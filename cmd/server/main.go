@@ -24,6 +24,10 @@ var (
 func main() {
 	var err error
 
+	// 测速排序：按 TCP 握手耗时筛选可用地址，最快排最前
+	sorted := tdx.SortHosts()
+	log.Printf("🌐 A股行情服务器测速完成，可用 %d 台，首选 %s", len(sorted), sorted[0])
+
 	mainClient, err = tdx.DialDefault(tdx.WithDebug(false))
 	if err != nil {
 		log.Printf("⚠️ A股连接失败: %v", err)
@@ -47,6 +51,10 @@ func main() {
 	}()
 
 	go func() {
+		// 测速排序：扩展行情服务器按 TCP 速度重排
+		exSorted := tdx.SortExHosts()
+		log.Printf("🌐 扩展行情服务器测速完成，可用 %d 台，首选 %s", len(exSorted), exSorted[0])
+
 		for i := 0; i < 5; i++ {
 			exClient, err = tdx.DialExHqDefault()
 			if err == nil {
