@@ -1,0 +1,37 @@
+package main
+
+import (
+	"time"
+
+	"github.com/injoyai/logs"
+	"github.com/injoyai/tdx/extend"
+	"github.com/injoyai/tdx/protocol"
+)
+
+func main() {
+	code := "sz000001"
+
+	pull, err := extend.NewPullKline(extend.PullKlineConfig{
+		Codes: []string{code},
+		Types: []string{extend.Day},
+	})
+
+	ks, err := pull.DayKlines(code, time.Time{}, time.Now())
+	logs.PanicErr(err)
+
+	ks2 := make(protocol.Klines, len(ks))
+	for i, v := range ks {
+		ks2[i] = v.Kline
+	}
+
+	t := time.Now().AddDate(0, -1, -9)
+	logs.Debug(t.Format(time.DateOnly))
+	ls := extend.DoIncomes(ks2, t, 5, 10, 20)
+
+	logs.Debug(len(ls))
+
+	for _, v := range ls {
+		logs.Info(v)
+	}
+
+}

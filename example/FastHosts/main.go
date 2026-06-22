@@ -1,0 +1,11 @@
+package main
+
+import (
+	"github.com/injoyai/logs"
+	"github.com/injoyai/tdx"
+)
+
+func main() {
+	ls := tdx.SortHosts()
+	logs.Debug("总数量:", len(ls))
+}

@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TDX Market Data</title>
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #242424;
+    --border: #2a2a2a;
+    --text: #e8e8e8;
+    --text2: #888;
+    --accent: #4a9eff;
+    --up: #f23645;
+    --down: #00c853;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  .container { max-width: 800px; margin: 0 auto; padding: 40px 24px 60px; }
+  header { margin-bottom: 32px; }
+  header h1 { font-size: 20px; font-weight: 500; letter-spacing: 0.5px; margin-bottom: 4px; }
+  header p { font-size: 13px; color: var(--text2); letter-spacing: 0.3px; }
+  .search-box { display: flex; gap: 8px; margin-bottom: 24px; }
+  .search-box input {
+    flex: 1; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 16px; font-size: 15px; color: var(--text);
+    outline: none; transition: border-color 0.2s; font-family: inherit;
+  }
+  .search-box input::placeholder { color: #555; }
+  .search-box input:focus { border-color: var(--accent); }
+  .search-box button {
+    background: var(--accent); border: none; border-radius: 10px;
+    padding: 0 24px; color: #fff; font-size: 14px; font-weight: 500;
+    cursor: pointer; transition: opacity 0.2s; font-family: inherit;
+  }
+  .search-box button:hover { opacity: 0.85; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px; margin-bottom: 12px; display: none;
+  }
+  .card.visible { display: block; }
+  .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .card-header .name { font-size: 18px; font-weight: 500; }
+  .card-header .code { font-size: 13px; color: var(--text2); margin-left: 8px; }
+  .price-row { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+  .price-row .current { font-size: 36px; font-weight: 500; letter-spacing: -0.5px; }
+  .price-row .change { font-size: 16px; font-weight: 400; }
+  .up { color: var(--up); } .down { color: var(--down); }
+  .detail-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .detail-item .label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+  .detail-item .value { font-size: 14px; }
+  .tabs { display: flex; gap: 2px; background: var(--surface2); border-radius: 8px; padding: 3px; margin-bottom: 16px; flex-wrap: wrap; }
+  .tabs button {
+    flex: 1; background: none; border: none; padding: 8px 10px; border-radius: 6px;
+    color: var(--text2); font-size: 12px; cursor: pointer; transition: all 0.2s; font-family: inherit; min-width: 60px;
+  }
+  .tabs button.active { background: var(--surface); color: var(--text); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table th { text-align: left; color: var(--text2); font-weight: 400; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  table td { padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .f10-cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 4px; }
+  .f10-cats a {
+    color: var(--accent); text-decoration: none; font-size: 12px;
+    padding: 5px 8px; border-radius: 6px; background: var(--surface2);
+    display: block; cursor: pointer; text-align: center;
+  }
+  .f10-cats a:hover { background: var(--border); }
+  .loading { text-align: center; color: var(--text2); padding: 40px 0; display: none; }
+  .error-msg { background: rgba(242,54,69,0.1); border: 1px solid rgba(242,54,69,0.3); border-radius: 10px; padding: 12px 16px; color: var(--up); font-size: 14px; display: none; margin-bottom: 12px; }
+  .status-bar { position: fixed; bottom: 0; left: 0; right: 0; padding: 8px 24px; background: var(--surface); border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-size: 11px; color: var(--text2); z-index: 100; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>TDX Market Data</h1>
+    <p>通达信行情数据服务</p>
+  </header>
+
+  <div class="search-box">
+    <input type="text" id="stockInput" placeholder="输入代码（如 603063, sh000001, AAPL, 00700）" autofocus>
+    <button id="searchBtn" onclick="search()">查询</button>
+  </div>
+
+  <div class="error-msg" id="errorMsg"></div>
+  <div class="loading" id="loading">查询中...</div>
+
+  <!-- 报价卡片 -->
+  <div class="card" id="quoteCard">
+    <div class="card-header">
+      <span><span class="name" id="stockName"></span><span class="code" id="stockCode"></span></span>
+      <span style="font-size:11px;color:var(--text2)" id="marketTag"></span>
+    </div>
+    <div class="price-row">
+      <span class="current" id="price"></span>
+      <span class="change" id="change"></span>
+    </div>
+    <div class="detail-grid">
+      <div class="detail-item"><div class="label">昨收</div><div class="value" id="lastClose"></div></div>
+      <div class="detail-item"><div class="label">今开</div><div class="value" id="open"></div></div>
+      <div class="detail-item"><div class="label">最高</div><div class="value" id="high"></div></div>
+      <div class="detail-item"><div class="label">最低</div><div class="value" id="low"></div></div>
+      <div class="detail-item"><div class="label">成交量</div><div class="value" id="volume"></div></div>
+      <div class="detail-item"><div class="label">成交额</div><div class="value" id="amount"></div></div>
+    </div>
+  </div>
+
+  <!-- 详情卡片 -->
+  <div class="card" id="detailCard">
+    <div class="tabs" id="tabBar">
+      <button class="active" onclick="switchTab('kline')">K线</button>
+      <button onclick="switchTab('finance')">财务</button>
+      <button onclick="switchTab('f10')">F10</button>
+    </div>
+    <div class="tab-content active" id="tabKline">
+      <table><thead><tr><th>日期</th><th>开盘</th><th>最高</th><th>最低</th><th>收盘</th><th>成交量</th></tr></thead><tbody id="klineBody"></tbody></table>
+    </div>
+    <div class="tab-content" id="tabFinance">
+      <table><tbody id="financeBody"></tbody></table>
+    </div>
+    <div class="tab-content" id="tabF10">
+      <div class="f10-cats" id="f10Cats"></div>
+      <div style="margin-top:12px;font-size:13px;white-space:pre-wrap;color:var(--text2)" id="f10Content"></div>
+    </div>
+  </div>
+</div>
+
+<div class="status-bar"><span id="statusLeft">准备就绪</span><span id="statusRight">tdx-api-server v2.0</span></div>
+
+<script>
+// A股市场代码→mkt映射
+const A_PREFIXES = ['600','601','603','605','688','689','900','000','001','002','003','004','300','301','400','420','430','488','500','550','8'];
+const INDEX_CODES = { 'sh000001':'上证指数','sz399001':'深证成指','sz399006':'创业板指','sh000300':'沪深300','sh000688':'科创50','sh000016':'上证50','sh000905':'中证500','sh000852':'中证1000' };
+
+function detectMarket(code) {
+  const upper = code.toUpperCase();
+  if (upper.startsWith('SH')) return 1;
+  if (upper.startsWith('SZ')) return 0;
+  if (upper.startsWith('BJ')) return 2;
+  for (const p of A_PREFIXES) {
+    if (code.startsWith(p)) return (p === '688' || p === '689' || code.startsWith('6') || code.startsWith('9')) ? 1 : 0;
+  }
+  return 1;
+}
+
+function isIndexCode(code) { return code in INDEX_CODES; }
+function isUSCode(code) { return /^[A-Z]{1,5}$/.test(code.toUpperCase()) && code.toUpperCase() !== code; }
+
+function fmt(v) { return Number(v).toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+function fmtInt(v) { return Number(v).toLocaleString('zh-CN'); }
+
+async function search() {
+  const input = document.getElementById('stockInput').value.trim();
+  if (!input) return;
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('errorMsg').style.display = 'none';
+  document.getElementById('quoteCard').classList.remove('visible');
+  document.getElementById('detailCard').classList.remove('visible');
+  document.getElementById('statusLeft').textContent = '查询中...';
+
+  const upper = input.toUpperCase();
+  const cleanCode = input.replace(/[^0-9A-Za-z]/g, '');
+  const fullInput = input.includes('sh') || input.includes('sz') || input.includes('bj') ? input : cleanCode;
+
+  try {
+    // 1. 指数代码 → 走指数K线
+    if (isIndexCode(fullInput) || fullInput.startsWith('sh000') || fullInput.startsWith('sz399') || fullInput.startsWith('sh000') || fullInput.startsWith('sz399')) {
+      const r = await fetch('/api/index/kline?code='+fullInput+'&count=10');
+      const d = await r.json();
+      if (d.code !== 0) throw new Error(d.message);
+      const name = INDEX_CODES[fullInput] || fullInput;
+      document.getElementById('stockName').textContent = name;
+      document.getElementById('stockCode').textContent = '· 指数';
+      document.getElementById('marketTag').textContent = '指数';
+      document.getElementById('price').textContent = d.data ? '—' : '—';
+      document.getElementById('price').className = 'current';
+      document.getElementById('change').textContent = '';
+      renderKline(d.data && d.data.list ? d.data.list : []);
+      document.getElementById('detailCard').classList.add('visible');
+      document.getElementById('statusLeft').textContent = name + ' 已更新';
+      document.getElementById('loading').style.display = 'none';
+      return;
+    }
+
+    // 2. 美股
+    const isUS = /^[A-Z]{1,5}$/.test(upper) && upper.length <= 5 && !/^[0-9]/.test(input);
+    if (isUS) {
+      const r = await fetch('/api/ex/quote?market=74&code='+upper);
+      const d = await r.json();
+      if (d.code !== 0) throw new Error(d.message || '无数据');
+      const q = d.data;
+      document.getElementById('stockName').textContent = upper;
+      document.getElementById('stockCode').textContent = '· 美股';
+      document.getElementById('marketTag').textContent = '美股';
+      const p = q.price || 0;
+      const lc = q.preClose || 0;
+      const chg = p - lc;
+      const pct = lc > 0 ? (chg/lc*100) : 0;
+      document.getElementById('price').textContent = fmt(p);
+      document.getElementById('price').className = chg >= 0 ? 'current up' : 'current down';
+      document.getElementById('change').textContent = (chg>=0?'+':'')+fmt(chg)+' ('+(pct>=0?'+':'')+pct.toFixed(2)+'%)';
+      document.getElementById('change').className = chg >= 0 ? 'change up' : 'change down';
+      document.getElementById('lastClose').textContent = fmt(lc);
+      document.getElementById('open').textContent = fmt(q.open||0);
+      document.getElementById('high').textContent = fmt(q.high||0);
+      document.getElementById('low').textContent = fmt(q.low||0);
+      document.getElementById('volume').textContent = fmtInt(q.volume||0);
+      document.getElementById('amount').textContent = '—';
+      document.getElementById('quoteCard').classList.add('visible');
+      document.getElementById('statusLeft').textContent = upper + ' 已更新';
+      document.getElementById('loading').style.display = 'none';
+      return;
+    }
+
+    // 3. A股（含深市002,003,300开头）
+    const mkt = detectMarket(fullInput);
+    const qR = await fetch('/api/quote?code='+fullInput);
+    const qD = await qR.json();
+    if (qD.code !== 0) throw new Error(qD.message);
+
+    const q = qD.data;
+    document.getElementById('stockName').textContent = fullInput;
+    document.getElementById('stockCode').textContent = '· A股';
+    document.getElementById('marketTag').textContent = 'A股';
+    const p = q.price || 0;
+    const lc = q.lastClose || 0;
+    const chg = p - lc;
+    const pct = lc > 0 ? (chg/lc*100) : 0;
+    document.getElementById('price').textContent = fmt(p);
+    document.getElementById('price').className = chg >= 0 ? 'current up' : 'current down';
+    document.getElementById('change').textContent = (chg>=0?'+':'')+fmt(chg)+' ('+(pct>=0?'+':'')+pct.toFixed(2)+'%)';
+    document.getElementById('change').className = chg >= 0 ? 'change up' : 'change down';
+    document.getElementById('lastClose').textContent = fmt(lc);
+    document.getElementById('open').textContent = fmt(q.open||0);
+    document.getElementById('high').textContent = fmt(q.high||0);
+    document.getElementById('low').textContent = fmt(q.low||0);
+    document.getElementById('volume').textContent = fmtInt(q.volume||0);
+    document.getElementById('amount').textContent = fmtInt(q.amount||0);
+    document.getElementById('quoteCard').classList.add('visible');
+
+    // 并行加载 K线 + 财务 + F10
+    const [kR, fR] = await Promise.all([
+      fetch('/api/kline?code='+fullInput+'&count=10'),
+      fetch('/api/finance?code='+fullInput+'&mkt='+mkt)
+    ]);
+    const kD = await kR.json();
+    if (kD.code === 0) renderKline(kD.data.list);
+    const fD = await fR.json();
+    if (fD.code === 0) renderFinance(fD.data);
+    loadF10(fullInput, mkt);
+    document.getElementById('detailCard').classList.add('visible');
+    document.getElementById('statusLeft').textContent = fullInput + ' 已更新';
+
+  } catch(e) {
+    showError('查询失败: ' + (e.message || '无数据'));
+    document.getElementById('statusLeft').textContent = '查询失败';
+  }
+  document.getElementById('loading').style.display = 'none';
+}
+
+function renderKline(list) {
+  if (!list || !list.length) return;
+  const body = document.getElementById('klineBody');
+  body.innerHTML = '';
+  list.forEach(b => {
+    const tr = document.createElement('tr');
+    const chg = b.close - b.open;
+    tr.innerHTML = '<td>'+b.date+'</td><td class="'+(chg>=0?'down':'up')+'">'+fmt(b.open)+'</td><td style="color:var(--down)">'+fmt(b.high)+'</td><td style="color:var(--up)">'+fmt(b.low)+'</td><td class="'+(chg>=0?'up':'down')+'">'+fmt(b.close)+'</td><td>'+fmtInt(b.volume)+'</td>';
+    body.appendChild(tr);
+  });
+}
+
+function renderFinance(data) {
+  if (!data) return;
+  const items = [
+    ['总资产', fmt(data.zongZiChan/1e8)+'亿'],['净资产', fmt(data.jingZiChan/1e8)+'亿'],
+    ['主营收入', fmt(data.zhuYingShouRu/1e8)+'亿'],['主营利润', fmt(data.zhuYingLiRun/1e8)+'亿'],
+    ['营业利润', fmt(data.yingYeLiRun/1e8)+'亿'],['净利润', fmt(data.jingLiRun/1e8)+'亿'],
+    ['经营现金流', fmt(data.jingYingXianJinLiu/1e8)+'亿'],['股东人数', fmtInt(data.guDongRenShu)],
+    ['流通股本', fmt(data.liuTongGuBen/1e8)+'亿'],['总股本', fmt(data.zongGuBen/1e8)+'亿'],
+    ['存货', fmt(data.cunHuo/1e8)+'亿'],
+  ];
+  const body = document.getElementById('financeBody');
+  body.innerHTML = '';
+  items.forEach(([k,v]) => { body.innerHTML += '<tr><td style="color:var(--text2);width:100px">'+k+'</td><td>'+v+'</td></tr>'; });
+}
+
+async function loadF10(code, mkt) {
+  try {
+    const r = await fetch('/api/f10?code='+code+'&mkt='+mkt);
+    const d = await r.json();
+    if (d.code !== 0 || !d.data || !d.data.categories) return;
+    const container = document.getElementById('f10Cats');
+    container.innerHTML = '';
+    d.data.categories.forEach(c => {
+      const a = document.createElement('a');
+      a.textContent = c.name;
+      a.onclick = () => loadF10Content(code, mkt, c.index);
+      container.appendChild(a);
+    });
+  } catch(e) {}
+}
+async function loadF10Content(code, mkt, cat) {
+  try {
+    const r = await fetch('/api/f10?code='+code+'&mkt='+mkt+'&cat='+cat);
+    const d = await r.json();
+    if (d.code === 0) { document.getElementById('f10Content').textContent = d.data.content || '(空)'; }
+  } catch(e) {}
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab'+name.charAt(0).toUpperCase()+name.slice(1)).classList.add('active');
+  event.target.classList.add('active');
+}
+function showError(msg) { const el = document.getElementById('errorMsg'); el.textContent = msg; el.style.display = 'block'; }
+
+document.getElementById('stockInput').addEventListener('keydown', e => { if(e.key === 'Enter') search(); });
+</script>
+</body>
+</html>
