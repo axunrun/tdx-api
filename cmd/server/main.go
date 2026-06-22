@@ -31,19 +31,20 @@ func main() {
 		log.Println("✅ A股行情已连接")
 	}
 
-	gbbq, err = tdx.NewGbbq(tdx.WithGbbqClient(mainClient))
-	if err != nil {
-		log.Printf("⚠️ 复权模块初始化失败: %v", err)
-	} else {
+	go func() {
+		var err error
+		gbbq, err = tdx.NewGbbq(tdx.WithGbbqClient(mainClient))
+		if err != nil {
+			log.Printf("⚠️ 复权模块初始化失败: %v", err)
+			return
+		}
 		log.Println("✅ 复权模块已就绪")
-		go func() {
-			if err := gbbq.Update(); err != nil {
-				log.Printf("⚠️ 复权数据更新失败: %v", err)
-			} else {
-				log.Println("✅ 复权数据已更新")
-			}
-		}()
-	}
+		if err := gbbq.Update(); err != nil {
+			log.Printf("⚠️ 复权数据更新失败: %v", err)
+		} else {
+			log.Println("✅ 复权数据已更新")
+		}
+	}()
 
 	go func() {
 		for i := 0; i < 5; i++ {
