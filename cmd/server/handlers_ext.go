@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"html/template"
 	"net/http"
 	"sort"
@@ -313,4 +314,124 @@ func parseInt(s string) (int, error) {
 		n = n*10 + int(c-'0')
 	}
 	return n, nil
+}
+
+// ====== P1: 自定义周期复权 K 线 ======
+
+func handleGbbqAdjust(w http.ResponseWriter, r *http.Request) {
+	code := r.URL.Query().Get("code")
+	typ := r.URL.Query().Get("type")   // day, week, month, quarter, year
+	adj := r.URL.Query().Get("adjust") // qfq, hfq
+	cnt := parseCount(r.URL.Query().Get("count"), 60)
+	if code == "" { jsonErr(w, "缺少code"); return }
+	if adj == "" { adj = "qfq" }
+
+	gb := getGbbq()
+	if gb == nil { jsonErr(w, "复权模块未就绪"); return }
+	c := cli()
+	if c == nil { jsonErr(w, "未连接"); return }
+
+	var resp *protocol.KlineResp
+	var err error
+	switch typ {
+	case "week":
+		resp, err = c.GetKlineWeekAll(code)
+	case "month":
+		resp, err = c.GetKlineMonthAll(code)
+	case "quarter":
+		resp, err = c.GetKlineQuarterAll(code)
+	case "year":
+		resp, err = c.GetKlineYearAll(code)
+	default:
+		resp, err = c.GetKlineDayAll(code)
+	}
+	if err != nil || resp == nil { jsonErr(w, "K线获取失败"); return }
+
+	var klines protocol.Klines
+	if adj == "hfq" {
+		klines = gb.HFQ(code, resp.List)
+	} else {
+		klines = gb.QFQ(code, resp.List)
+	}
+	if len(klines) == 0 { jsonErr(w, "复权后无数据"); return }
+	list := toKlineList(klines)
+	if cnt > 0 && cnt < len(list) { list = list[len(list)-cnt:] }
+	jsonResp(w, map[string]interface{}{
+		"code": code, "type": typ, "adjust": adj,
+		"count": len(list), "list": list,
+	})
+}
+
+// ====== P2: zhb 配置数据（板块指数/板块名称/统计/新股） ======
+
+func handleZhb(w http.ResponseWriter, r *http.Request) {
+	section := r.URL.Query().Get("section")
+	if section == "" { section = "zs" }
+	c := cli()
+	if c == nil { jsonErr(w, "未连接"); return }
+
+	files, err := c.GetZHBFiles()
+	if err != nil { jsonErr(w, "zhb 下载失败: "+err.Error()); return }
+
+	switch section {
+	case "zs":
+		data, ok := files[protocol.FileTdxZs]
+		if !ok { jsonErr(w, "缺少 tdxzs.cfg"); return }
+		zs := protocol.ParseTdxZs(data)
+		jsonResp(w, map[string]interface{}{"section": "zs", "count": len(zs), "list": zs})
+
+	case "bk":
+		data, ok := files[protocol.FileTdxBk]
+		if !ok { jsonErr(w, "缺少 tdxbk.cfg"); return }
+		bk := protocol.ParseTdxBk(data)
+		jsonResp(w, map[string]interface{}{"section": "bk", "count": len(bk), "list": bk})
+
+	case "stat":
+		data, ok := files[protocol.FileTdxStat]
+		if !ok { jsonErr(w, "缺少 tdxstat.cfg"); return }
+		stat := protocol.ParseTdxStat(data)
+		type Item struct {
+			Market int      `json:"market"`
+			Code   string   `json:"code"`
+			Date   string   `json:"date"`
+			Fields []string `json:"fields"`
+		}
+		list := make([]Item, len(stat))
+		for i, s := range stat {
+			list[i] = Item{int(s.Market), s.Code, s.Date, s.Fields}
+		}
+		jsonResp(w, map[string]interface{}{"section": "stat", "count": len(list), "list": list})
+
+	case "stat2":
+		data, ok := files[protocol.FileTdxStat2]
+		if !ok { jsonErr(w, "缺少 tdxstat2.cfg"); return }
+		stat2 := protocol.ParseTdxStat2(data)
+		jsonResp(w, map[string]interface{}{"section": "stat2", "count": len(stat2), "list": stat2})
+
+	case "xgsg":
+		data, ok := files[protocol.FileXgsg]
+		if !ok { jsonErr(w, "缺少 xgsg.cfg"); return }
+		xgsg := protocol.ParseXgsg(data)
+		jsonResp(w, map[string]interface{}{"section": "xgsg", "count": len(xgsg), "list": xgsg})
+
+	default:
+		jsonErr(w, "未知 section，可选: zs/bk/stat/stat2/xgsg")
+	}
+}
+
+// ====== GetReportFile 原始文件下载 ======
+
+func handleReport(w http.ResponseWriter, r *http.Request) {
+	file := r.URL.Query().Get("file")
+	if file == "" { jsonErr(w, "缺少file"); return }
+	c := cli()
+	if c == nil { jsonErr(w, "未连接"); return }
+
+	raw, err := c.GetReportFile(file)
+	if err != nil { jsonErr(w, "文件下载失败: "+err.Error()); return }
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(raw)))
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", file))
+	w.Write(raw)
 }

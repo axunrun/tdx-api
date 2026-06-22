@@ -102,6 +102,10 @@ func main() {
 	mux.HandleFunc("/api/income", handleIncome)
 	mux.HandleFunc("/api/health", handleHealth)
 	mux.HandleFunc("/api/server-status", handleServerStatus)
+	mux.HandleFunc("/api/gbbq/adjust", handleGbbqAdjust)
+	tmux.HandleFunc("/api/zhb", handleZhb)
+	tmux.HandleFunc("/api/report", handleReport)
+
 
 	port := "8080"
 	if p := os.Getenv("PORT"); p != "" {
