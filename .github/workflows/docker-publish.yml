@@ -29,10 +29,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        run: echo "VERSION=$(git describe --tags --always 2>/dev/null || echo 'latest')" >> $GITHUB_OUTPUT
-
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -40,5 +36,5 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ${{ env.IMAGE_NAME }}:latest
-            ${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.VERSION }}
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/tdx-api-server:latest
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/tdx-api-server:${{ github.sha }}
