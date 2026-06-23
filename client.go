@@ -291,8 +291,22 @@ func (this *Client) GetCodeAll(exchange protocol.Exchange) (*protocol.CodeResp, 
 
 	//通达信没有北交所代码列表,通过爬虫的方式从北交所官网获取,放在这里是为了方便业务逻辑
 	//不放在extend包时防止循环引用
-	//todo 这是临时方案,等通达信有北交所代码列表时再改
+	//先尝试通过通达信协议获取,不行再走BSE官网爬虫
 	if exchange == protocol.ExchangeBJ {
+		//尝试通达信协议
+		size := uint16(1000)
+		for start := uint16(0); ; start += size {
+			r, err := this.GetCode(exchange, start)
+			if err != nil {
+				break
+			}
+			resp.Count += r.Count
+			resp.List = append(resp.List, r.List...)
+			if r.Count < size {
+				return resp, nil
+			}
+		}
+		//通达信协议不回BJ代码,走BSE官网爬虫
 		codes, err := bse.GetCodes()
 		if err != nil {
 			return nil, err
