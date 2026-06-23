@@ -133,6 +133,7 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 
 	allCodes, err := c.GetStockCodeAll()
 	if err != nil { jsonErr(w, err.Error()); return }
+	if len(allCodes) == 0 { jsonResp(w, map[string]interface{}{"keyword": kw, "count": 0, "list": []interface{}{}}); return }
 	kw = strings.ToUpper(kw)
 	type Item struct {
 		Code     string `json:"code"`

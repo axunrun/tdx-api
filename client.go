@@ -326,10 +326,12 @@ func (this *Client) GetCodeAll(exchange protocol.Exchange) (*protocol.CodeResp, 
 // GetStockCodeAll 获取所有股票代码,带前缀例sz000001
 func (this *Client) GetStockCodeAll() ([]string, error) {
 	ls := []string(nil)
-	for _, ex := range []protocol.Exchange{protocol.ExchangeSH, protocol.ExchangeSZ, protocol.ExchangeBJ} {
+	exchanges := []protocol.Exchange{protocol.ExchangeSH, protocol.ExchangeSZ, protocol.ExchangeBJ}
+	for _, ex := range exchanges {
 		resp, err := this.GetCodeAll(ex)
 		if err != nil {
-			return nil, err
+			logs.Err("[%s] 代码列表获取失败: %v (跳过)", ex, err)
+			continue
 		}
 		for _, v := range resp.List {
 			if protocol.IsStock(ex.String() + v.Code) {
