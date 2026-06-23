@@ -1,15 +1,17 @@
 package main
 
 import (
+	"encoding/json"
+	"encoding/binary"
 	"fmt"
 	"html/template"
 	"net/http"
-	"sort"
-	"github.com/injoyai/tdx/protocol"
 	"strings"
 	"time"
+	"unicode/utf8"
 
-	"github.com/injoyai/tdx/extend"
+	"github.com/injoyai/tdx"
+	"github.com/injoyai/tdx/protocol"
 )
 
 // ====== WebUI ======
@@ -19,6 +21,168 @@ func handleWebUI(w http.ResponseWriter, r *http.Request) {
 	tmpl, _ := template.ParseFS(staticFiles, "static/index.html")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	tmpl.Execute(w, nil)
+}
+
+// ====== 搜索 ======
+
+var stockNameMap map[string]string
+
+func loadStockNames(c *tdx.Client) map[string]string {
+	if stockNameMap != nil {
+		return stockNameMap
+	}
+	m := make(map[string]string)
+	files, err := c.GetZHBFiles()
+	if err != nil {
+		stockNameMap = m
+		return m
+	}
+	data, ok := files[protocol.FileHsPy]
+	if !ok {
+		stockNameMap = m
+		return m
+	}
+	text := string(protocol.UTF8ToGBK(data))
+	lines := strings.Split(text, "\n")
+	for _, ln := range lines {
+		ln = strings.TrimRight(ln, "\r")
+		if ln == "" || strings.HasPrefix(ln, "#") {
+			continue
+		}
+		f := strings.Split(ln, "|")
+		if len(f) < 3 {
+			continue
+		}
+		code := strings.TrimSpace(f[0]) + strings.TrimSpace(f[1])
+		name := strings.TrimSpace(f[2])
+		if code != "" && name != "" {
+			m[code] = name
+		}
+	}
+
+	// profile.dat 二进制文件，包含完整代码→最新名称映射
+	profData, ok := files["profile.dat"]
+	if ok && len(profData) > 0 {
+		parseProfileNames(profData, m)
+	}
+
+	stockNameMap = m
+	return m
+}
+
+func parseProfileNames(data []byte, m map[string]string) {
+	// profile.dat 格式: 记录以 \x00\x00\x00 开头，含 4 字节小端代码 + \x00 + GBK名称
+	// 每条记录: header(3-4字节) + code(4字节) + \x00 + name(GBK) + \x00 + binary
+	i := 0
+	for i < len(data)-12 {
+		// 找代码区域的起始: code 由小端 uint32 编码，后跟 \x00
+		for ; i < len(data)-10; i++ {
+			if data[i] == 0 && data[i+1] == 0 && data[i+2] == 0 && data[i+3] <= 0x09 {
+				// 可能是代码起始
+				break
+			}
+		}
+		if i >= len(data)-10 {
+			break
+		}
+		code := int(binary.LittleEndian.Uint32(data[i : i+4]))
+		if code <= 0 || code > 999999 {
+			i += 4
+			continue
+		}
+		// 跳过代码 + \x00
+		j := i + 4
+		if j >= len(data) || data[j] != 0 {
+			i = j
+			continue
+		}
+		j++ // skip \x00
+		// 读取名称直到 \x00 或 非法字符
+		start := j
+		for j < len(data) && data[j] != 0 {
+			j++
+		}
+		if j > start {
+			nameBytes := data[start:j]
+			if utf8.Valid(nameBytes) {
+				name := string(nameBytes)
+				codeStr := fmt.Sprintf("%06d", code)
+				if _, exists := m[codeStr]; !exists {
+					// 取最新(非历史变更)的名称
+					m[codeStr] = name
+				}
+			} else {
+				// GBK 解码
+				name := string(protocol.UTF8ToGBK(nameBytes))
+				codeStr := fmt.Sprintf("%06d", code)
+				if _, exists := m[codeStr]; !exists {
+					m[codeStr] = name
+				}
+			}
+		}
+		i = j + 1
+	}
+}
+
+func handleSearch(w http.ResponseWriter, r *http.Request) {
+	kw := r.URL.Query().Get("keyword")
+	if kw == "" { jsonErr(w, "缺少keyword"); return }
+	c := cli()
+	if c == nil { jsonErr(w, "未连接"); return }
+
+	// 加载代码→名称映射
+	nameMap := loadStockNames(c)
+
+	allCodes, err := c.GetStockCodeAll()
+	if err != nil { jsonErr(w, err.Error()); return }
+	kw = strings.ToUpper(kw)
+	type Item struct {
+		Code     string `json:"code"`
+		Exchange string `json:"exchange"`
+		Name     string `json:"name,omitempty"`
+	}
+	results := make([]Item, 0)
+	seen := make(map[string]bool)
+	for _, full := range allCodes {
+		short := full[2:]
+		if seen[short] {
+			continue
+		}
+		ex := "sh"
+		if strings.HasPrefix(full, "sz") { ex = "sz" } else if strings.HasPrefix(full, "bj") { ex = "bj" }
+
+		name := nameMap[short]
+		upperName := strings.ToUpper(name)
+		matches := false
+		if strings.Contains(strings.ToUpper(short), kw) {
+			matches = true
+		}
+		if !matches && name != "" && strings.Contains(upperName, kw) {
+			matches = true
+		}
+		if !matches && name != "" {
+			// 拼音首字母匹配
+			pinyinShort := ""
+			for _, r := range name {
+				if r > 127 {
+					break
+				}
+				pinyinShort += string(r)
+			}
+			if strings.Contains(strings.ToUpper(pinyinShort), kw) {
+				matches = true
+			}
+		}
+
+		if matches {
+			results = append(results, Item{short, ex, name})
+			seen[short] = true
+		}
+		if len(results) >= 50 {
+			break
+		}
+	}
+	jsonResp(w, map[string]interface{}{"keyword": kw, "count": len(results), "list": results})
 }
 
 // ====== 指数 ======
@@ -83,245 +247,12 @@ func handleIndexKlineAll(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, map[string]interface{}{"code": code, "type": typ, "count": len(list), "list": list})
 }
 
-// ====== 扩展行情 ======
-
-func handleExQuote(w http.ResponseWriter, r *http.Request) {
-	ex := getEx()
-	if ex == nil { jsonErr(w, "扩展行情未连接"); return }
-	code := r.URL.Query().Get("code")
-	mkt := uint8(parseCount(r.URL.Query().Get("market"), 31))
-	if code == "" { jsonErr(w, "缺少code"); return }
-	q, err := ex.ExQuote(mkt, code)
-	if err != nil || q == nil { jsonErr(w, "无数据"); return }
-	jsonResp(w, map[string]interface{}{
-		"market": q.Market, "code": q.Code,
-		"price": q.Price, "preClose": q.PreClose,
-		"open": q.Open, "high": q.High, "low": q.Low,
-		"volume": q.ZongLiang, "openInterest": q.ChiCang,
-		"bid": q.Bid, "bidVol": q.BidVol,
-		"ask": q.Ask, "askVol": q.AskVol,
-	})
-}
-
-func handleExBars(w http.ResponseWriter, r *http.Request) {
-	ex := getEx()
-	if ex == nil { jsonErr(w, "扩展行情未连接"); return }
-	code := r.URL.Query().Get("code")
-	mkt := uint8(parseCount(r.URL.Query().Get("market"), 31))
-	cat := uint8(parseCount(r.URL.Query().Get("category"), 9))
-	cnt := uint16(parseCount(r.URL.Query().Get("count"), 20))
-	if code == "" { jsonErr(w, "缺少code"); return }
-	bars, err := ex.ExBars(cat, mkt, code, 0, cnt)
-	if err != nil { jsonErr(w, err.Error()); return }
-	jsonResp(w, map[string]interface{}{"market": mkt, "code": code, "count": len(bars), "list": bars})
-}
-
-func handleExMinute(w http.ResponseWriter, r *http.Request) {
-	ex := getEx()
-	if ex == nil { jsonErr(w, "扩展行情未连接"); return }
-	code := r.URL.Query().Get("code")
-	mkt := uint8(parseCount(r.URL.Query().Get("market"), 31))
-	if code == "" { jsonErr(w, "缺少code"); return }
-	mint, err := ex.ExMinute(mkt, code)
-	if err != nil { jsonErr(w, err.Error()); return }
-	jsonResp(w, map[string]interface{}{"market": mkt, "code": code, "count": len(mint), "list": mint})
-}
-
-func handleExTrade(w http.ResponseWriter, r *http.Request) {
-	ex := getEx()
-	if ex == nil { jsonErr(w, "扩展行情未连接"); return }
-	code := r.URL.Query().Get("code")
-	mkt := uint8(parseCount(r.URL.Query().Get("market"), 31))
-	cnt := uint16(parseCount(r.URL.Query().Get("count"), 30))
-	if code == "" { jsonErr(w, "缺少code"); return }
-	ticks, err := ex.ExTrade(mkt, code, 0, cnt)
-	if err != nil { jsonErr(w, err.Error()); return }
-	jsonResp(w, map[string]interface{}{"market": mkt, "code": code, "count": len(ticks), "list": ticks})
-}
-
-func handleExMarkets(w http.ResponseWriter, r *http.Request) {
-	ex := getEx()
-	if ex == nil { jsonErr(w, "扩展行情未连接"); return }
-	markets, err := ex.ExMarkets()
-	if err != nil { jsonErr(w, err.Error()); return }
-	jsonResp(w, map[string]interface{}{"count": len(markets), "list": markets})
-}
-
-func handleExInstruments(w http.ResponseWriter, r *http.Request) {
-	ex := getEx()
-	if ex == nil { jsonErr(w, "扩展行情未连接"); return }
-	start := uint32(parseCount(r.URL.Query().Get("start"), 0))
-	cnt := uint16(parseCount(r.URL.Query().Get("count"), 100))
-	insts, err := ex.ExInstruments(start, cnt)
-	if err != nil { jsonErr(w, err.Error()); return }
-	jsonResp(w, map[string]interface{}{"start": start, "count": len(insts), "list": insts})
-}
-
-// ====== 搜索 ======
-
-func handleSearch(w http.ResponseWriter, r *http.Request) {
-	kw := r.URL.Query().Get("keyword")
-	if kw == "" { jsonErr(w, "缺少keyword"); return }
-	c := cli()
-	if c == nil { jsonErr(w, "未连接"); return }
-	allCodes, err := c.GetStockCodeAll()
-	if err != nil { jsonErr(w, err.Error()); return }
-	kw = strings.ToUpper(kw)
-	type Item struct { Code string `json:"code"`; Exchange string `json:"exchange"` }
-	results := make([]Item, 0); seen := make(map[string]bool)
-	for _, code := range allCodes {
-		if strings.Contains(strings.ToUpper(code), kw) {
-			ex := "sh"
-			if strings.HasPrefix(code, "sz") { ex = "sz" } else if strings.HasPrefix(code, "bj") { ex = "bj" }
-			short := code[2:]
-			if !seen[short] { results = append(results, Item{short, ex}); seen[short] = true }
-		}
-		if len(results) >= 50 { break }
-	}
-	jsonResp(w, map[string]interface{}{"keyword": kw, "count": len(results), "list": results})
-}
-
-// ====== 交易日 ======
-
-func handleWorkday(w http.ResponseWriter, r *http.Request) {
-	dateStr := r.URL.Query().Get("date")
-	target := time.Now()
-	if dateStr != "" {
-		var err error
-		target, err = time.Parse("20060102", dateStr)
-		if err != nil { target, err = time.Parse("2006-01-02", dateStr) }
-		if err != nil { jsonErr(w, "日期格式错误"); return }
-	}
-	isWorkday := target.Weekday() != time.Saturday && target.Weekday() != time.Sunday
-	jsonResp(w, map[string]interface{}{"date": target.Format("2006-01-02"), "is_workday": isWorkday})
-}
-
-func handleWorkdayRange(w http.ResponseWriter, r *http.Request) {
-	startStr := r.URL.Query().Get("start")
-	endStr := r.URL.Query().Get("end")
-	if startStr == "" || endStr == "" { jsonErr(w, "缺少start或end"); return }
-	start, _ := time.Parse("20060102", startStr)
-	if start.IsZero() { start, _ = time.Parse("2006-01-02", startStr) }
-	end, _ := time.Parse("20060102", endStr)
-	if end.IsZero() { end, _ = time.Parse("2006-01-02", endStr) }
-	if start.IsZero() || end.IsZero() { jsonErr(w, "日期格式错误"); return }
-	list := make([]string, 0)
-	for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
-		if d.Weekday() != time.Saturday && d.Weekday() != time.Sunday {
-			list = append(list, d.Format("2006-01-02"))
-		}
-	}
-	jsonResp(w, map[string]interface{}{"count": len(list), "list": list})
-}
-
-// ====== 历史成交 ======
-
-func handleHistoryTrade(w http.ResponseWriter, r *http.Request) {
-	code := r.URL.Query().Get("code")
-	date := r.URL.Query().Get("date")
-	if code == "" || date == "" { jsonErr(w, "缺少code或date"); return }
-	c := cli()
-	if c == nil { jsonErr(w, "未连接"); return }
-	date = strings.ReplaceAll(date, "-", "")
-	resp, err := c.GetHistoryMinuteTradeDay(date, code)
-	if err != nil || resp == nil { jsonErr(w, "无数据"); return }
-	type Item struct {
-		Time string `json:"time"`; Price float64 `json:"price"`
-		Volume int `json:"volume"`; Status int `json:"status"`
-	}
-	list := make([]Item, 0)
-	for _, t := range resp.List {
-		list = append(list, Item{t.Time.Format("15:04:05"), t.Price.Float64(), t.Volume, t.Status})
-	}
-	jsonResp(w, map[string]interface{}{"code": code, "date": date, "count": len(list), "list": list})
-}
-
-// ====== 收益率 ======
-
-func handleIncome(w http.ResponseWriter, r *http.Request) {
-	code := r.URL.Query().Get("code")
-	startStr := r.URL.Query().Get("start_date")
-	if code == "" || startStr == "" { jsonErr(w, "缺少code或start_date"); return }
-	startDate, _ := time.Parse("20060102", startStr)
-	if startDate.IsZero() { startDate, _ = time.Parse("2006-01-02", startStr) }
-	if startDate.IsZero() { jsonErr(w, "start_date格式错误"); return }
-	
-	daysParam := r.URL.Query().Get("days")
-	days := make([]int, 0)
-	if daysParam == "" {
-		days = []int{5, 10, 20, 60, 120}
-	} else {
-		for _, s := range strings.Split(daysParam, ",") {
-			s = strings.TrimSpace(s)
-			if n, e := parseInt(s); e == nil { days = append(days, n) }
-		}
-	}
-	
-	c := cli()
-	if c == nil { jsonErr(w, "未连接"); return }
-	resp, err := c.GetKlineDayAll(code)
-	if err != nil || resp == nil { jsonErr(w, "无数据"); return }
-	
-	klines := make(extend.Klines, 0)
-	for _, k := range resp.List {
-		klines = append(klines, &extend.Kline{
-			Kline: k,
-		})
-	}
-	pk := make(protocol.Klines, len(klines))
-	for i, k := range klines { pk[i] = k.Kline }
-	sort.Slice(pk, func(i, j int) bool { return pk[i].Time.Unix() < pk[j].Time.Unix() })
-	incomes := extend.DoIncomes(pk, startDate, days...)
-	type Item struct {
-		Offset   int     `json:"offset"`
-		Rise     float64 `json:"rise"`
-		RiseRate float64 `json:"rise_rate"`
-		Close    float64 `json:"close"`
-		RefClose float64 `json:"ref_close"`
-	}
-	list := make([]Item, 0)
-	for _, inc := range incomes {
-		if inc == nil { continue }
-		list = append(list, Item{inc.Offset, inc.Rise().Float64(), inc.RiseRate(), inc.Current.Close.Float64(), inc.Source.Close.Float64()})
-	}
-	jsonResp(w, map[string]interface{}{"code": code, "count": len(list), "list": list})
-}
-
-// ====== 健康检查 & 状态 ======
-
-func handleHealth(w http.ResponseWriter, r *http.Request) {
-	st := "ok"; exSt := "disconnected"
-	if mainClient == nil { st = "disconnected" }
-	if exClient != nil { exSt = "ok" }
-	jsonResp(w, map[string]string{
-		"status": st, "ex_status": exSt,
-		"version": "2.0.0", "server_time": time.Now().Format("2006-01-02 15:04:05"),
-	})
-}
-
-func handleServerStatus(w http.ResponseWriter, r *http.Request) {
-	jsonResp(w, map[string]interface{}{
-		"status": func() string { if mainClient == nil { return "disconnected" }; return "running" }(),
-		"version": "2.0.0", "uptime": time.Since(startTime).String(),
-		"gbbq": gbbq != nil, "ex_hq": exClient != nil,
-	})
-}
-
-func parseInt(s string) (int, error) {
-	n := 0
-	for _, c := range s {
-		if c < '0' || c > '9' { return 0, nil }
-		n = n*10 + int(c-'0')
-	}
-	return n, nil
-}
-
 // ====== P1: 自定义周期复权 K 线 ======
 
 func handleGbbqAdjust(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
-	typ := r.URL.Query().Get("type")   // day, week, month, quarter, year
-	adj := r.URL.Query().Get("adjust") // qfq, hfq
+	typ := r.URL.Query().Get("type")
+	adj := r.URL.Query().Get("adjust")
 	cnt := parseCount(r.URL.Query().Get("count"), 60)
 	if code == "" { jsonErr(w, "缺少code"); return }
 	if adj == "" { adj = "qfq" }
@@ -362,76 +293,48 @@ func handleGbbqAdjust(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ====== P2: zhb 配置数据（板块指数/板块名称/统计/新股） ======
+// ====== 历史成交 ======
 
-func handleZhb(w http.ResponseWriter, r *http.Request) {
-	section := r.URL.Query().Get("section")
-	if section == "" { section = "zs" }
+func handleHistoryTrade(w http.ResponseWriter, r *http.Request) {
+	code := r.URL.Query().Get("code")
+	date := r.URL.Query().Get("date")
+	if code == "" || date == "" { jsonErr(w, "缺少code或date"); return }
 	c := cli()
 	if c == nil { jsonErr(w, "未连接"); return }
-
-	files, err := c.GetZHBFiles()
-	if err != nil { jsonErr(w, "zhb 下载失败: "+err.Error()); return }
-
-	switch section {
-	case "zs":
-		data, ok := files[protocol.FileTdxZs]
-		if !ok { jsonErr(w, "缺少 tdxzs.cfg"); return }
-		zs := protocol.ParseTdxZs(data)
-		jsonResp(w, map[string]interface{}{"section": "zs", "count": len(zs), "list": zs})
-
-	case "bk":
-		data, ok := files[protocol.FileTdxBk]
-		if !ok { jsonErr(w, "缺少 tdxbk.cfg"); return }
-		bk := protocol.ParseTdxBk(data)
-		jsonResp(w, map[string]interface{}{"section": "bk", "count": len(bk), "list": bk})
-
-	case "stat":
-		data, ok := files[protocol.FileTdxStat]
-		if !ok { jsonErr(w, "缺少 tdxstat.cfg"); return }
-		stat := protocol.ParseTdxStat(data)
-		type Item struct {
-			Market int      `json:"market"`
-			Code   string   `json:"code"`
-			Date   string   `json:"date"`
-			Fields []string `json:"fields"`
-		}
-		list := make([]Item, len(stat))
-		for i, s := range stat {
-			list[i] = Item{int(s.Market), s.Code, s.Date, s.Fields}
-		}
-		jsonResp(w, map[string]interface{}{"section": "stat", "count": len(list), "list": list})
-
-	case "stat2":
-		data, ok := files[protocol.FileTdxStat2]
-		if !ok { jsonErr(w, "缺少 tdxstat2.cfg"); return }
-		stat2 := protocol.ParseTdxStat2(data)
-		jsonResp(w, map[string]interface{}{"section": "stat2", "count": len(stat2), "list": stat2})
-
-	case "xgsg":
-		data, ok := files[protocol.FileXgsg]
-		if !ok { jsonErr(w, "缺少 xgsg.cfg"); return }
-		xgsg := protocol.ParseXgsg(data)
-		jsonResp(w, map[string]interface{}{"section": "xgsg", "count": len(xgsg), "list": xgsg})
-
-	default:
-		jsonErr(w, "未知 section，可选: zs/bk/stat/stat2/xgsg")
+	date = strings.ReplaceAll(date, "-", "")
+	resp, err := c.GetHistoryMinuteTradeDay(date, code)
+	if err != nil || resp == nil { jsonErr(w, "无数据"); return }
+	type Item struct {
+		Time string `json:"time"`; Price float64 `json:"price"`
+		Volume int `json:"volume"`; Status int `json:"status"`
 	}
+	list := make([]Item, 0)
+	for _, t := range resp.List {
+		list = append(list, Item{t.Time.Format("15:04:05"), t.Price.Float64(), t.Volume, t.Status})
+	}
+	jsonResp(w, map[string]interface{}{"code": code, "date": date, "count": len(list), "list": list})
 }
 
-// ====== GetReportFile 原始文件下载 ======
+// ====== 辅助函数 ======
 
-func handleReport(w http.ResponseWriter, r *http.Request) {
-	file := r.URL.Query().Get("file")
-	if file == "" { jsonErr(w, "缺少file"); return }
-	c := cli()
-	if c == nil { jsonErr(w, "未连接"); return }
+func jsonResp(w http.ResponseWriter, v interface{}) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	b, _ := json.Marshal(map[string]interface{}{"code": 0, "message": "success", "data": v})
+	w.Write(b)
+}
 
-	raw, err := c.GetReportFile(file)
-	if err != nil { jsonErr(w, "文件下载失败: "+err.Error()); return }
+func jsonErr(w http.ResponseWriter, msg string) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	b, _ := json.Marshal(map[string]interface{}{"code": -1, "message": msg})
+	w.Write(b)
+}
 
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(raw)))
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", file))
-	w.Write(raw)
+func parseInt(s string) (int, error) {
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' { return 0, nil }
+		n = n*10 + int(c-'0')
+	}
+	return n, nil
 }

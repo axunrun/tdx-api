@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 	"github.com/injoyai/tdx"
 	"github.com/injoyai/tdx/protocol"
 )
@@ -79,9 +80,14 @@ func handleHfqKline(w http.ResponseWriter, r *http.Request) {
 func handleMinute(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
 	if code == "" { jsonErr(w, "缺少code"); return }
+	date := r.URL.Query().Get("date")
+	if date == "" {
+		// 默认今天
+		date = time.Now().Format("20060102")
+	}
 	c := cli()
 	if c == nil { jsonErr(w, "未连接"); return }
-	resp, err := c.GetMinute(code)
+	resp, err := c.GetHistoryMinute(date, code)
 	if err != nil || resp == nil { jsonErr(w, "无数据"); return }
 	type MinuteItem struct {
 		Time   string  `json:"time"`
@@ -92,7 +98,7 @@ func handleMinute(w http.ResponseWriter, r *http.Request) {
 	for _, m := range resp.List {
 		list = append(list, MinuteItem{m.Time, m.Price.Float64(), m.Number})
 	}
-	jsonResp(w, map[string]interface{}{"code": code, "count": len(list), "list": list})
+	jsonResp(w, map[string]interface{}{"code": code, "date": date, "count": len(list), "list": list})
 }
 
 func handleTrade(w http.ResponseWriter, r *http.Request) {
@@ -182,6 +188,19 @@ func handleFactors(w http.ResponseWriter, r *http.Request) {
 		list = append(list, FactorItem{f.Time.Format("2006-01-02"), f.QFQMul, f.QFQAdd, f.HFQMul, f.HFQAdd})
 	}
 	jsonResp(w, map[string]interface{}{"code": code, "count": len(list), "list": list})
+}
+
+// handleGbbqAll 全市场复权因子
+func handleGbbqAll(w http.ResponseWriter, r *http.Request) {
+	c := cli()
+	if c == nil { jsonErr(w, "未连接"); return }
+	m, err := c.GetGbbqAll()
+	if err != nil { jsonErr(w, err.Error()); return }
+	codes := make([]string, 0, len(m))
+	for code := range m {
+		codes = append(codes, code)
+	}
+	jsonResp(w, map[string]interface{}{"count": len(codes), "codes": codes})
 }
 
 // ====== 基本面 ======
@@ -333,24 +352,6 @@ func handleHy(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, map[string]interface{}{"count": len(list), "list": list})
 }
 
-func handleXgsg(w http.ResponseWriter, r *http.Request) {
-	c := cli()
-	if c == nil { jsonErr(w, "未连接"); return }
-	xgsg, err := c.GetXgsg()
-	if err != nil { jsonErr(w, err.Error()); return }
-	type XgsgItem struct {
-		Code       string  `json:"code"`
-		Name       string  `json:"name"`
-		Date       string  `json:"date"`
-		IssuePrice float64 `json:"issue_price"`
-	}
-	list := make([]XgsgItem, 0)
-	for _, x := range xgsg {
-		list = append(list, XgsgItem{x.Code, x.Name, x.Date, x.IssuePrice})
-	}
-	jsonResp(w, map[string]interface{}{"count": len(list), "list": list})
-}
-
 func handleCodes(w http.ResponseWriter, r *http.Request) {
 	c := cli()
 	if c == nil { jsonErr(w, "未连接"); return }
@@ -370,6 +371,24 @@ func handleCodes(w http.ResponseWriter, r *http.Request) {
 	}
 	limit := parseCount(r.URL.Query().Get("limit"), 0)
 	if limit > 0 && limit < len(codes) { codes = codes[:limit] }
+	jsonResp(w, map[string]interface{}{"count": len(codes), "list": codes})
+}
+
+// handleCodesETF 全量 ETF 代码列表
+func handleCodesETF(w http.ResponseWriter, r *http.Request) {
+	c := cli()
+	if c == nil { jsonErr(w, "未连接"); return }
+	codes, err := c.GetETFCodeAll()
+	if err != nil { jsonErr(w, err.Error()); return }
+	jsonResp(w, map[string]interface{}{"count": len(codes), "list": codes})
+}
+
+// handleCodesIndex 全量指数代码列表
+func handleCodesIndex(w http.ResponseWriter, r *http.Request) {
+	c := cli()
+	if c == nil { jsonErr(w, "未连接"); return }
+	codes, err := c.GetIndexCodeAll()
+	if err != nil { jsonErr(w, err.Error()); return }
 	jsonResp(w, map[string]interface{}{"count": len(codes), "list": codes})
 }
 

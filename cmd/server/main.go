@@ -24,7 +24,6 @@ var (
 func main() {
 	var err error
 
-	// 测速排序：按 TCP 握手耗时筛选可用地址，最快排最前
 	sorted := tdx.SortHosts()
 	log.Printf("🌐 A股行情服务器测速完成，可用 %d 台，首选 %s", len(sorted), sorted[0])
 
@@ -50,25 +49,9 @@ func main() {
 		}
 	}()
 
-	go func() {
-		// 测速排序：扩展行情服务器按 TCP 速度重排
-		exSorted := tdx.SortExHosts()
-		log.Printf("🌐 扩展行情服务器测速完成，可用 %d 台，首选 %s", len(exSorted), exSorted[0])
-
-		for i := 0; i < 5; i++ {
-			exClient, err = tdx.DialExHqDefault()
-			if err == nil {
-				log.Println("✅ 扩展行情(期货/港股/外盘)已连接")
-				return
-			}
-			log.Printf("⏳ 扩展行情重试(%d/5): %v", i+1, err)
-			time.Sleep(3 * time.Second)
-		}
-		log.Printf("⚠️ 扩展行情连接失败: %v", err)
-	}()
-
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", handleWebUI)
+	// A股行情
 	mux.HandleFunc("/api/quote", handleQuote)
 	mux.HandleFunc("/api/kline", handleKline)
 	mux.HandleFunc("/api/kline/all", handleKlineAll)
@@ -77,41 +60,35 @@ func main() {
 	mux.HandleFunc("/api/minute", handleMinute)
 	mux.HandleFunc("/api/trade", handleTrade)
 	mux.HandleFunc("/api/call-auction", handleCallAuction)
-	mux.HandleFunc("/api/finance", handleFinance)
-	mux.HandleFunc("/api/f10", handleF10)
+	// 复权系统
 	mux.HandleFunc("/api/gbbq", handleGbbq)
 	mux.HandleFunc("/api/adjust-factors", handleFactors)
+	mux.HandleFunc("/api/gbbq/adjust", handleGbbqAdjust)
+	mux.HandleFunc("/api/gbbq/all", handleGbbqAll)
+	// 基本面
+	mux.HandleFunc("/api/finance", handleFinance)
+	mux.HandleFunc("/api/f10", handleF10)
+	// 全市场统计
 	mux.HandleFunc("/api/stat", handleStat)
 	mux.HandleFunc("/api/moneyflow", handleMoneyflow)
 	mux.HandleFunc("/api/blocks", handleBlocks)
 	mux.HandleFunc("/api/hy", handleHy)
-	mux.HandleFunc("/api/xgsg", handleXgsg)
 	mux.HandleFunc("/api/codes", handleCodes)
+	mux.HandleFunc("/api/codes/etf", handleCodesETF)
+	mux.HandleFunc("/api/codes/index", handleCodesIndex)
+	// 指数
 	mux.HandleFunc("/api/index/kline", handleIndexKline)
 	mux.HandleFunc("/api/index/all", handleIndexKlineAll)
-	mux.HandleFunc("/api/ex/quote", handleExQuote)
-	mux.HandleFunc("/api/ex/bars", handleExBars)
-	mux.HandleFunc("/api/ex/minute", handleExMinute)
-	mux.HandleFunc("/api/ex/trade", handleExTrade)
-	mux.HandleFunc("/api/ex/markets", handleExMarkets)
-	mux.HandleFunc("/api/ex/instruments", handleExInstruments)
+	// 工具
 	mux.HandleFunc("/api/search", handleSearch)
-	mux.HandleFunc("/api/workday", handleWorkday)
-	mux.HandleFunc("/api/workday/range", handleWorkdayRange)
 	mux.HandleFunc("/api/history-trade", handleHistoryTrade)
-	mux.HandleFunc("/api/income", handleIncome)
-	mux.HandleFunc("/api/health", handleHealth)
-	mux.HandleFunc("/api/server-status", handleServerStatus)
-	mux.HandleFunc("/api/gbbq/adjust", handleGbbqAdjust)
-	mux.HandleFunc("/api/zhb", handleZhb)
-	mux.HandleFunc("/api/report", handleReport)
-
 
 	port := "8080"
 	if p := os.Getenv("PORT"); p != "" {
 		port = p
 	}
-	log.Printf("🚀 TDX API Server v2.0 启动于 :%s", port)
+	nEndpoints := 24
+	log.Printf("🚀 TDX API Server v2.1 启动于 :%s (%d endpoints)", port, nEndpoints)
 	log.Fatal(http.ListenAndServe(":"+port, mux))
 }
 

@@ -64,19 +64,18 @@
 </head>
 <body>
 <div class="container">
-<header><div><h1>TDX Market Data</h1></div><div class="ver">v2.1 · 37 endpoints</div></header>
+<header><div><h1>TDX Market Data</h1></div><div class="ver">v2.1 · 24 endpoints</div></header>
 
 <div class="nav-tabs" id="navTabs">
   <button class="active" onclick="switchNav('search')">行情查询</button>
   <button onclick="switchNav('adjust')">复权工具</button>
-  <button onclick="switchNav('zhb')">板块配置</button>
   <button onclick="switchNav('api')">接口清单</button>
 </div>
 
 <!-- ===== 行情查询 ===== -->
 <div class="tab-pane active" id="navSearch">
   <div class="search-box">
-    <input type="text" id="stockInput" placeholder="代码（如 603063, 600933, 000001）" autofocus>
+    <input type="text" id="stockInput" placeholder="代码或名称（如 603063, 禾望电气, 000001）" autofocus>
     <button onclick="search()">查询</button>
   </div>
   <div class="error-msg" id="errorMsg"></div>
@@ -145,82 +144,50 @@
   </div>
 </div>
 
-<!-- ===== 板块配置 ===== -->
-<div class="tab-pane" id="navZhb">
-  <div class="card">
-    <div class="form-row">
-      <div><label>数据类型</label><select id="zhbSection" onchange="loadZhb()">
-        <option value="zs">板块指数映射 (zs)</option>
-        <option value="bk">概念板块全称 (bk)</option>
-        <option value="stat">全市场统计 (stat)</option>
-        <option value="stat2">资金流向 (stat2)</option>
-        <option value="xgsg">新股申购 (xgsg)</option>
-      </select></div>
-      <div><label>过滤</label><input type="text" id="zhbFilter" placeholder="关键词" style="width:150px" oninput="filterZhb()"></div>
-    </div>
-    <div id="zhbInfo" style="font-size:11px;color:var(--text2);margin-bottom:8px"></div>
-    <div style="max-height:500px;overflow-y:auto">
-      <table><thead><tr><th>#</th><th>代码</th><th>名称</th></tr></thead><tbody id="zhbBody"></tbody></table>
-    </div>
-  </div>
-</div>
-
 <!-- ===== 接口清单 ===== -->
 <div class="tab-pane" id="navApi">
   <div class="card">
-    <p style="font-size:13px;color:var(--text2);margin-bottom:12px">共 <strong style="color:var(--text)">37</strong> 个 REST 端点 · 数据源：TDX 通达信行情服务器</p>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:12px">共 <strong style="color:var(--text)">24</strong> 个 REST 端点 · 数据源：TDX 通达信行情服务器</p>
     <div id="apiCatalog"></div>
   </div>
 </div>
 </div>
 
-<div class="status-bar"><span id="statusLeft">就绪</span><span id="statusRight">tdx-api-server v2.1 · 37 endpoints</span></div>
+<div class="status-bar"><span id="statusLeft">就绪</span><span id="statusRight">tdx-api-server v2.1 · 24 endpoints</span></div>
 
 <script>
 const API_CATALOG=[
   {cat:"A股行情",items:[
-    {path:"/api/quote",params:"code",desc:"五档盘口报价"},
-    {path:"/api/kline",params:"code, type=day, count=10",desc:"K线数据（day/week/month/quarter/year/minute1-60）"},
+    {path:"/api/quote",params:"code",desc:"实时行情（最新价/涨跌幅/量额）"},
+    {path:"/api/kline",params:"code, type=day, count=20",desc:"K线数据（day/week/month/quarter/year/minute1-60）"},
     {path:"/api/kline/all",params:"code, type=day",desc:"全量历史K线"},
-    {path:"/api/kline/qfq",params:"code, count=10",desc:"前复权日K线"},
-    {path:"/api/kline/hfq",params:"code, count=10",desc:"后复权日K线"},
-    {path:"/api/minute",params:"code",desc:"当日分时数据"},
-    {path:"/api/trade",params:"code, start=0, count=30",desc:"当日分笔成交"},
+    {path:"/api/kline/qfq",params:"code, count=20",desc:"前复权日K线"},
+    {path:"/api/kline/hfq",params:"code, count=20",desc:"后复权日K线"},
+    {path:"/api/minute",params:"code, date=20260623",desc:"分时数据（加?date=查历史分时）"},
+    {path:"/api/trade",params:"code",desc:"当日分笔成交"},
     {path:"/api/call-auction",params:"code",desc:"集合竞价"}]},
   {cat:"基本面",items:[
     {path:"/api/finance",params:"code, mkt=1",desc:"30字段财务摘要"},
-    {path:"/api/f10",params:"code, mkt=1, cat=N",desc:"F16分类(cat=2财务 4股东 8资金 10板块 11公告)"},
-    {path:"/api/income",params:"code, start_date, days=5,10,20,60,120",desc:"区间收益率"}]},
+    {path:"/api/f10",params:"code, mkt=1, cat=N",desc:"F16分类(cat=2财务 4股东 8资金 10板块 11公告)"}]},
   {cat:"复权系统",items:[
-    {path:"/api/gbbq",params:"code",desc:"复权因子列表"},
+    {path:"/api/gbbq",params:"code",desc:"个股复权因子"},
     {path:"/api/adjust-factors",params:"code",desc:"逐日复权系数"},
-    {path:"/api/gbbq/adjust",params:"code, type=week, adjust=qfq, count=30",desc:"自定义周期复权K线"}]},
+    {path:"/api/gbbq/adjust",params:"code, type=week, adjust=qfq, count=30",desc:"自定义周期复权K线"},
+    {path:"/api/gbbq/all",params:"",desc:"全市场复权因子"}]},
   {cat:"全市场统计",items:[
     {path:"/api/stat",params:"limit=100",desc:"个股综合统计(PE/涨跌幅)"},
     {path:"/api/moneyflow",params:"limit=100",desc:"资金流向+板块归属"},
-    {path:"/api/blocks",params:"type=gn/fg/zs",desc:"板块成分股"},
+    {path:"/api/blocks",params:"type=gn/fg/zs",desc:"板块成分股(含指数代码+成分股列表)"},
     {path:"/api/hy",params:"",desc:"行业归属"},
-    {path:"/api/xgsg",params:"",desc:"新股申购"},
-    {path:"/api/codes",params:"exchange=sh/sz/bj, limit=10",desc:"代码列表"}]},
+    {path:"/api/codes",params:"exchange=sh/sz/bj, limit=10",desc:"A股代码列表"},
+    {path:"/api/codes/etf",params:"",desc:"ETF代码列表"},
+    {path:"/api/codes/index",params:"",desc:"指数代码列表"}]},
   {cat:"指数",items:[
     {path:"/api/index/kline",params:"code, type=day, count=10",desc:"指数K线(含分钟5/15/30/60)"},
     {path:"/api/index/all",params:"code",desc:"指数全量K线"}]},
-  {cat:"扩展行情",items:[
-    {path:"/api/ex/markets",params:"",desc:"52个市场代码表"},
-    {path:"/api/ex/instruments",params:"market=31, start=0, count=50",desc:"品种列表"},
-    {path:"/api/ex/quote",params:"code, market=31",desc:"五档报价"},
-    {path:"/api/ex/bars",params:"code, market, category, count=20",desc:"K线"},
-    {path:"/api/ex/minute",params:"code, market=31",desc:"分时"},
-    {path:"/api/ex/trade",params:"code, market=31, count=30",desc:"分笔成交"}]},
   {cat:"工具",items:[
-    {path:"/api/search",params:"keyword",desc:"股票代码搜索"},
-    {path:"/api/workday",params:"date=20260623",desc:"交易日判断"},
-    {path:"/api/workday/range",params:"start, end",desc:"交易日区间"},
-    {path:"/api/history-trade",params:"code, date=20260618",desc:"历史全量分笔"},
-    {path:"/api/zhb",params:"section=zs/bk/stat/stat2/xgsg",desc:"通达信配置数据"},
-    {path:"/api/report",params:"file=文件名",desc:"原始文件下载"},
-    {path:"/api/health",params:"",desc:"健康检查"},
-    {path:"/api/server-status",params:"",desc:"服务状态"}]},
+    {path:"/api/search",params:"keyword",desc:"股票搜索(代码/名称/拼音)"},
+    {path:"/api/history-trade",params:"code, date=20260618",desc:"历史全量分笔"}]},
 ];
 
 document.addEventListener('DOMContentLoaded',function(){
@@ -247,14 +214,19 @@ function switchNav(name){
   document.querySelectorAll('.tab-pane').forEach(function(t){t.classList.remove('active')});
   event.target.classList.add('active');
   document.getElementById('nav'+name.charAt(0).toUpperCase()+name.slice(1)).classList.add('active');
-  if(name==='zhb') loadZhb();
 }
 
 function switchSub(name){
+  var map={kline:'subKline',finance:'subFinance',f10:'subF10',history:'subHistory',K线:'subKline',财务:'subFinance',F10:'subF10',分笔:'subHistory'};
   document.querySelectorAll('#subTabs button').forEach(function(b){b.classList.remove('active')});
   document.querySelectorAll('#detailCard .sub-content').forEach(function(t){t.classList.remove('active')});
-  var btns=document.querySelectorAll('#subTabs button'); for(var i=0;i<btns.length;i++){if(btns[i].textContent.trim()===name||btns[i].getAttribute('onclick').includes(name))btns[i].classList.add('active');break}
-  document.getElementById('sub'+name.charAt(0).toUpperCase()+name.slice(1)).classList.add('active');
+  for(var i=0;i<event.target.parentNode.children.length;i++){
+    var btn=event.target.parentNode.children[i];
+    if(btn.textContent.trim().startsWith(name)||(name==='kline'&&btn.textContent.includes('K'))){
+      btn.classList.add('active');break;
+    }
+  }
+  var target=map[name]||'subKline'; document.getElementById(target).classList.add('active');
 }
 
 var A_PREFIXES=['600','601','603','605','688','689','900','000','001','002','003','004','300','301','400','420','430','488','500','550','8'];
@@ -309,10 +281,6 @@ async function loadF10Content(c,m,cat){try{var r=await fetch('/api/f10?code='+c+
 async function loadHistory(){var code=document.getElementById('stockInput').value.trim();var date=document.getElementById('histDate').value.trim();if(!code||!date)return;try{var r=await fetch('/api/history-trade?code='+code+'&date='+date);var d=await r.json();if(d.code!==0)throw new Error(d.message);var list=d.data.list;var b=document.getElementById('histBody');b.innerHTML='<p style="font-size:11px;color:var(--text2);margin-bottom:6px">共 '+list.length+' 笔</p><table><thead><tr><th>时间</th><th>价格</th><th>成交量</th><th>方向</th></tr></thead><tbody>';list.forEach(function(t){var dir=t.status===0?'买':t.status===1?'卖':'中性';b.innerHTML+='<tr><td>'+t.time+'</td><td>'+fmt(t.price)+'</td><td>'+fmtInt(t.volume)+'</td><td style="color:'+(t.status===0?'var(--up)':t.status===1?'var(--down)':'var(--text2)')+'">'+dir+'</td></tr>'});b.innerHTML+='</tbody></table>'}catch(e){document.getElementById('histBody').innerHTML='<span style="color:var(--up)">加载失败</span>'}}
 
 async function loadAdjust(){var code=document.getElementById('adjCode').value.trim(),type=document.getElementById('adjType').value,adj=document.getElementById('adjMode').value,cnt=document.getElementById('adjCount').value;if(!code)return;document.getElementById('adjInfo').textContent='加载中...';try{var r=await fetch('/api/gbbq/adjust?code='+code+'&type='+type+'&adjust='+adj+'&count='+cnt);var d=await r.json();if(d.code!==0)throw new Error(d.message);var list=d.data.list;var b=document.getElementById('adjBody');b.innerHTML='';list.forEach(function(v){var c=v.close-v.open;b.innerHTML+='<tr><td>'+v.date+'</td><td class="'+(c>=0?'down':'up')+'">'+fmt(v.open)+'</td><td style="color:var(--down)">'+fmt(v.high)+'</td><td style="color:var(--up)">'+fmt(v.low)+'</td><td class="'+(c>=0?'up':'down')+'">'+fmt(v.close)+'</td><td>'+fmtInt(v.volume)+'</td></tr>'});document.getElementById('adjInfo').textContent='✅ '+d.data.code+' · '+d.data.type+'K线 '+d.data.adjust+' · 共'+d.data.count+'根'}catch(e){document.getElementById('adjInfo').textContent='❌ 失败: '+(e.message||'无数据')}}
-
-var zhbData=[];
-async function loadZhb(){var s=document.getElementById('zhbSection').value;document.getElementById('zhbInfo').textContent='加载中...';try{var r=await fetch('/api/zhb?section='+s);var d=await r.json();if(d.code!==0)throw new Error(d.message);zhbData=d.data.list||[];document.getElementById('zhbInfo').textContent='共 '+zhbData.length+' 条';filterZhb()}catch(e){document.getElementById('zhbInfo').textContent='❌ 加载失败'}}
-function filterZhb(){var q=document.getElementById('zhbFilter').value.trim().toLowerCase();var list=q?zhbData.filter(function(i){return(i.Name||i.code||'').toLowerCase().includes(q)}):zhbData;var b=document.getElementById('zhbBody');b.innerHTML='';list.slice(0,200).forEach(function(item,i){b.innerHTML+='<tr><td>'+(i+1)+'</td><td style="color:var(--accent);font-family:monospace">'+(item.Code||item.code||item.Index||'')+'</td><td>'+(item.Name||item.name||'')+'</td></tr>'});document.getElementById('zhbInfo').textContent='共 '+zhbData.length+' 条 · 显示 '+list.length+' 条'}
 </script>
 </body>
 </html>
