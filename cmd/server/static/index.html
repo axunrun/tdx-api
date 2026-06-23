@@ -253,7 +253,11 @@ document.addEventListener('DOMContentLoaded',function(){
   renderApiCatalog();
   buildTestEndpointList();
   document.getElementById('stockInput').addEventListener('keydown',function(e){
-    if(e.key==='Enter') doSearch();
+    if(e.key==='Enter'){
+      var dd=document.getElementById('searchDropdown');
+      if(dd.style.display!=='none'&&dd.children.length>0){dd.children[0].click();return;}
+      doSearch();
+    }
   });
   document.getElementById('stockInput').addEventListener('input',function(){
     var v=this.value.trim();
@@ -331,6 +335,7 @@ async function doSearch(){
   document.getElementById('quoteCard').style.display='none';document.getElementById('detailCard').style.display='none';
   setStatus('查询中...');
   var fullInput=input.includes('sh')||input.includes('sz')||input.includes('bj')?input:input.replace(/[^0-9A-Za-z]/g,'');
+  if(!fullInput){showError('请输入有效代码');setStatus('失败');document.getElementById('loading').style.display='none';return;}
   try{
     if(isIndexCode(fullInput)||fullInput.startsWith('sh000')||fullInput.startsWith('sz399')){
       var r=await fetch('/api/index/kline?code='+fullInput+'&count=10');var d=await r.json();if(d.code!==0)throw new Error(d.message);
