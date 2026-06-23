@@ -337,3 +337,37 @@ func parseInt(s string) (int, error) {
 	}
 	return n, nil
 }
+
+// ====== SQLite 股票库 ======
+
+func handleStocksRefresh(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		jsonErr(w, "请求解析失败")
+		return
+	}
+	c := cli()
+	if c == nil {
+		jsonErr(w, "未连接")
+		return
+	}
+	count, err := refreshStocks(c)
+	if err != nil {
+		jsonErr(w, "更新失败: "+err.Error())
+		return
+	}
+	jsonResp(w, map[string]interface{}{"count": count, "message": "更新成功"})
+}
+
+func handleStocksSearch(w http.ResponseWriter, r *http.Request) {
+	kw := r.URL.Query().Get("keyword")
+	if kw == "" {
+		jsonErr(w, "缺少keyword")
+		return
+	}
+	results, err := searchStocks(kw, 50)
+	if err != nil {
+		jsonErr(w, err.Error())
+		return
+	}
+	jsonResp(w, map[string]interface{}{"keyword": kw, "count": len(results), "list": results})
+}

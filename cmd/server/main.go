@@ -82,13 +82,20 @@ func main() {
 	// 工具
 	mux.HandleFunc("/api/search", handleSearch)
 	mux.HandleFunc("/api/history-trade", handleHistoryTrade)
+	// 股票对照表（SQLite）
+	mux.HandleFunc("/api/stocks/refresh", handleStocksRefresh)
+	mux.HandleFunc("/api/stocks/search", handleStocksSearch)
 
 	port := "8080"
 	if p := os.Getenv("PORT"); p != "" {
 		port = p
 	}
-	nEndpoints := 24
+	nEndpoints := 26
 	log.Printf("🚀 TDX API Server v2.1 启动于 :%s (%d endpoints)", port, nEndpoints)
+
+	// 初始化 SQLite 股票库
+	initStocksDB()
+
 	log.Fatal(http.ListenAndServe(":"+port, mux))
 }
 

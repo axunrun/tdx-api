@@ -102,8 +102,12 @@
 <!-- ===== 行情查询 ===== -->
 <div class="tab-pane active" id="navSearch">
   <div class="search-box">
-    <input type="text" id="stockInput" placeholder="代码或名称（如 603063, 禾望电气, 000001）" autofocus>
+    <input type="text" id="stockInput" placeholder="代码或名称或拼音（如 603063, 平安银行, PAYH）" autofocus>
     <button onclick="doSearch()">查询</button>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:12px">
+    <span id="stockStatus" class="hint-text" style="flex:1;padding:6px 0"></span>
+    <button onclick="refreshStocks()" id="refreshBtn" class="btn btn-secondary" style="font-size:11px">📥 更新股票数据</button>
   </div>
   <div class="search-dropdown" id="searchDropdown"></div>
   <div class="error-msg" id="errorMsg"></div>
@@ -231,7 +235,9 @@ const API_CATALOG=[
     {path:"/api/index/all",params:"code",desc:"指数全量K线"}]},
   {cat:"工具",items:[
     {path:"/api/search",params:"keyword",desc:"股票搜索(代码/名称/拼音)"},
-    {path:"/api/history-trade",params:"code, date=20260618",desc:"历史全量分笔"}]},
+    {path:"/api/history-trade",params:"code, date=20260618",desc:"历史全量分笔"},
+    {path:"/api/stocks/search",params:"keyword",desc:"SQLite股票检索(代码/名称/拼音)"},
+    {path:"/api/stocks/refresh",params:"",desc:"全量更新SQLite股票数据库"}]},
 ];
 
 // --- endpoint param definitions for API test ---
@@ -308,7 +314,7 @@ function fmtInt(v){return Number(v).toLocaleString('zh-CN')}
 // ====== 搜索 ======
 async function searchDropdown(kw){
   try{
-    var r=await fetch('/api/search?keyword='+encodeURIComponent(kw));
+    var r=await fetch('/api/stocks/search?keyword='+encodeURIComponent(kw));
     var d=await r.json();
     if(d.code!==0||!d.data||!d.data.list||!d.data.list.length){
       document.getElementById('searchDropdown').style.display='none';return;
@@ -321,6 +327,17 @@ async function searchDropdown(kw){
       dd.appendChild(row);
     });
   }catch(e){document.getElementById('searchDropdown').style.display='none';}
+}
+
+async function refreshStocks(){
+  var btn=document.getElementById('refreshBtn');btn.disabled=true;btn.textContent='⏳ 更新中...';
+  document.getElementById('stockStatus').textContent='正在从通达信下载股票数据...';
+  try{
+    var r=await fetch('/api/stocks/refresh',{method:'POST'});var d=await r.json();
+    if(d.code===0) document.getElementById('stockStatus').textContent='✅ 更新成功，共 '+d.data.count+' 只股票';
+    else document.getElementById('stockStatus').textContent='❌ 更新失败: '+d.message;
+  }catch(e){document.getElementById('stockStatus').textContent='❌ 请求失败: '+e.message;}
+  btn.disabled=false;btn.textContent='📥 更新股票数据';
 }
 
 var A_PREFIXES=['600','601','603','605','688','689','900','000','001','002','003','004','300','301','400','420','430','488','500','550','8'];
@@ -336,9 +353,9 @@ async function doSearch(){
   setStatus('查询中...');
   var fullInput=input.includes('sh')||input.includes('sz')||input.includes('bj')?input:input.replace(/[^0-9A-Za-z]/g,'');
   if(!fullInput){
-    // 中文名→调用search取第一条结果
+    // 中文名→调用 stocks/search 取第一条结果
     try{
-      var sr=await fetch('/api/search?keyword='+encodeURIComponent(input));var sd=await sr.json();
+      var sr=await fetch('/api/stocks/search?keyword='+encodeURIComponent(input));var sd=await sr.json();
       if(sd.code===0&&sd.data&&sd.data.list&&sd.data.list.length){fullInput=sd.data.list[0].code;}
     }catch(e){}
     if(!fullInput){showError('未找到匹配的股票');setStatus('失败');document.getElementById('loading').style.display='none';return;}
