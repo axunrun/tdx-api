@@ -12,7 +12,7 @@
   header{margin-bottom:24px;display:flex;align-items:center;justify-content:space-between}
   header h1{font-size:20px;font-weight:500}
   header .ver{font-size:12px;color:var(--text2)}
-  .search-box{display:flex;gap:8px;margin-bottom:20px}
+  .search-box{display:flex;gap:8px;margin-bottom:6px}
   .search-box input{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-size:15px;color:var(--text);outline:none;transition:border-color .2s;font-family:inherit}
   .search-box input::placeholder{color:#555}
   .search-box input:focus{border-color:var(--accent)}
@@ -60,6 +60,32 @@
   .api-item .desc{font-size:12px;color:var(--text2)}
   .api-item .params{font-size:11px;color:var(--text2);font-family:'SF Mono',Menlo,monospace;background:var(--surface);padding:4px 8px;border-radius:4px;margin-top:2px}
   .tag{display:inline-block;font-size:10px;padding:1px 6px;border-radius:4px;background:var(--surface3);color:var(--text2);margin-left:6px}
+  .search-dropdown{background:var(--surface);border:1px solid var(--border);border-radius:0 0 10px 10px;max-height:300px;overflow-y:auto;display:none;margin-top:-10px;margin-bottom:20px;position:relative;z-index:10}
+  .search-dropdown div{padding:10px 16px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between}
+  .search-dropdown div:hover{background:var(--surface3)}
+  .search-dropdown .scode{color:var(--accent);font-family:'SF Mono',Menlo,monospace}
+  .search-dropdown .sname{color:var(--text)}
+  .search-dropdown .sexch{font-size:10px;color:var(--text2);background:var(--surface3);padding:1px 6px;border-radius:4px}
+  .test-console{display:flex;flex-direction:column;gap:12px}
+  .test-console .ep-select{width:100%;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;font-family:inherit;outline:none}
+  .test-console .ep-select:focus{border-color:var(--accent)}
+  .test-params{display:flex;gap:8px;flex-wrap:wrap}
+  .test-params input{background:var(--surface3);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:13px;color:var(--text);font-family:'SF Mono',Menlo,monospace;outline:none;min-width:140px;flex:1}
+  .test-params input:focus{border-color:var(--accent)}
+  .test-params input::placeholder{color:#555;font-family:inherit}
+  .test-result{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+  .test-result .url-bar{padding:8px 14px;background:var(--surface2);font-size:11px;color:var(--text2);font-family:'SF Mono',Menlo,monospace;word-break:break-all;border-bottom:1px solid var(--border)}
+  .test-result .url-bar .method-badge{display:inline-block;background:var(--down);color:#fff;padding:1px 6px;border-radius:3px;font-weight:500;margin-right:6px;font-size:10px}
+  .test-result pre{overflow-x:auto;padding:14px;font-size:12px;line-height:1.6;color:var(--text);font-family:'SF Mono',Menlo,monospace;max-height:500px;white-space:pre-wrap;word-break:break-all;margin:0}
+  .test-status{padding:10px 14px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border);font-size:11px;color:var(--text2)}
+  .test-status .ok{color:var(--down)}
+  .test-status .err{color:var(--up)}
+  .test-status .ms{color:var(--text2);font-family:'SF Mono',Menlo,monospace}
+  .hint-text{font-size:11px;color:var(--text2);margin-top:4px}
+  .btn{padding:8px 20px;border:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:opacity .2s}
+  .btn:hover{opacity:.85}
+  .btn-primary{background:var(--accent);color:#fff}
+  .btn-secondary{background:var(--surface2);border:1px solid var(--border);color:var(--text)}
 </style>
 </head>
 <body>
@@ -69,6 +95,7 @@
 <div class="nav-tabs" id="navTabs">
   <button class="active" onclick="switchNav('search')">行情查询</button>
   <button onclick="switchNav('adjust')">复权工具</button>
+  <button onclick="switchNav('test')">API测试</button>
   <button onclick="switchNav('api')">接口清单</button>
 </div>
 
@@ -76,8 +103,9 @@
 <div class="tab-pane active" id="navSearch">
   <div class="search-box">
     <input type="text" id="stockInput" placeholder="代码或名称（如 603063, 禾望电气, 000001）" autofocus>
-    <button onclick="search()">查询</button>
+    <button onclick="doSearch()">查询</button>
   </div>
+  <div class="search-dropdown" id="searchDropdown"></div>
   <div class="error-msg" id="errorMsg"></div>
   <div class="loading" id="loading">查询中...</div>
 
@@ -120,7 +148,7 @@
     <div class="sub-content" id="subHistory">
       <div class="form-row">
         <div><label>日期</label><input type="text" id="histDate" value="" placeholder="20260618" style="width:120px"></div>
-        <button onclick="loadHistory()" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 16px;color:var(--text);cursor:pointer">加载</button>
+        <button onclick="loadHistory()" class="btn btn-secondary">加载</button>
       </div>
       <div style="max-height:400px;overflow-y:auto" id="histBody"></div>
     </div>
@@ -135,12 +163,28 @@
       <div><label>周期</label><select id="adjType"><option value="day">日</option><option value="week" selected>周</option><option value="month">月</option><option value="quarter">季</option><option value="year">年</option></select></div>
       <div><label>复权</label><select id="adjMode"><option value="qfq">前复权</option><option value="hfq">后复权</option></select></div>
       <div><label>数量</label><input type="number" id="adjCount" value="30" style="width:80px"></div>
-      <div><button onclick="loadAdjust()" style="background:var(--accent);border:none;border-radius:8px;padding:8px 20px;color:#fff;cursor:pointer;font-family:inherit">查询</button></div>
+      <div><button onclick="loadAdjust()" class="btn btn-primary">查询</button></div>
     </div>
     <div style="max-height:500px;overflow-y:auto">
       <table><thead><tr><th>日期</th><th>开盘</th><th>最高</th><th>最低</th><th>收盘</th><th>成交量</th></tr></thead><tbody id="adjBody"></tbody></table>
     </div>
     <div id="adjInfo" style="font-size:11px;color:var(--text2);margin-top:8px"></div>
+  </div>
+</div>
+
+<!-- ===== API测试 ===== -->
+<div class="tab-pane" id="navTest">
+  <div class="card">
+    <div class="test-console">
+      <select id="testEndpoint" class="ep-select" onchange="updateTestParams()"></select>
+      <div class="test-params" id="testParams"></div>
+      <div><button onclick="runTest()" class="btn btn-primary">执行</button> <span id="testHint" class="hint-text">选择端点后自动生成参数输入框</span></div>
+      <div class="test-result" id="testResult" style="display:none">
+        <div class="url-bar" id="testUrlBar"><span class="method-badge">GET</span><span id="testUrl"></span></div>
+        <pre id="testJson"></pre>
+        <div class="test-status"><span id="testStatus"></span><span class="ms" id="testMs"></span></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -190,9 +234,32 @@ const API_CATALOG=[
     {path:"/api/history-trade",params:"code, date=20260618",desc:"历史全量分笔"}]},
 ];
 
+// --- endpoint param definitions for API test ---
+const EP_PARAMS = {};
+API_CATALOG.forEach(g => g.items.forEach(ep => {
+  var p = [];
+  if (ep.params) {
+    ep.params.split(', ').forEach(function(raw) {
+      var parts = raw.split('=');
+      var name = parts[0].trim();
+      var defVal = parts.length > 1 ? parts.slice(1).join('=').trim() : '';
+      p.push({name: name, default: defVal});
+    });
+  }
+  EP_PARAMS[ep.path] = p;
+}));
+
 document.addEventListener('DOMContentLoaded',function(){
   renderApiCatalog();
-  document.getElementById('stockInput').addEventListener('keydown',function(e){if(e.key==='Enter')search()});
+  buildTestEndpointList();
+  document.getElementById('stockInput').addEventListener('keydown',function(e){
+    if(e.key==='Enter') doSearch();
+  });
+  document.getElementById('stockInput').addEventListener('input',function(){
+    var v=this.value.trim();
+    if(v.length<1){document.getElementById('searchDropdown').style.display='none';return;}
+    searchDropdown(v);
+  });
   var d=new Date(); document.getElementById('histDate').value=d.getFullYear()+('0'+(d.getMonth()+1)).slice(-2)+('0'+d.getDate()).slice(-2);
 });
 
@@ -229,17 +296,37 @@ function switchSub(name){
   var target=map[name]||'subKline'; document.getElementById(target).classList.add('active');
 }
 
+function setStatus(m){document.getElementById('statusLeft').textContent=m}
+function showError(m){var e=document.getElementById('errorMsg');e.textContent=m;e.style.display='block'}
+function fmt(v){return Number(v).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2})}
+function fmtInt(v){return Number(v).toLocaleString('zh-CN')}
+
+// ====== 搜索 ======
+async function searchDropdown(kw){
+  try{
+    var r=await fetch('/api/search?keyword='+encodeURIComponent(kw));
+    var d=await r.json();
+    if(d.code!==0||!d.data||!d.data.list||!d.data.list.length){
+      document.getElementById('searchDropdown').style.display='none';return;
+    }
+    var dd=document.getElementById('searchDropdown');dd.innerHTML='';dd.style.display='block';
+    d.data.list.forEach(function(item){
+      var row=document.createElement('div');
+      row.innerHTML='<span class="scode">'+item.code+'</span> <span class="sname">'+item.name+'</span> <span class="sexch">'+item.exchange+'</span>';
+      row.onclick=function(){document.getElementById('stockInput').value=item.code;dd.style.display='none';doSearch();};
+      dd.appendChild(row);
+    });
+  }catch(e){document.getElementById('searchDropdown').style.display='none';}
+}
+
 var A_PREFIXES=['600','601','603','605','688','689','900','000','001','002','003','004','300','301','400','420','430','488','500','550','8'];
 var INDEX_CODES={'sh000001':'上证指数','sz399001':'深证成指','sz399006':'创业板指','sh000300':'沪深300','sh000688':'科创50','sh000016':'上证50','sh000905':'中证500','sh000852':'中证1000'};
 function detectMarket(c){var u=c.toUpperCase();if(u.startsWith('SH'))return 1;if(u.startsWith('SZ'))return 0;if(u.startsWith('BJ'))return 2;for(var i=0;i<A_PREFIXES.length;i++){if(c.startsWith(A_PREFIXES[i]))return(A_PREFIXES[i]==='688'||A_PREFIXES[i]==='689'||c.startsWith('6')||c.startsWith('9'))?1:0}return 1}
 function isIndexCode(c){return c in INDEX_CODES}
-function fmt(v){return Number(v).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2})}
-function fmtInt(v){return Number(v).toLocaleString('zh-CN')}
-function showError(m){var e=document.getElementById('errorMsg');e.textContent=m;e.style.display='block'}
-function setStatus(m){document.getElementById('statusLeft').textContent=m}
 
-async function search(){
+async function doSearch(){
   var input=document.getElementById('stockInput').value.trim();if(!input)return;
+  document.getElementById('searchDropdown').style.display='none';
   document.getElementById('loading').style.display='block';document.getElementById('errorMsg').style.display='none';
   document.getElementById('quoteCard').style.display='none';document.getElementById('detailCard').style.display='none';
   setStatus('查询中...');
@@ -281,6 +368,72 @@ async function loadF10Content(c,m,cat){try{var r=await fetch('/api/f10?code='+c+
 async function loadHistory(){var code=document.getElementById('stockInput').value.trim();var date=document.getElementById('histDate').value.trim();if(!code||!date)return;try{var r=await fetch('/api/history-trade?code='+code+'&date='+date);var d=await r.json();if(d.code!==0)throw new Error(d.message);var list=d.data.list;var b=document.getElementById('histBody');b.innerHTML='<p style="font-size:11px;color:var(--text2);margin-bottom:6px">共 '+list.length+' 笔</p><table><thead><tr><th>时间</th><th>价格</th><th>成交量</th><th>方向</th></tr></thead><tbody>';list.forEach(function(t){var dir=t.status===0?'买':t.status===1?'卖':'中性';b.innerHTML+='<tr><td>'+t.time+'</td><td>'+fmt(t.price)+'</td><td>'+fmtInt(t.volume)+'</td><td style="color:'+(t.status===0?'var(--up)':t.status===1?'var(--down)':'var(--text2)')+'">'+dir+'</td></tr>'});b.innerHTML+='</tbody></table>'}catch(e){document.getElementById('histBody').innerHTML='<span style="color:var(--up)">加载失败</span>'}}
 
 async function loadAdjust(){var code=document.getElementById('adjCode').value.trim(),type=document.getElementById('adjType').value,adj=document.getElementById('adjMode').value,cnt=document.getElementById('adjCount').value;if(!code)return;document.getElementById('adjInfo').textContent='加载中...';try{var r=await fetch('/api/gbbq/adjust?code='+code+'&type='+type+'&adjust='+adj+'&count='+cnt);var d=await r.json();if(d.code!==0)throw new Error(d.message);var list=d.data.list;var b=document.getElementById('adjBody');b.innerHTML='';list.forEach(function(v){var c=v.close-v.open;b.innerHTML+='<tr><td>'+v.date+'</td><td class="'+(c>=0?'down':'up')+'">'+fmt(v.open)+'</td><td style="color:var(--down)">'+fmt(v.high)+'</td><td style="color:var(--up)">'+fmt(v.low)+'</td><td class="'+(c>=0?'up':'down')+'">'+fmt(v.close)+'</td><td>'+fmtInt(v.volume)+'</td></tr>'});document.getElementById('adjInfo').textContent='✅ '+d.data.code+' · '+d.data.type+'K线 '+d.data.adjust+' · 共'+d.data.count+'根'}catch(e){document.getElementById('adjInfo').textContent='❌ 失败: '+(e.message||'无数据')}}
+
+// ====== API测试 ======
+function buildTestEndpointList(){
+  var sel=document.getElementById('testEndpoint');
+  API_CATALOG.forEach(function(g){
+    var opt=document.createElement('optgroup');opt.label=g.cat;
+    g.items.forEach(function(ep){
+      var o=document.createElement('option');o.value=ep.path;
+      o.textContent='['+ep.path.split('/')[2]+'] '+ep.path;
+      opt.appendChild(o);
+    });
+    sel.appendChild(opt);
+  });
+  updateTestParams();
+}
+
+function updateTestParams(){
+  var path=document.getElementById('testEndpoint').value;
+  var params=EP_PARAMS[path]||[];
+  var container=document.getElementById('testParams');container.innerHTML='';
+  params.forEach(function(p){
+    var d=document.createElement('div');
+    d.innerHTML='<label>'+p.name+'</label><input type="text" id="tp_'+p.name+'" value="'+p.default+'" placeholder="'+p.name+'" style="min-width:100px">';
+    container.appendChild(d);
+  });
+  document.getElementById('testResult').style.display='none';
+}
+
+async function runTest(){
+  var path=document.getElementById('testEndpoint').value;
+  var params=EP_PARAMS[path]||[];
+  var qs='';
+  params.forEach(function(p){
+    var v=document.getElementById('tp_'+p.name).value.trim();
+    if(v) qs+=(qs?'&':'')+encodeURIComponent(p.name)+'='+encodeURIComponent(v);
+  });
+  var url=path+(qs?'?'+qs:'');
+  document.getElementById('testResult').style.display='block';
+  document.getElementById('testUrl').textContent=url;
+  document.getElementById('testJson').textContent='请求中...';
+  document.getElementById('testStatus').innerHTML='<span style="color:var(--text2)">⏳ 请求中...</span>';
+  document.getElementById('testMs').textContent='';
+  var t0=performance.now();
+  try{
+    var r=await fetch(url);
+    var ms=Math.round(performance.now()-t0);
+    var ct=r.headers.get('content-type')||'';
+    if(ct.includes('application/json')){
+      var jd=await r.json();
+      document.getElementById('testJson').textContent=JSON.stringify(jd,null,2);
+      document.getElementById('testStatus').innerHTML=jd.code===0
+        ?'<span class="ok">✅ 成功</span>'
+        :'<span class="err">❌ 业务错误: '+(jd.message||'')+'</span>';
+    } else {
+      var txt=await r.text();
+      document.getElementById('testJson').textContent=txt;
+      document.getElementById('testStatus').innerHTML=r.ok?'<span class="ok">✅ HTTP '+r.status+'</span>':'<span class="err">❌ HTTP '+r.status+'</span>';
+    }
+    document.getElementById('testMs').textContent=ms+'ms';
+  }catch(e){
+    var ms=Math.round(performance.now()-t0);
+    document.getElementById('testJson').textContent='❌ 请求失败: '+e.message;
+    document.getElementById('testStatus').innerHTML='<span class="err">❌ 异常</span>';
+    document.getElementById('testMs').textContent=ms+'ms';
+  }
+}
 </script>
 </body>
 </html>
