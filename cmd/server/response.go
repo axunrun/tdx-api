@@ -13,6 +13,7 @@ type APIResponse struct {
 
 func jsonResp(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	json.NewEncoder(w).Encode(APIResponse{0, "success", data})
 }
 

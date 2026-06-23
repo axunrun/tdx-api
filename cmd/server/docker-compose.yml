@@ -3,8 +3,8 @@ services:
     build:
       context: ../..
       dockerfile: cmd/server/Dockerfile
-    image: tdx-api-server:latest
-    container_name: tdx-api-server
+    image: tdx-api:latest
+    container_name: tdx-api
     restart: unless-stopped
     ports:
       - "8080:8080"

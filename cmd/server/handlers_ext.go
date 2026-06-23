@@ -1,13 +1,11 @@
 package main
 
 import (
-	"encoding/json"
 	"encoding/binary"
 	"fmt"
 	"html/template"
 	"net/http"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/injoyai/tdx"
@@ -316,19 +314,6 @@ func handleHistoryTrade(w http.ResponseWriter, r *http.Request) {
 }
 
 // ====== 辅助函数 ======
-
-func jsonResp(w http.ResponseWriter, v interface{}) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	b, _ := json.Marshal(map[string]interface{}{"code": 0, "message": "success", "data": v})
-	w.Write(b)
-}
-
-func jsonErr(w http.ResponseWriter, msg string) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	b, _ := json.Marshal(map[string]interface{}{"code": -1, "message": msg})
-	w.Write(b)
-}
 
 func parseInt(s string) (int, error) {
 	n := 0

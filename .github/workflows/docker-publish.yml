@@ -8,7 +8,7 @@ env:
   REGISTRY: ghcr.io
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
@@ -17,10 +17,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Read version
+        id: version
+        run: |
+          VER=$(cat VERSION | tr -d ' \t\n\r')
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Build and push
         run: |
-          docker build -t ghcr.io/axunrun/tdx-api-server:latest .
-          docker push ghcr.io/axunrun/tdx-api-server:latest
+          docker build -t $REGISTRY/axunrun/tdx-api:${{ steps.version.outputs.version }} -t $REGISTRY/axunrun/tdx-api:latest .
+          docker push --all-tags $REGISTRY/axunrun/tdx-api
+
+      - name: Bump patch version
+        run: |
+          VER="${{ steps.version.outputs.version }}"
+          MAJOR=$(echo "$VER" | cut -d. -f1)
+          MINOR=$(echo "$VER" | cut -d. -f2)
+          PATCH=$(echo "$VER" | cut -d. -f3)
+          NEW_PATCH=$((PATCH + 1))
+          echo "${MAJOR}.${MINOR}.${NEW_PATCH}" > VERSION
+          git config user.name "tdx-api CI"
+          git config user.email "ci@axunrun"
+          git add VERSION
+          git commit -m "chore: bump version to ${MAJOR}.${MINOR}.${NEW_PATCH}"
+          git push
