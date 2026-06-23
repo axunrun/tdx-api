@@ -253,7 +253,7 @@ document.addEventListener('DOMContentLoaded',function(){
   renderApiCatalog();
   buildTestEndpointList();
   document.getElementById('stockInput').addEventListener('keydown',function(e){
-    if(e.key==='Enter'){
+    if(e.key==='Enter'&&!e.isComposing){
       var dd=document.getElementById('searchDropdown');
       if(dd.style.display!=='none'&&dd.children.length>0){dd.children[0].click();return;}
       doSearch();
@@ -335,7 +335,14 @@ async function doSearch(){
   document.getElementById('quoteCard').style.display='none';document.getElementById('detailCard').style.display='none';
   setStatus('查询中...');
   var fullInput=input.includes('sh')||input.includes('sz')||input.includes('bj')?input:input.replace(/[^0-9A-Za-z]/g,'');
-  if(!fullInput){showError('请输入有效代码');setStatus('失败');document.getElementById('loading').style.display='none';return;}
+  if(!fullInput){
+    // 中文名→调用search取第一条结果
+    try{
+      var sr=await fetch('/api/search?keyword='+encodeURIComponent(input));var sd=await sr.json();
+      if(sd.code===0&&sd.data&&sd.data.list&&sd.data.list.length){fullInput=sd.data.list[0].code;}
+    }catch(e){}
+    if(!fullInput){showError('未找到匹配的股票');setStatus('失败');document.getElementById('loading').style.display='none';return;}
+  }
   try{
     if(isIndexCode(fullInput)||fullInput.startsWith('sh000')||fullInput.startsWith('sz399')){
       var r=await fetch('/api/index/kline?code='+fullInput+'&count=10');var d=await r.json();if(d.code!==0)throw new Error(d.message);
