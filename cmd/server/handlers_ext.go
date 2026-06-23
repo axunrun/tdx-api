@@ -130,10 +130,33 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 
 	// 加载代码→名称映射
 	nameMap := loadStockNames(c)
+	if len(nameMap) == 0 {
+		// 如果名称映射获取失败，降级为直接用协议拉代码列表
+		allCodes, err := c.GetStockCodeAll()
+		if err != nil { jsonErr(w, err.Error()); return }
+		kw = strings.ToUpper(kw)
+		type Item struct {
+			Code     string `json:"code"`
+			Exchange string `json:"exchange"`
+		}
+		results := make([]Item, 0)
+		seen := make(map[string]bool)
+		for _, full := range allCodes {
+			short := full[2:]
+			if seen[short] { continue }
+			ex := "sh"
+			if strings.HasPrefix(full, "sz") { ex = "sz" } else if strings.HasPrefix(full, "bj") { ex = "bj" }
+			if strings.Contains(strings.ToUpper(short), kw) {
+				results = append(results, Item{short, ex})
+				seen[short] = true
+			}
+			if len(results) >= 50 { break }
+		}
+		jsonResp(w, map[string]interface{}{"keyword": kw, "count": len(results), "list": results})
+		return
+	}
 
-	allCodes, err := c.GetStockCodeAll()
-	if err != nil { jsonErr(w, err.Error()); return }
-	if len(allCodes) == 0 { jsonResp(w, map[string]interface{}{"keyword": kw, "count": 0, "list": []interface{}{}}); return }
+	// 主路径：用名称映射直接搜索（不依赖 GetStockCodeAll）
 	kw = strings.ToUpper(kw)
 	type Item struct {
 		Code     string `json:"code"`
@@ -142,44 +165,34 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	results := make([]Item, 0)
 	seen := make(map[string]bool)
-	for _, full := range allCodes {
-		short := full[2:]
-		if seen[short] {
-			continue
-		}
-		ex := "sh"
-		if strings.HasPrefix(full, "sz") { ex = "sz" } else if strings.HasPrefix(full, "bj") { ex = "bj" }
-
-		name := nameMap[short]
+	// 遍历名称映射字典（code→name）
+	for short, name := range nameMap {
+		if seen[short] { continue }
 		upperName := strings.ToUpper(name)
-		matches := false
-		if strings.Contains(strings.ToUpper(short), kw) {
-			matches = true
-		}
-		if !matches && name != "" && strings.Contains(upperName, kw) {
-			matches = true
-		}
-		if !matches && name != "" {
+		matched := strings.Contains(strings.ToUpper(short), kw) ||
+			(name != "" && strings.Contains(upperName, kw))
+		if !matched && name != "" {
 			// 拼音首字母匹配
 			pinyinShort := ""
 			for _, r := range name {
-				if r > 127 {
-					break
-				}
+				if r > 127 { break }
 				pinyinShort += string(r)
 			}
 			if strings.Contains(strings.ToUpper(pinyinShort), kw) {
-				matches = true
+				matched = true
 			}
 		}
-
-		if matches {
+		if matched {
+			ex := "sh"
+			if strings.HasPrefix(short, "sz") || (len(short) == 6 && (short[0] == '0' || short[0] == '3')) {
+				ex = "sz"
+			} else if strings.HasPrefix(short, "bj") || (len(short) == 6 && (short[0] == '4' || short[0] == '8')) {
+				ex = "bj"
+			}
 			results = append(results, Item{short, ex, name})
 			seen[short] = true
 		}
-		if len(results) >= 50 {
-			break
-		}
+		if len(results) >= 50 { break }
 	}
 	jsonResp(w, map[string]interface{}{"keyword": kw, "count": len(results), "list": results})
 }
