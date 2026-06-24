@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -8,8 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/injoyai/tdx"
+	"github.com/injoyai/tdx/protocol"
 )
 
 var (
@@ -50,42 +53,117 @@ func refreshStocks(c *tdx.Client) (int, error) {
 	}
 	log.Println("🔄 开始全量更新股票数据...")
 
-	// 清除缓存，强制重新下载
-	stockNameMap = nil
-	nameMap := loadStockNames(c)
-	if len(nameMap) == 0 {
-		return 0, fmt.Errorf("未能获取股票名称数据")
+	// 直接下载 zhb.zip，不走 loadStockNames 缓存
+	files, err := c.GetZHBFiles()
+	if err != nil {
+		return 0, fmt.Errorf("下载 zhb.zip 失败: %v", err)
 	}
 
+	// code6位→(exchange, name)
+	type entry struct{ name, exch string }
+	codeMap := make(map[string]entry)
+
+	// 1. 解析 hspy.dat → 拼音缩写 + 交易所前缀 → 6位code
+	if data, ok := files[protocol.FileHsPy]; ok {
+		for _, line := range strings.Split(string(protocol.UTF8ToGBK(data)), "\n") {
+			line = strings.TrimRight(line, "\r")
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			f := strings.Split(line, "|")
+			if len(f) < 3 {
+				continue
+			}
+			exPrefix := strings.TrimSpace(f[0])
+			rawCode := strings.TrimSpace(f[1])
+			shortName := strings.TrimSpace(f[2])
+			if rawCode == "" || shortName == "" {
+				continue
+			}
+			// 标准化为6位代码
+			if len(rawCode) > 6 {
+				rawCode = rawCode[len(rawCode)-6:]
+			}
+			if len(rawCode) != 6 {
+				continue
+			}
+			ex := "sh"
+			if exPrefix == "0" || exPrefix == "sz" {
+				ex = "sz"
+			} else if exPrefix == "2" || exPrefix == "bj" {
+				ex = "bj"
+			}
+			// hspy 的名字优先用 profile 覆盖，这里作为备选
+			if _, exists := codeMap[rawCode]; !exists {
+				codeMap[rawCode] = entry{name: shortName, exch: ex}
+			}
+		}
+	}
+
+	// 2. 解析 profile.dat → 中文全名 → 覆盖 codeMap
+	if profData, ok := files["profile.dat"]; ok && len(profData) > 0 {
+		i := 0
+		for i < len(profData)-12 {
+			for ; i < len(profData)-10; i++ {
+				if profData[i] == 0 && profData[i+1] == 0 && profData[i+2] == 0 && profData[i+3] <= 0x09 {
+					break
+				}
+			}
+			if i >= len(profData)-10 {
+				break
+			}
+			code := int(binary.LittleEndian.Uint32(profData[i : i+4]))
+			if code <= 0 || code > 999999 {
+				i += 4
+				continue
+			}
+			j := i + 4
+			if j >= len(profData) || profData[j] != 0 {
+				i = j
+				continue
+			}
+			j++
+			start := j
+			for j < len(profData) && profData[j] != 0 {
+				j++
+			}
+			if j > start {
+				nameBytes := profData[start:j]
+				var name string
+				// 尝试 UTF8 直读，否则 GBK 解码
+				if !utf8.Valid(nameBytes) {
+					name = string(protocol.UTF8ToGBK(nameBytes))
+				} else {
+					name = string(nameBytes)
+				}
+				codeStr := fmt.Sprintf("%06d", code)
+				// 始终用 profile 的名字（中文全名）
+				ex := "sh"
+				if codeStr[0] == '0' || codeStr[0] == '3' {
+					ex = "sz"
+				} else if codeStr[0] == '4' || codeStr[0] == '8' {
+					ex = "bj"
+				}
+				codeMap[codeStr] = entry{name: name, exch: ex}
+			}
+			i = j + 1
+		}
+	}
+
+	// 3. 序列化到 JSON
 	var stocks []stockRow
-	for code, name := range nameMap {
-		if code == "" || name == "" {
+	for code, e := range codeMap {
+		if code == "" || e.name == "" {
 			continue
 		}
-		// 标准化 code: hspy.dat 可能带交易所前缀(7位), profile.dat 是纯6位
-		if len(code) > 6 {
-			code = code[len(code)-6:]
-		}
-		if len(code) != 6 {
-			continue
-		}
-		ex := "sh"
-		switch code[0] {
-		case '0', '3':
-			ex = "sz"
-		case '4', '8':
-			ex = "bj"
-		}
-		pinyin := pinyinForName(name)
 		stocks = append(stocks, stockRow{
 			Code:     code,
-			Name:     name,
-			Exchange: ex,
-			Pinyin:   pinyin,
+			Name:     e.name,
+			Exchange: e.exch,
+			Pinyin:   pinyinForName(e.name),
 		})
 	}
 
-	// 写入 JSON 文件
 	data, err := json.Marshal(stocks)
 	if err != nil {
 		return 0, fmt.Errorf("序列化失败: %v", err)
@@ -119,7 +197,7 @@ func searchStocks(keyword string, limit int) ([]stockRow, error) {
 	}
 
 	kw := strings.ToUpper(keyword)
-	var results []stockRow
+	results := make([]stockRow, 0)
 	for _, s := range cache {
 		if len(results) >= limit {
 			break
