@@ -59,7 +59,14 @@ func refreshStocks(c *tdx.Client) (int, error) {
 
 	var stocks []stockRow
 	for code, name := range nameMap {
-		if len(code) != 6 || code == "" || name == "" {
+		if code == "" || name == "" {
+			continue
+		}
+		// 标准化 code: hspy.dat 可能带交易所前缀(7位), profile.dat 是纯6位
+		if len(code) > 6 {
+			code = code[len(code)-6:]
+		}
+		if len(code) != 6 {
 			continue
 		}
 		ex := "sh"
