@@ -1,7 +1,7 @@
 package main
 
 import (
-	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -10,12 +10,12 @@ import (
 	"sync"
 
 	"github.com/injoyai/tdx"
-	_ "modernc.org/sqlite"
 )
 
 var (
-	stocksDB   *sql.DB
-	stocksLock sync.RWMutex
+	stocksCache   []stockRow
+	stocksCacheMu sync.RWMutex
+	stocksDBPath  string
 )
 
 type stockRow struct {
@@ -26,64 +26,38 @@ type stockRow struct {
 }
 
 func initStocksDB() {
-	dbPath := os.Getenv("STOCKS_DB_PATH")
-	if dbPath == "" {
-		dbPath = filepath.Join(os.TempDir(), "tdx-stocks.db")
+	stocksDBPath = os.Getenv("STOCKS_DB_PATH")
+	if stocksDBPath == "" {
+		stocksDBPath = filepath.Join(os.TempDir(), "tdx-stocks.json")
 	}
-	os.MkdirAll(filepath.Dir(dbPath), 0755)
-	var err error
-	stocksDB, err = sql.Open("sqlite", dbPath)
-	if err != nil {
-		log.Printf("⚠️ SQLite 打开失败: %v", err)
-		return
+	// 尝试从文件加载已有缓存
+	if data, err := os.ReadFile(stocksDBPath); err == nil {
+		var cached []stockRow
+		if json.Unmarshal(data, &cached) == nil && len(cached) > 0 {
+			stocksCacheMu.Lock()
+			stocksCache = cached
+			stocksCacheMu.Unlock()
+			log.Printf("✅ 股票库已从缓存加载: %d 条 (%s)", len(cached), stocksDBPath)
+			return
+		}
 	}
-	_, err = stocksDB.Exec(`
-		CREATE TABLE IF NOT EXISTS stocks (
-			code     TEXT PRIMARY KEY,
-			name     TEXT NOT NULL DEFAULT '',
-			exchange TEXT NOT NULL DEFAULT 'sh',
-			pinyin   TEXT NOT NULL DEFAULT ''
-		);
-		CREATE INDEX IF NOT EXISTS idx_stocks_name  ON stocks(name);
-		CREATE INDEX IF NOT EXISTS idx_stocks_pinyin ON stocks(pinyin);
-	`)
-	if err != nil {
-		log.Printf("⚠️ SQLite 建表失败: %v", err)
-		return
-	}
-	log.Printf("✅ SQLite 股票库就绪 (%s)", dbPath)
+	log.Printf("📂 股票缓存文件不存在或无效，点击「更新股票数据」初始化 (%s)", stocksDBPath)
 }
 
 func refreshStocks(c *tdx.Client) (int, error) {
 	if c == nil {
 		return 0, fmt.Errorf("未连接通达信")
 	}
-	if stocksDB == nil {
-		return 0, fmt.Errorf("SQLite 未就绪")
-	}
 	log.Println("🔄 开始全量更新股票数据...")
 
+	// 清除缓存，强制重新下载
 	stockNameMap = nil
 	nameMap := loadStockNames(c)
 	if len(nameMap) == 0 {
 		return 0, fmt.Errorf("未能获取股票名称数据")
 	}
 
-	tx, err := stocksDB.Begin()
-	if err != nil {
-		return 0, fmt.Errorf("事务开始失败: %v", err)
-	}
-	defer tx.Rollback()
-	if _, err := tx.Exec("DELETE FROM stocks"); err != nil {
-		return 0, fmt.Errorf("清空失败: %v", err)
-	}
-	stmt, err := tx.Prepare("INSERT INTO stocks (code, name, exchange, pinyin) VALUES (?, ?, ?, ?)")
-	if err != nil {
-		return 0, fmt.Errorf("预编译失败: %v", err)
-	}
-	defer stmt.Close()
-
-	count := 0
+	var stocks []stockRow
 	for code, name := range nameMap {
 		if len(code) != 6 || code == "" || name == "" {
 			continue
@@ -96,17 +70,60 @@ func refreshStocks(c *tdx.Client) (int, error) {
 			ex = "bj"
 		}
 		pinyin := pinyinForName(name)
-		if _, err := stmt.Exec(code, name, ex, pinyin); err != nil {
-			log.Printf("⚠️ 插入 %s 失败: %v", code, err)
-			continue
+		stocks = append(stocks, stockRow{
+			Code:     code,
+			Name:     name,
+			Exchange: ex,
+			Pinyin:   pinyin,
+		})
+	}
+
+	// 写入 JSON 文件
+	data, err := json.Marshal(stocks)
+	if err != nil {
+		return 0, fmt.Errorf("序列化失败: %v", err)
+	}
+	if err := os.WriteFile(stocksDBPath, data, 0644); err != nil {
+		return 0, fmt.Errorf("写入缓存文件失败: %v", err)
+	}
+
+	stocksCacheMu.Lock()
+	stocksCache = stocks
+	stocksCacheMu.Unlock()
+
+	log.Printf("✅ 股票数据更新完成: %d 条 (%s)", len(stocks), stocksDBPath)
+	return len(stocks), nil
+}
+
+func searchStocks(keyword string, limit int) ([]stockRow, error) {
+	if keyword == "" {
+		return nil, fmt.Errorf("缺少关键词")
+	}
+	if limit <= 0 || limit > 50 {
+		limit = 50
+	}
+
+	stocksCacheMu.RLock()
+	cache := stocksCache
+	stocksCacheMu.RUnlock()
+
+	if len(cache) == 0 {
+		return nil, fmt.Errorf("股票库为空，请先点击「更新股票数据」")
+	}
+
+	kw := strings.ToUpper(keyword)
+	var results []stockRow
+	for _, s := range cache {
+		if len(results) >= limit {
+			break
 		}
-		count++
+		if strings.Contains(strings.ToUpper(s.Code), kw) ||
+			strings.Contains(strings.ToUpper(s.Name), kw) ||
+			strings.Contains(s.Pinyin, kw) {
+			results = append(results, s)
+		}
 	}
-	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("提交事务失败: %v", err)
-	}
-	log.Printf("✅ 股票数据更新完成: %d 条", count)
-	return count, nil
+	return results, nil
 }
 
 func pinyinForName(name string) string {
@@ -172,42 +189,4 @@ func pinyinInitial(r rune) byte {
 		return 'Z'
 	}
 	return 0
-}
-
-func searchStocks(keyword string, limit int) ([]stockRow, error) {
-	if stocksDB == nil {
-		return nil, fmt.Errorf("SQLite 未就绪")
-	}
-	if keyword == "" {
-		return nil, fmt.Errorf("缺少关键词")
-	}
-	if limit <= 0 || limit > 50 {
-		limit = 50
-	}
-	kw := strings.ToUpper(keyword)
-	like := "%" + kw + "%"
-
-	stocksLock.RLock()
-	defer stocksLock.RUnlock()
-
-	rows, err := stocksDB.Query(
-		`SELECT DISTINCT code, name, exchange, pinyin FROM stocks
-		 WHERE code LIKE ? OR UPPER(name) LIKE ? OR UPPER(pinyin) LIKE ?
-		 LIMIT ?`,
-		like, like, like, limit,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var results []stockRow
-	for rows.Next() {
-		var r stockRow
-		if err := rows.Scan(&r.Code, &r.Name, &r.Exchange, &r.Pinyin); err != nil {
-			continue
-		}
-		results = append(results, r)
-	}
-	return results, nil
 }
