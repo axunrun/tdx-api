@@ -118,13 +118,14 @@ func handlePaperDashboardWithStore(store *PaperStore) http.HandlerFunc {
 		} else if len(accounts) > 0 {
 			selectedAccount = &accounts[0]
 		}
+		equityRange := r.URL.Query().Get("range")
 
 		positions := []PaperPosition{}
 		orders := []PaperOrder{}
 		trades := []PaperTrade{}
 		closedPositions := []PaperClosedPosition{}
 		equityCurve := []PaperEquityPoint{}
-		equityCurves, err := listPaperEquityCurves(store, accounts)
+		equityCurves, err := listPaperEquityCurves(store, accounts, equityRange)
 		if err != nil {
 			jsonErr(w, err.Error())
 			return
@@ -140,7 +141,7 @@ func handlePaperDashboardWithStore(store *PaperStore) http.HandlerFunc {
 				jsonErr(w, err.Error())
 				return
 			}
-			equityCurve, err = listPaperEquityCurve(store, selectedAccount.ID)
+			equityCurve, err = listPaperEquityCurve(store, selectedAccount.ID, equityRange)
 			if err != nil {
 				jsonErr(w, err.Error())
 				return
@@ -278,7 +279,11 @@ func listPaperAgentActions(
 	return actions, rows.Err()
 }
 
-func listPaperEquityCurve(store *PaperStore, accountID string) ([]PaperEquityPoint, error) {
+func listPaperEquityCurve(
+	store *PaperStore,
+	accountID string,
+	rangeName string,
+) ([]PaperEquityPoint, error) {
 	rows, err := store.db.Query(`
 		SELECT trading_day, total_assets, created_at
 		FROM paper_account_snapshots
@@ -299,16 +304,20 @@ func listPaperEquityCurve(store *PaperStore, accountID string) ([]PaperEquityPoi
 		}
 		points = append(points, point)
 	}
-	return points, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return filterPaperEquityPoints(points, rangeName), nil
 }
 
 func listPaperEquityCurves(
 	store *PaperStore,
 	accounts []PaperAccount,
+	rangeName string,
 ) ([]PaperEquitySeries, error) {
 	series := make([]PaperEquitySeries, 0, len(accounts))
 	for _, account := range accounts {
-		points, err := listPaperEquityCurve(store, account.ID)
+		points, err := listPaperEquityCurve(store, account.ID, rangeName)
 		if err != nil {
 			return nil, err
 		}
@@ -319,6 +328,45 @@ func listPaperEquityCurves(
 		})
 	}
 	return series, nil
+}
+
+func filterPaperEquityPoints(
+	points []PaperEquityPoint,
+	rangeName string,
+) []PaperEquityPoint {
+	if len(points) == 0 {
+		return points
+	}
+	daily := make([]PaperEquityPoint, 0, len(points))
+	for _, point := range points {
+		last := len(daily) - 1
+		if last >= 0 && daily[last].TradingDay == point.TradingDay {
+			daily[last] = point
+			continue
+		}
+		daily = append(daily, point)
+	}
+	days := paperEquityRangeDays(rangeName)
+	if days <= 0 || len(daily) <= days {
+		return daily
+	}
+	return daily[len(daily)-days:]
+}
+
+func paperEquityRangeDays(rangeName string) int {
+	value := strings.ToLower(strings.TrimSpace(rangeName))
+	switch value {
+	case "60", "60d":
+		return 60
+	case "120", "120d":
+		return 120
+	case "all":
+		return 0
+	}
+	if days, err := strconv.Atoi(strings.TrimSuffix(value, "d")); err == nil && days > 0 {
+		return days
+	}
+	return 20
 }
 
 func paperActivityLimit(r *http.Request) int {

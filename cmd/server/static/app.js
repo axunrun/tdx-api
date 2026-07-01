@@ -8,6 +8,7 @@ const curveColors = ["#4fb3ff", "#42d392", "#f4c95d", "#ff626e", "#b68cff", "#35
 
 const state = {
   accountId: "",
+  range: "20d",
   dashboard: null,
   activity: [],
   closed: []
@@ -19,7 +20,7 @@ window.addEventListener("resize", () => drawEquityCurve(getEquitySeries()));
 async function loadAccount(accountId) {
   try {
     const query = accountId ? `&accountId=${encodeURIComponent(accountId)}` : "";
-    const dashboard = await fetchData(`/api/paper/dashboard?range=20d${query}`);
+    const dashboard = await fetchData(`/api/paper/dashboard?range=${state.range}${query}`);
     const selectedID = dashboard.selectedAccount?.id || "";
     const activityQuery = selectedID ? `&accountId=${encodeURIComponent(selectedID)}` : "";
     const [activity, closed] = await Promise.all([
@@ -63,7 +64,30 @@ function render() {
   renderOrdersTrades(dashboard.orders || [], dashboard.trades || []);
   renderClosedPositions(state.closed);
   renderActivity(state.activity, accounts);
+  renderCurveRange();
   drawEquityCurve(getEquitySeries());
+}
+
+function renderCurveRange() {
+  const root = document.getElementById("curveRange");
+  root.className = "range-switch";
+  const ranges = [
+    ["20d", "20日"],
+    ["60d", "60日"],
+    ["120d", "120日"],
+    ["all", "全部"]
+  ];
+  root.innerHTML = ranges.map(([value, label]) => `
+    <button class="${state.range === value ? "active" : ""}" data-range="${value}">
+      ${label}
+    </button>
+  `).join("");
+  root.querySelectorAll("button").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.range = button.dataset.range;
+      loadAccount(state.accountId);
+    });
+  });
 }
 
 function renderAccounts(accounts, selectedAccount) {
@@ -218,14 +242,19 @@ function getEquitySeries() {
 
 function drawEquityCurve(series) {
   const canvas = document.getElementById("equityCanvas");
-  const rect = canvas.getBoundingClientRect();
+  const days = getCurveDays(series);
+  const containerWidth = canvas.parentElement.clientWidth || canvas.getBoundingClientRect().width;
+  const logicalWidth = days.length > 60
+    ? Math.max(containerWidth, days.length * 14 + 48)
+    : containerWidth;
+  canvas.style.width = `${logicalWidth}px`;
   const scale = window.devicePixelRatio || 1;
-  canvas.width = Math.max(1, Math.floor(rect.width * scale));
+  canvas.width = Math.max(1, Math.floor(logicalWidth * scale));
   canvas.height = Math.floor(300 * scale);
 
   const ctx = canvas.getContext("2d");
   ctx.scale(scale, scale);
-  ctx.clearRect(0, 0, rect.width, 300);
+  ctx.clearRect(0, 0, logicalWidth, 300);
   ctx.strokeStyle = "#243140";
   ctx.lineWidth = 1;
 
@@ -241,7 +270,7 @@ function drawEquityCurve(series) {
     const y = plot.top + i * ((plot.bottom - plot.top) / 4);
     ctx.beginPath();
     ctx.moveTo(0, y);
-    ctx.lineTo(rect.width, y);
+    ctx.lineTo(logicalWidth, y);
     ctx.stroke();
   }
 
@@ -250,18 +279,17 @@ function drawEquityCurve(series) {
     ctx.fillStyle = "#8795a5";
     ctx.font = "13px Microsoft YaHei, sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("暂无资产曲线", rect.width / 2, 150);
+    ctx.fillText("暂无资产曲线", logicalWidth / 2, 150);
     return;
   }
 
-  const days = getCurveDays(series);
   const values = series.flatMap((item) => dailyCurvePoints(item.points).map(
     (point) => point.totalAssets
   ));
   const min = Math.min(...values);
   const max = Math.max(...values);
   const span = max - min || 1;
-  const width = rect.width - plot.left - plot.right;
+  const width = logicalWidth - plot.left - plot.right;
   const height = plot.bottom - plot.top;
 
   drawCurveXAxis(ctx, days, plot, width);

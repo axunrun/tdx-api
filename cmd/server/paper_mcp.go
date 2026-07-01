@@ -351,7 +351,7 @@ func paperPortfolioSummary(
 	if err != nil {
 		return nil, err
 	}
-	equityCurve, err := listPaperEquityCurve(store, accountID)
+	equityCurve, err := listPaperEquityCurve(store, accountID, "all")
 	if err != nil {
 		return nil, err
 	}

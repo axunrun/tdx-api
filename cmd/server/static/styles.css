@@ -160,6 +160,10 @@ h2 {
   padding: 16px;
 }
 
+.chart-panel {
+  overflow-x: auto;
+}
+
 .panel-head {
   display: flex;
   justify-content: space-between;
@@ -175,6 +179,27 @@ h2 {
   color: var(--muted);
   font-size: 11px;
   padding: 3px 8px;
+}
+
+.range-switch {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+}
+
+.range-switch button {
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  padding: 2px 7px;
+}
+
+.range-switch button.active {
+  background: var(--line);
+  color: var(--text);
 }
 
 canvas {

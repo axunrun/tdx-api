@@ -34,7 +34,7 @@ func TestHandleWebUI(t *testing.T) {
 			path:        "/static/app.js",
 			wantStatus:  http.StatusOK,
 			contentType: "application/javascript",
-			contains:    "/api/paper/dashboard?range=20d",
+			contains:    "range=${state.range}",
 		},
 		{
 			name:       "not found",

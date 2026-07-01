@@ -130,6 +130,28 @@ func TestHandlePaperActivityFiltersAccount(t *testing.T) {
 	}
 }
 
+func TestFilterPaperEquityPointsUsesDailyRange(t *testing.T) {
+	points := []PaperEquityPoint{
+		{TradingDay: "2026-01-01", TotalAssets: 1, CreatedAt: "a"},
+		{TradingDay: "2026-01-01", TotalAssets: 2, CreatedAt: "b"},
+		{TradingDay: "2026-01-02", TotalAssets: 3, CreatedAt: "c"},
+		{TradingDay: "2026-01-03", TotalAssets: 4, CreatedAt: "d"},
+	}
+
+	got := filterPaperEquityPoints(points, "2")
+
+	if len(got) != 2 {
+		t.Fatalf("len(got) = %d, want 2", len(got))
+	}
+	if got[0].TradingDay != "2026-01-02" || got[1].TradingDay != "2026-01-03" {
+		t.Fatalf("got = %+v", got)
+	}
+	all := filterPaperEquityPoints(points, "all")
+	if len(all) != 3 || all[0].TotalAssets != 2 {
+		t.Fatalf("all = %+v", all)
+	}
+}
+
 func TestHandlePaperClosedPositionsRequiresAccountID(t *testing.T) {
 	store := newTestPaperStore(t)
 
