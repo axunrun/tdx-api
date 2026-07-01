@@ -1,27 +1,63 @@
 :root {
-  --bg: #080b0f;
-  --panel: #10151c;
-  --panel-2: #151b24;
-  --line: #243140;
-  --text: #e7edf4;
-  --muted: #8795a5;
-  --accent: #4fb3ff;
-  --good: #42d392;
-  --bad: #ff626e;
-  --warn: #f4c95d;
+  --bg: #09080f;
+  --panel: #12131c;
+  --panel-2: #171925;
+  --panel-3: #0d0e15;
+  --line: #33364c;
+  --line-hot: #49f2c2;
+  --text: #f3f6ff;
+  --muted: #9aa3bc;
+  --accent: #6aa7ff;
+  --good: #49f2c2;
+  --bad: #ff6b8b;
+  --warn: #ffcf5a;
+  --shadow: rgb(0 0 0 / 55%);
+  --pixel: 4px;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  background: var(--bg);
+}
+
 body {
   margin: 0;
   min-height: 100vh;
-  background: var(--bg);
   color: var(--text);
   font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
   letter-spacing: 0;
+  background:
+    linear-gradient(rgb(255 255 255 / 3%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 3%) 1px, transparent 1px),
+    radial-gradient(circle at 18% 0%, rgb(73 242 194 / 16%), transparent 28%),
+    radial-gradient(circle at 82% 8%, rgb(255 207 90 / 12%), transparent 24%),
+    linear-gradient(180deg, #070711 0%, #10111b 48%, #08080e 100%);
+  background-size: 18px 18px, 18px 18px, auto, auto, auto;
+}
+
+body::before {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  content: "";
+  background: linear-gradient(transparent 0 50%, rgb(255 255 255 / 3%) 50% 100%);
+  background-size: 100% 6px;
+  mix-blend-mode: screen;
+  opacity: .34;
+}
+
+body::after {
+  position: fixed;
+  inset: 0;
+  z-index: 39;
+  pointer-events: none;
+  content: "";
+  background: linear-gradient(180deg, transparent, rgb(73 242 194 / 10%), transparent);
+  animation: scanline 7s linear infinite;
 }
 
 body.has-expanded-panel {
@@ -29,7 +65,7 @@ body.has-expanded-panel {
 }
 
 .shell {
-  width: min(1440px, 100%);
+  width: min(1480px, 100%);
   margin: 0 auto;
   padding: 22px;
 }
@@ -37,10 +73,30 @@ body.has-expanded-panel {
 .topbar,
 .panel,
 .empty-state,
-.account-card {
+.account-card,
+.market-strip {
+  position: relative;
   border: 1px solid var(--line);
-  background: var(--panel);
-  border-radius: 8px;
+  border-radius: 0;
+  background: linear-gradient(180deg, rgb(24 27 39 / 92%), rgb(12 13 20 / 94%));
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 5%) inset,
+    0 16px 38px var(--shadow);
+}
+
+.topbar::before,
+.panel::before,
+.empty-state::before,
+.account-card::before,
+.market-strip::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  background:
+    linear-gradient(90deg, var(--line-hot) 0 18px, transparent 18px) 0 0 / 100% 2px no-repeat,
+    linear-gradient(90deg, transparent calc(100% - 18px), var(--warn) 0) 0 100% / 100% 2px no-repeat;
+  opacity: .72;
 }
 
 .topbar {
@@ -50,6 +106,18 @@ body.has-expanded-panel {
   align-items: center;
   padding: 18px 20px;
   margin-bottom: 14px;
+  overflow: hidden;
+}
+
+.topbar::after {
+  position: absolute;
+  top: 0;
+  left: -30%;
+  width: 30%;
+  height: 100%;
+  content: "";
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 12%), transparent);
+  animation: sweep 5.8s ease-in-out infinite;
 }
 
 h1,
@@ -59,18 +127,20 @@ p {
 }
 
 h1 {
-  font-size: 24px;
-  font-weight: 650;
+  font-size: clamp(22px, 2vw, 30px);
+  font-weight: 800;
+  text-shadow: 2px 2px 0 #000, 0 0 18px rgb(73 242 194 / 28%);
 }
 
 h2 {
   font-size: 15px;
-  font-weight: 650;
+  font-weight: 800;
 }
 
 .eyebrow,
 .label {
-  color: var(--muted);
+  color: var(--warn);
+  font-family: "Consolas", "Microsoft YaHei", monospace;
   font-size: 11px;
   line-height: 1.7;
   text-transform: uppercase;
@@ -90,21 +160,23 @@ h2 {
 }
 
 .status-cluster > div {
-  padding-left: 14px;
-  border-left: 1px solid var(--line);
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: var(--panel-3);
 }
 
 .status-cluster strong {
   display: block;
+  color: var(--good);
+  font-family: "Consolas", "Microsoft YaHei", monospace;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 800;
 }
 
 .empty-state {
   padding: 34px;
   margin-bottom: 14px;
   text-align: center;
-  background: var(--panel-2);
 }
 
 .empty-state h2 {
@@ -117,20 +189,13 @@ h2 {
   font-size: 14px;
 }
 
-.account-grid {
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-  margin-bottom: 14px;
-}
-
 .market-strip {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.8fr);
+  grid-template-columns: minmax(0, 1.65fr) minmax(300px, .8fr);
   gap: 12px;
   margin-bottom: 14px;
   padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: linear-gradient(180deg, #10151c 0%, #0b1016 100%);
+  animation: enter .42s ease both;
 }
 
 .market-strip-head {
@@ -149,7 +214,8 @@ h2 {
 
 .market-session strong {
   color: var(--warn);
-  font-size: 14px;
+  font-family: "Consolas", "Microsoft YaHei", monospace;
+  font-size: 15px;
 }
 
 .market-session span {
@@ -164,16 +230,30 @@ h2 {
 }
 
 .index-tile,
-.breadth-card {
+.breadth-card,
+.metric,
+.row {
   border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #0c1118;
+  border-radius: 0;
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 5%) 0 25%, transparent 25% 100%),
+    var(--panel-3);
+  background-size: 8px 8px, auto;
 }
 
 .index-tile {
   display: grid;
   gap: 4px;
   padding: 10px;
+  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+
+.index-tile:hover,
+.account-card:hover,
+.panel:hover {
+  border-color: rgb(73 242 194 / 70%);
+  box-shadow: 0 0 0 1px rgb(73 242 194 / 20%) inset, 0 18px 46px var(--shadow);
+  transform: translateY(-1px);
 }
 
 .index-tile span,
@@ -184,13 +264,15 @@ h2 {
 }
 
 .index-tile strong {
-  font-size: 19px;
+  font-family: "Consolas", "Microsoft YaHei", monospace;
+  font-size: 20px;
 }
 
 .index-tile em {
+  font-family: "Consolas", "Microsoft YaHei", monospace;
   font-style: normal;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .breadth-card {
@@ -207,32 +289,37 @@ h2 {
 }
 
 .breadth-main strong {
-  font-size: 18px;
+  font-family: "Consolas", "Microsoft YaHei", monospace;
+  font-size: 19px;
 }
 
 .breadth-main b {
-  font-weight: 750;
+  font-weight: 900;
 }
 
 .breadth-bar {
   display: flex;
-  height: 8px;
+  height: 10px;
   overflow: hidden;
-  border-radius: 999px;
-  background: #1b2530;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: #0a0b12;
 }
 
 .breadth-bar i {
   display: block;
   height: 100%;
+  background-size: 8px 8px;
 }
 
 .breadth-bar .rise {
-  background: var(--good);
+  background-color: var(--good);
+  background-image: linear-gradient(45deg, rgb(0 0 0 / 18%) 25%, transparent 25% 50%, rgb(0 0 0 / 18%) 50% 75%, transparent 75%);
 }
 
 .breadth-bar .fall {
-  background: var(--bad);
+  background-color: var(--bad);
+  background-image: linear-gradient(45deg, rgb(0 0 0 / 18%) 25%, transparent 25% 50%, rgb(0 0 0 / 18%) 50% 75%, transparent 75%);
 }
 
 .breadth-sub {
@@ -241,25 +328,39 @@ h2 {
   gap: 10px;
 }
 
+.account-grid {
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  margin-bottom: 14px;
+}
+
 .account-card {
   padding: 16px;
+  animation: enter .42s ease both;
+  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
 }
 
 .account-card.selected {
   border-color: var(--good);
+  box-shadow:
+    0 0 0 1px rgb(73 242 194 / 26%) inset,
+    0 0 24px rgb(73 242 194 / 12%),
+    0 18px 42px var(--shadow);
 }
 
 .account-card .name {
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  font-weight: 650;
+  font-weight: 800;
 }
 
 .account-card .cash {
   margin-top: 14px;
-  font-size: 26px;
-  font-weight: 700;
+  color: var(--good);
+  font-family: "Consolas", "Microsoft YaHei", monospace;
+  font-size: 27px;
+  font-weight: 900;
+  text-shadow: 0 0 14px rgb(73 242 194 / 22%);
 }
 
 .account-card .subline,
@@ -281,11 +382,26 @@ h2 {
 .panel {
   min-width: 0;
   padding: 16px;
-  position: relative;
+  animation: enter .42s ease both;
+  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
 }
 
 .chart-panel {
   overflow-x: auto;
+}
+
+.chart-panel::-webkit-scrollbar,
+.table-wrap::-webkit-scrollbar,
+.panel.expanded::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+.chart-panel::-webkit-scrollbar-thumb,
+.table-wrap::-webkit-scrollbar-thumb,
+.panel.expanded::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border: 2px solid var(--panel-3);
 }
 
 .panel[data-expand] {
@@ -300,7 +416,7 @@ h2 {
   display: flex;
   flex-direction: column;
   overflow: auto;
-  box-shadow: 0 24px 80px rgb(0 0 0 / 70%);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 78%);
 }
 
 .panel.expanded canvas {
@@ -316,14 +432,14 @@ h2 {
   position: absolute;
   top: 14px;
   right: 14px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: #0c1118;
-  color: var(--text);
+  border: 1px solid var(--warn);
+  border-radius: 0;
+  background: #0c0d14;
+  color: var(--warn);
   cursor: pointer;
   font: inherit;
   font-size: 12px;
-  padding: 5px 10px;
+  padding: 6px 10px;
 }
 
 .panel-head {
@@ -337,37 +453,43 @@ h2 {
 .panel-head > span,
 .pill {
   border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--muted);
+  border-radius: 0;
+  color: var(--warn);
+  font-family: "Consolas", "Microsoft YaHei", monospace;
   font-size: 11px;
-  padding: 3px 8px;
+  padding: 4px 8px;
+  background: #0b0c13;
 }
 
 .range-switch {
   display: inline-flex;
   gap: 4px;
   padding: 3px;
+  border: 1px solid var(--line);
+  background: #090a10;
 }
 
 .range-switch button {
   border: 0;
-  border-radius: 999px;
+  border-radius: 0;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
   font: inherit;
-  padding: 2px 7px;
+  padding: 3px 8px;
 }
 
+.range-switch button:hover,
 .range-switch button.active {
-  background: var(--line);
-  color: var(--text);
+  background: var(--good);
+  color: #06110d;
 }
 
 canvas {
   display: block;
   width: 100%;
   height: 300px;
+  image-rendering: pixelated;
 }
 
 .curve-legend {
@@ -386,9 +508,10 @@ canvas {
 }
 
 .curve-legend i {
-  width: 18px;
-  height: 3px;
-  border-radius: 999px;
+  width: 20px;
+  height: 4px;
+  border-radius: 0;
+  box-shadow: 0 0 10px currentColor;
 }
 
 .curve-tooltip {
@@ -399,10 +522,10 @@ canvas {
   min-width: 210px;
   max-width: 280px;
   padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #0c1118;
-  box-shadow: 0 12px 28px rgb(0 0 0 / 45%);
+  border: 1px solid var(--line-hot);
+  border-radius: 0;
+  background: #090a10;
+  box-shadow: 0 12px 28px rgb(0 0 0 / 55%), 0 0 18px rgb(73 242 194 / 18%);
   color: var(--text);
   font-size: 12px;
   pointer-events: none;
@@ -421,12 +544,10 @@ canvas {
   justify-content: space-between;
   gap: 12px;
   padding: 12px;
-  background: #0c1118;
-  border: 1px solid var(--line);
-  border-radius: 6px;
 }
 
 .metric strong {
+  font-family: "Consolas", "Microsoft YaHei", monospace;
   font-size: 14px;
 }
 
@@ -436,13 +557,19 @@ canvas {
 
 .account-filter select {
   max-width: 180px;
-  border: 0;
-  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: #090a10;
   color: var(--good);
   font: inherit;
-  font-weight: 700;
+  font-weight: 800;
   text-align: right;
   outline: none;
+  padding: 5px 8px;
+}
+
+.account-filter select:focus {
+  border-color: var(--good);
 }
 
 .account-filter option {
@@ -462,15 +589,23 @@ table {
 
 th,
 td {
-  padding: 9px 6px;
+  padding: 10px 7px;
   border-bottom: 1px solid var(--line);
   text-align: left;
   white-space: nowrap;
 }
 
 th {
-  color: var(--muted);
-  font-weight: 500;
+  color: var(--warn);
+  font-weight: 800;
+}
+
+tbody tr {
+  transition: background .14s ease;
+}
+
+tbody tr:hover {
+  background: rgb(73 242 194 / 6%);
 }
 
 .compact-list {
@@ -484,10 +619,13 @@ th {
   gap: 10px;
   align-items: center;
   padding: 10px;
-  background: #0c1118;
-  border: 1px solid var(--line);
-  border-radius: 6px;
   font-size: 12px;
+  transition: transform .14s ease, border-color .14s ease;
+}
+
+.row:hover {
+  border-color: var(--accent);
+  transform: translateX(2px);
 }
 
 .timeline {
@@ -499,9 +637,21 @@ th {
 }
 
 .timeline li {
-  padding-left: 14px;
+  position: relative;
+  padding-left: 16px;
   border-left: 2px solid var(--line);
   font-size: 12px;
+}
+
+.timeline li::before {
+  position: absolute;
+  top: 3px;
+  left: -5px;
+  width: 8px;
+  height: 8px;
+  content: "";
+  background: var(--warn);
+  box-shadow: 0 0 12px rgb(255 207 90 / 50%);
 }
 
 .timeline strong {
@@ -528,7 +678,49 @@ th {
   font-size: 13px;
 }
 
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes sweep {
+  0%,
+  52% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(430%);
+  }
+}
+
+@keyframes scanline {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  body::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
 @media (max-width: 900px) {
+  .shell {
+    padding: 14px;
+  }
+
   .topbar,
   .market-strip,
   .layout-main,
@@ -536,16 +728,13 @@ th {
     grid-template-columns: 1fr;
   }
 
+  .topbar,
   .market-strip-head {
     display: grid;
   }
 
   .market-session {
     text-align: left;
-  }
-
-  .topbar {
-    display: grid;
   }
 
   .status-cluster {

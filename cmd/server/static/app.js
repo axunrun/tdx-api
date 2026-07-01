@@ -4,7 +4,7 @@ const fmtMoney = new Intl.NumberFormat("zh-CN", {
   maximumFractionDigits: 2
 });
 const fmtNumber = new Intl.NumberFormat("zh-CN");
-const curveColors = ["#4fb3ff", "#42d392", "#f4c95d", "#ff626e", "#b68cff", "#35d0ba"];
+const curveColors = ["#49f2c2", "#ffcf5a", "#6aa7ff", "#ff6b8b", "#b28cff", "#35d0ba"];
 
 const state = {
   accountId: "",
