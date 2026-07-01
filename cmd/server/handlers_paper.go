@@ -159,11 +159,13 @@ func handlePaperDashboardWithStore(store *PaperStore) http.HandlerFunc {
 			}
 		}
 
+		marketSnapshot := loadPaperMarketSnapshot(cli(), time.Now())
 		jsonResp(w, map[string]any{
 			"marketStatus": map[string]string{
-				"status": "unknown",
-				"note":   "market data handled by existing agent APIs",
+				"status": marketSnapshot.Status,
+				"note":   marketSnapshot.StatusText,
 			},
+			"marketSnapshot":  marketSnapshot,
 			"updatedAt":       time.Now().Format(time.RFC3339Nano),
 			"accounts":        emptyPaperAccounts(accounts),
 			"selectedAccount": selectedAccount,

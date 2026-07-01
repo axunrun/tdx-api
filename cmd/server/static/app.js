@@ -12,7 +12,8 @@ const state = {
   dashboard: null,
   activity: [],
   closed: [],
-  curveHits: []
+  curveHits: [],
+  refreshTimer: 0
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -59,10 +60,11 @@ function render() {
   const selectedAccount = dashboard.selectedAccount;
   const accounts = dashboard.accounts || [];
 
-  text("marketStatus", dashboard.marketStatus?.status || "unknown");
+  text("marketStatus", dashboard.marketSnapshot?.statusText || dashboard.marketStatus?.status || "未知");
   text("updatedAt", formatTime(dashboard.updatedAt));
   document.getElementById("emptyState").hidden = accounts.length > 0;
 
+  renderMarketStrip(dashboard.marketSnapshot);
   renderAccounts(accounts, selectedAccount);
   renderMarketOverview(dashboard);
   renderPositions(dashboard.positions || []);
@@ -71,6 +73,16 @@ function render() {
   renderActivity(state.activity, accounts);
   renderCurveRange();
   drawEquityCurve(getEquitySeries());
+  scheduleRefresh(dashboard.marketSnapshot);
+}
+
+function scheduleRefresh(snapshot) {
+  window.clearTimeout(state.refreshTimer);
+  const next = snapshot?.nextRefresh ? new Date(snapshot.nextRefresh).getTime() : 0;
+  const delay = Number.isFinite(next) && next > Date.now()
+    ? Math.max(5000, next - Date.now())
+    : 60000;
+  state.refreshTimer = window.setTimeout(() => loadAccount(state.accountId), delay);
 }
 
 function setupPanelExpand() {
@@ -153,13 +165,74 @@ function renderAccounts(accounts, selectedAccount) {
   }).join("");
 }
 
+function renderMarketStrip(snapshot) {
+  const root = document.getElementById("marketStrip");
+  const indexes = snapshot?.indexes || [];
+  const breadth = snapshot?.breadth || {};
+  const statusText = snapshot?.statusText || "未知";
+  const note = snapshot?.note || "市场快照暂不可用";
+  const breadthTotal = breadth.total || 0;
+  const riseWidth = breadthTotal ? Math.round((breadth.rising || 0) / breadthTotal * 100) : 0;
+  const fallWidth = breadthTotal ? Math.round((breadth.falling || 0) / breadthTotal * 100) : 0;
+
+  root.innerHTML = `
+    <div class="market-strip-head">
+      <div>
+        <p class="eyebrow">MARKET SNAPSHOT</p>
+        <h2>主要市场行情</h2>
+      </div>
+      <div class="market-session">
+        <strong>${escapeHtml(statusText)}</strong>
+        <span>${escapeHtml(note)}</span>
+      </div>
+    </div>
+    <div class="index-tape">
+      ${indexes.length ? indexes.map(renderIndexTile).join("") : `
+        <div class="index-tile muted">指数行情暂不可用</div>
+      `}
+    </div>
+    <div class="breadth-card">
+      <div class="breadth-main">
+        <span>全市场涨跌</span>
+        <strong>
+          <b class="good">${fmtNumber.format(breadth.rising || 0)}</b>
+          /
+          <b class="bad">${fmtNumber.format(breadth.falling || 0)}</b>
+          /
+          <b>${fmtNumber.format(breadth.flat || 0)}</b>
+        </strong>
+      </div>
+      <div class="breadth-bar" aria-label="上涨下跌比例">
+        <i class="rise" style="width:${riseWidth}%"></i>
+        <i class="fall" style="width:${fallWidth}%"></i>
+      </div>
+      <div class="breadth-sub">
+        <span>涨停约 ${fmtNumber.format(breadth.limitUp || 0)}</span>
+        <span>跌停约 ${fmtNumber.format(breadth.limitDown || 0)}</span>
+        <span>上涨占比 ${formatPercent(breadth.risingPct || 0)}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderIndexTile(item) {
+  const tone = item.changePct >= 0 ? "good" : "bad";
+  return `
+    <div class="index-tile">
+      <span>${escapeHtml(item.name)}</span>
+      <strong>${formatFixed(item.close, 2)}</strong>
+      <em class="${tone}">${formatPercent(item.changePct || 0)}</em>
+    </div>
+  `;
+}
+
 function renderMarketOverview(dashboard) {
   const account = dashboard.selectedAccount;
   const accounts = dashboard.accounts || [];
   const positions = dashboard.positions || [];
   const orders = dashboard.orders || [];
   const trades = dashboard.trades || [];
-  const status = dashboard.marketStatus || {};
+  const snapshot = dashboard.marketSnapshot || {};
   const selectedID = account?.id || "";
   const accountOptions = accounts.map((item) => `
     <option value="${escapeHtml(item.id)}" ${item.id === selectedID ? "selected" : ""}>
@@ -167,7 +240,7 @@ function renderMarketOverview(dashboard) {
     </option>
   `).join("");
   const values = [
-    ["市场状态", status.note || status.status || "未知", "warn"],
+    ["市场状态", snapshot.statusText || "未知", "warn"],
     ["持仓标的", `${positions.length} 个`, ""],
     ["待处理委托", `${orders.filter((item) => item.status === "pending").length} 笔`, ""],
     ["成交记录", `${trades.length} 笔`, ""]
@@ -510,6 +583,17 @@ function formatTradeSummary(point) {
     parts.push(`卖出 ${fmtNumber.format(point.sellQuantity)} 股 / ${fmtMoney.format(point.sellAmount)}`);
   }
   return parts.length ? parts.join("；") : "当日无成交";
+}
+
+function formatPercent(value) {
+  const number = Number(value || 0);
+  const sign = number > 0 ? "+" : "";
+  return `${sign}${number.toFixed(2)}%`;
+}
+
+function formatFixed(value, digits) {
+  const number = Number(value || 0);
+  return number.toFixed(digits);
 }
 
 function describeActivity(item) {

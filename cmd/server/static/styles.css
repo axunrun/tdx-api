@@ -122,6 +122,125 @@ h2 {
   margin-bottom: 14px;
 }
 
+.market-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.8fr);
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: linear-gradient(180deg, #10151c 0%, #0b1016 100%);
+}
+
+.market-strip-head {
+  display: flex;
+  grid-column: 1 / -1;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+}
+
+.market-session {
+  display: grid;
+  gap: 2px;
+  text-align: right;
+}
+
+.market-session strong {
+  color: var(--warn);
+  font-size: 14px;
+}
+
+.market-session span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.index-tape {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 8px;
+}
+
+.index-tile,
+.breadth-card {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #0c1118;
+}
+
+.index-tile {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.index-tile span,
+.breadth-main span,
+.breadth-sub {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.index-tile strong {
+  font-size: 19px;
+}
+
+.index-tile em {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.breadth-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.breadth-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.breadth-main strong {
+  font-size: 18px;
+}
+
+.breadth-main b {
+  font-weight: 750;
+}
+
+.breadth-bar {
+  display: flex;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #1b2530;
+}
+
+.breadth-bar i {
+  display: block;
+  height: 100%;
+}
+
+.breadth-bar .rise {
+  background: var(--good);
+}
+
+.breadth-bar .fall {
+  background: var(--bad);
+}
+
+.breadth-sub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .account-card {
   padding: 16px;
 }
@@ -411,9 +530,18 @@ th {
 
 @media (max-width: 900px) {
   .topbar,
+  .market-strip,
   .layout-main,
   .data-grid {
     grid-template-columns: 1fr;
+  }
+
+  .market-strip-head {
+    display: grid;
+  }
+
+  .market-session {
+    text-align: left;
   }
 
   .topbar {

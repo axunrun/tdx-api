@@ -53,8 +53,11 @@ func TestHandlePaperDashboardReturnsEmptyState(t *testing.T) {
 
 	data := decodePaperResponse(t, rec, http.StatusOK)
 	marketStatus := data["marketStatus"].(map[string]any)
-	if marketStatus["status"] != "unknown" {
+	if marketStatus["status"] == "" {
 		t.Fatalf("marketStatus = %+v", marketStatus)
+	}
+	if data["marketSnapshot"] == nil {
+		t.Fatal("marketSnapshot is nil")
 	}
 	if data["selectedAccount"] != nil {
 		t.Fatalf("selectedAccount = %+v, want nil", data["selectedAccount"])
