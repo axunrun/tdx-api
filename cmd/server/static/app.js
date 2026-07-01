@@ -511,6 +511,7 @@ function renderCurveLegend(series) {
     legend.className = "curve-legend";
     canvas.insertAdjacentElement("afterend", legend);
   }
+  legend.hidden = !series.length;
   legend.innerHTML = series.map((item, index) => `
     <span>
       <i style="background:${curveColors[index % curveColors.length]}"></i>
