@@ -5,6 +5,7 @@ const (
 	paperAccountClosed = "closed"
 
 	paperAssetStock = "stock"
+	paperAssetETF   = "etf"
 
 	paperSideBuy  = "buy"
 	paperSideSell = "sell"
@@ -38,6 +39,18 @@ type PaperInitialPosition struct {
 	BuyDate   string  `json:"buyDate,omitempty"`
 }
 
+type PaperPlaceOrderRequest struct {
+	AccountID   string  `json:"accountId"`
+	Code        string  `json:"code"`
+	Name        string  `json:"name,omitempty"`
+	AssetType   string  `json:"assetType,omitempty"`
+	Side        string  `json:"side"`
+	OrderType   string  `json:"orderType"`
+	TimeInForce string  `json:"timeInForce,omitempty"`
+	Price       float64 `json:"price,omitempty"`
+	Quantity    int64   `json:"quantity"`
+}
+
 type PaperAccount struct {
 	ID            string  `json:"id"`
 	Name          string  `json:"name"`
@@ -60,4 +73,40 @@ type PaperPosition struct {
 	FrozenQuantity   int64   `json:"frozenQuantity"`
 	AvgCost          float64 `json:"avgCost"`
 	UpdatedAt        string  `json:"updatedAt"`
+}
+
+type PaperOrder struct {
+	ID             string  `json:"id"`
+	AccountID      string  `json:"accountId"`
+	Code           string  `json:"code"`
+	Name           string  `json:"name,omitempty"`
+	AssetType      string  `json:"assetType"`
+	Side           string  `json:"side"`
+	OrderType      string  `json:"orderType"`
+	Status         string  `json:"status"`
+	TimeInForce    string  `json:"timeInForce"`
+	RejectReason   string  `json:"rejectReason,omitempty"`
+	CreatedAt      string  `json:"createdAt"`
+	UpdatedAt      string  `json:"updatedAt"`
+	FilledAt       string  `json:"filledAt,omitempty"`
+	CancelledAt    string  `json:"cancelledAt,omitempty"`
+	Price          float64 `json:"price,omitempty"`
+	Quantity       int64   `json:"quantity"`
+	FilledQuantity int64   `json:"filledQuantity"`
+}
+
+type PaperFeeInput struct {
+	AssetType string
+	Side      string
+	Amount    float64
+}
+
+type PaperFee struct {
+	Commission  float64
+	StampTax    float64
+	TransferFee float64
+}
+
+func (f PaperFee) Total() float64 {
+	return f.Commission + f.StampTax + f.TransferFee
 }
