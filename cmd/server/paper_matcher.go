@@ -234,6 +234,7 @@ func startPaperBackgroundTasks(store *PaperStore, quote PaperQuoteProvider) {
 		defer matchTicker.Stop()
 		defer snapshotTicker.Stop()
 
+		snapshotPaperAccounts(store, quote)
 		for {
 			select {
 			case <-matchTicker.C:
@@ -241,9 +242,23 @@ func startPaperBackgroundTasks(store *PaperStore, quote PaperQuoteProvider) {
 					log.Printf("paper match open orders failed: %v", err)
 				}
 			case <-snapshotTicker.C:
+				snapshotPaperAccounts(store, quote)
 			}
 		}
 	}()
+}
+
+func snapshotPaperAccounts(store *PaperStore, quote PaperQuoteProvider) {
+	accounts, err := store.ListAccounts()
+	if err != nil {
+		log.Printf("paper list accounts for snapshot failed: %v", err)
+		return
+	}
+	for _, account := range accounts {
+		if err := store.CreateSnapshot(account.ID, quote); err != nil {
+			log.Printf("paper create snapshot failed account=%s: %v", account.ID, err)
+		}
+	}
 }
 
 func quotePaperFromTDX(code string) (PaperQuote, error) {

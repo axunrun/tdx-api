@@ -257,6 +257,28 @@ func TestCreatePaperSnapshotUsesQuote(t *testing.T) {
 	assertFloatEqual(t, totalAssets, 2200)
 }
 
+func TestSnapshotPaperAccountsWritesAllAccounts(t *testing.T) {
+	store := newTestPaperStore(t)
+	for _, name := range []string{"a", "b"} {
+		if _, err := store.CreateAccount(PaperCreateAccountRequest{
+			Name:        name,
+			InitialCash: 1000,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	snapshotPaperAccounts(store, fixedPaperQuote(10))
+
+	var count int
+	if err := store.db.QueryRow(`SELECT COUNT(*) FROM paper_account_snapshots`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 2 {
+		t.Fatalf("snapshot count = %d, want 2", count)
+	}
+}
+
 func fixedPaperQuote(price float64) PaperQuoteProvider {
 	return func(code string) (PaperQuote, error) {
 		return PaperQuote{Code: code, Price: price}, nil
