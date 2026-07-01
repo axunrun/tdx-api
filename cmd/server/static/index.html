@@ -34,7 +34,7 @@
     <section class="account-grid" id="accountCards" aria-label="账户卡片"></section>
 
     <section class="layout-main">
-      <article class="panel chart-panel">
+      <article class="panel chart-panel" data-expand>
         <div class="panel-head">
           <div>
             <p class="eyebrow">EQUITY CURVE</p>
@@ -43,9 +43,10 @@
           <span id="curveRange">20d</span>
         </div>
         <canvas id="equityCanvas" width="900" height="300"></canvas>
+        <div id="curveTooltip" class="curve-tooltip" hidden></div>
       </article>
 
-      <article class="panel">
+      <article class="panel" data-expand>
         <div class="panel-head">
           <div>
             <p class="eyebrow">A-SHARE MARKET</p>
@@ -57,7 +58,7 @@
     </section>
 
     <section class="data-grid">
-      <article class="panel">
+      <article class="panel" data-expand>
         <div class="panel-head">
           <div>
             <p class="eyebrow">POSITIONS</p>
@@ -80,7 +81,7 @@
         </div>
       </article>
 
-      <article class="panel">
+      <article class="panel" data-expand>
         <div class="panel-head">
           <div>
             <p class="eyebrow">ORDERS & TRADES</p>
@@ -90,7 +91,7 @@
         <div id="ordersTrades" class="compact-list"></div>
       </article>
 
-      <article class="panel">
+      <article class="panel" data-expand>
         <div class="panel-head">
           <div>
             <p class="eyebrow">CLOSED</p>

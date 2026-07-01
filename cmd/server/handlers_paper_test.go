@@ -152,6 +152,47 @@ func TestFilterPaperEquityPointsUsesDailyRange(t *testing.T) {
 	}
 }
 
+func TestListPaperEquityCurveIncludesTradeSummary(t *testing.T) {
+	store := newTestPaperStore(t)
+	account, err := store.CreateAccount(PaperCreateAccountRequest{
+		Name:        "alpha",
+		InitialCash: 1000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CreateSnapshot(account.ID, fixedPaperQuote(10)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`
+		INSERT INTO paper_trades (
+			id, order_id, account_id, code, side, price, quantity,
+			amount, commission, stamp_tax, transfer_fee, traded_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, "trade_test", "order_test", account.ID, "300499", paperSideBuy,
+		10.5, 200, 2100, 0, 0, 0, "2026-01-01T10:00:00+08:00"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`
+		UPDATE paper_account_snapshots
+		SET trading_day = ?
+		WHERE account_id = ?
+	`, "2026-01-01", account.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	points, err := listPaperEquityCurve(store, account.ID, "all")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(points) != 1 {
+		t.Fatalf("len(points) = %d, want 1", len(points))
+	}
+	if points[0].BuyQuantity != 200 || points[0].BuyAmount != 2100 {
+		t.Fatalf("point = %+v", points[0])
+	}
+}
+
 func TestHandlePaperClosedPositionsRequiresAccountID(t *testing.T) {
 	store := newTestPaperStore(t)
 

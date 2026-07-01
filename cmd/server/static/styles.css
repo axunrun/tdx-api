@@ -24,6 +24,10 @@ body {
   letter-spacing: 0;
 }
 
+body.has-expanded-panel {
+  overflow: hidden;
+}
+
 .shell {
   width: min(1440px, 100%);
   margin: 0 auto;
@@ -158,10 +162,49 @@ h2 {
 .panel {
   min-width: 0;
   padding: 16px;
+  position: relative;
 }
 
 .chart-panel {
   overflow-x: auto;
+}
+
+.panel[data-expand] {
+  cursor: zoom-in;
+}
+
+.panel.expanded {
+  position: fixed;
+  inset: 16px;
+  z-index: 20;
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 70%);
+}
+
+.panel.expanded canvas {
+  min-height: 460px;
+}
+
+.panel-close {
+  display: none;
+}
+
+.panel.expanded .panel-close {
+  display: block;
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #0c1118;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 10px;
 }
 
 .panel-head {
@@ -227,6 +270,31 @@ canvas {
   width: 18px;
   height: 3px;
   border-radius: 999px;
+}
+
+.curve-tooltip {
+  position: absolute;
+  z-index: 30;
+  display: grid;
+  gap: 4px;
+  min-width: 210px;
+  max-width: 280px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #0c1118;
+  box-shadow: 0 12px 28px rgb(0 0 0 / 45%);
+  color: var(--text);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.curve-tooltip strong {
+  color: var(--good);
+}
+
+.curve-tooltip span {
+  color: var(--muted);
 }
 
 .metric {

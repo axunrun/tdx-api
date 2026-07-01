@@ -39,6 +39,7 @@ func paperMCPTools() []mcpTool {
 		optionalString("orderId", "委托 ID；get/cancel 时需要。"),
 		optionalString("name", "证券名称。"),
 		optionalEnum("assetType", "资产类型。", "stock", "etf"),
+		optionalString("reason", "交易理由；place 时可传，将写入 Agent 行为时间线。"),
 	)
 
 	portfolio := newMCPTool(

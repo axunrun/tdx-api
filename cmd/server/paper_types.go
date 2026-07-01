@@ -49,6 +49,7 @@ type PaperPlaceOrderRequest struct {
 	TimeInForce string  `json:"timeInForce,omitempty"`
 	Price       float64 `json:"price,omitempty"`
 	Quantity    int64   `json:"quantity"`
+	Reason      string  `json:"reason,omitempty"`
 }
 
 type PaperAccount struct {

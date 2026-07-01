@@ -11,10 +11,15 @@ const state = {
   range: "20d",
   dashboard: null,
   activity: [],
-  closed: []
+  closed: [],
+  curveHits: []
 };
 
-document.addEventListener("DOMContentLoaded", () => loadAccount(""));
+document.addEventListener("DOMContentLoaded", () => {
+  setupPanelExpand();
+  setupCurveTooltip();
+  loadAccount("");
+});
 window.addEventListener("resize", () => drawEquityCurve(getEquitySeries()));
 
 async function loadAccount(accountId) {
@@ -66,6 +71,43 @@ function render() {
   renderActivity(state.activity, accounts);
   renderCurveRange();
   drawEquityCurve(getEquitySeries());
+}
+
+function setupPanelExpand() {
+  document.querySelectorAll("[data-expand]").forEach((panel) => {
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "panel-close";
+    close.textContent = "关闭";
+    close.addEventListener("click", (event) => {
+      event.stopPropagation();
+      panel.classList.remove("expanded");
+      document.body.classList.remove("has-expanded-panel");
+      drawEquityCurve(getEquitySeries());
+    });
+    panel.appendChild(close);
+    panel.addEventListener("click", (event) => {
+      if (panel.classList.contains("expanded")) {
+        return;
+      }
+      if (event.target.closest("button, select, input, textarea, a")) {
+        return;
+      }
+      panel.classList.add("expanded");
+      document.body.classList.add("has-expanded-panel");
+      drawEquityCurve(getEquitySeries());
+    });
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") {
+      return;
+    }
+    document.querySelectorAll(".panel.expanded").forEach((panel) => {
+      panel.classList.remove("expanded");
+    });
+    document.body.classList.remove("has-expanded-panel");
+    drawEquityCurve(getEquitySeries());
+  });
 }
 
 function renderCurveRange() {
@@ -293,6 +335,7 @@ function drawEquityCurve(series) {
   const height = plot.bottom - plot.top;
 
   drawCurveXAxis(ctx, days, plot, width);
+  state.curveHits = [];
 
   series.forEach((item, seriesIndex) => {
     const pointsByDay = Object.fromEntries(dailyCurvePoints(item.points).map((point) => [
@@ -310,6 +353,13 @@ function drawEquityCurve(series) {
       }
       const x = plot.left + (width * index) / Math.max(1, days.length - 1);
       const y = plot.bottom - ((point.totalAssets - min) / span) * height;
+      state.curveHits.push({
+        x,
+        y,
+        color: curveColors[seriesIndex % curveColors.length],
+        accountName: item.accountName || item.accountId,
+        point
+      });
       if (!started) {
         ctx.moveTo(x, y);
         started = true;
@@ -318,6 +368,12 @@ function drawEquityCurve(series) {
       }
     });
     ctx.stroke();
+    for (const hit of state.curveHits.filter((hit) => hit.accountName === (item.accountName || item.accountId))) {
+      ctx.fillStyle = hit.color;
+      ctx.beginPath();
+      ctx.arc(hit.x, hit.y, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
   });
 
   ctx.fillStyle = "#e7edf4";
@@ -387,6 +443,75 @@ function renderCurveLegend(series) {
   `).join("");
 }
 
+function setupCurveTooltip() {
+  const canvas = document.getElementById("equityCanvas");
+  const tooltip = document.getElementById("curveTooltip");
+  if (!canvas || !tooltip) {
+    return;
+  }
+  canvas.addEventListener("mousemove", (event) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const hit = nearestCurveHit(x, y);
+    if (!hit) {
+      tooltip.hidden = true;
+      drawEquityCurve(getEquitySeries());
+      return;
+    }
+    drawEquityCurve(getEquitySeries());
+    drawCurveHoverDot(hit);
+    tooltip.hidden = false;
+    tooltip.style.left = `${hit.x + 14}px`;
+    tooltip.style.top = `${Math.max(8, hit.y - 46)}px`;
+    tooltip.innerHTML = `
+      <strong>${escapeHtml(hit.accountName)} · ${formatDayLabel(hit.point.tradingDay)}</strong>
+      <span>总资产 ${fmtMoney.format(hit.point.totalAssets)}</span>
+      <span>${escapeHtml(formatTradeSummary(hit.point))}</span>
+    `;
+  });
+  canvas.addEventListener("mouseleave", () => {
+    tooltip.hidden = true;
+    drawEquityCurve(getEquitySeries());
+  });
+}
+
+function nearestCurveHit(x, y) {
+  let best = null;
+  let bestDistance = Infinity;
+  for (const hit of state.curveHits) {
+    const distance = Math.hypot(hit.x - x, hit.y - y);
+    if (distance < bestDistance) {
+      best = hit;
+      bestDistance = distance;
+    }
+  }
+  return bestDistance <= 10 ? best : null;
+}
+
+function drawCurveHoverDot(hit) {
+  const canvas = document.getElementById("equityCanvas");
+  const ctx = canvas.getContext("2d");
+  ctx.strokeStyle = "#ffffff";
+  ctx.fillStyle = hit.color;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(hit.x, hit.y, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+}
+
+function formatTradeSummary(point) {
+  const parts = [];
+  if (point.buyQuantity > 0) {
+    parts.push(`买入 ${fmtNumber.format(point.buyQuantity)} 股 / ${fmtMoney.format(point.buyAmount)}`);
+  }
+  if (point.sellQuantity > 0) {
+    parts.push(`卖出 ${fmtNumber.format(point.sellQuantity)} 股 / ${fmtMoney.format(point.sellAmount)}`);
+  }
+  return parts.length ? parts.join("；") : "当日无成交";
+}
+
 function describeActivity(item) {
   const request = parseJSON(item.request);
   const response = parseJSON(item.response);
@@ -398,7 +523,8 @@ function describeActivity(item) {
     const side = request.side === "sell" ? "卖出" : "买入";
     const name = request.name || request.code || response.name || response.code || "";
     const price = request.price ? `，委托价 ${fmtMoney.format(request.price)}` : "";
-    return `提交委托：${side} ${name} ${fmtNumber.format(request.quantity || 0)} 股${price}`;
+    const reason = request.reason ? `，理由：${request.reason}` : "";
+    return `提交委托：${side} ${name} ${fmtNumber.format(request.quantity || 0)} 股${price}${reason}`;
   }
   if (item.actionType === "fill_order") {
     const side = response.side === "sell" ? "卖出成交" : "买入成交";

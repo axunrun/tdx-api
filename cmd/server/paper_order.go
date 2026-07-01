@@ -186,6 +186,7 @@ func normalizePaperOrderRequest(req *PaperPlaceOrderRequest) error {
 	req.Side = strings.TrimSpace(req.Side)
 	req.OrderType = strings.TrimSpace(req.OrderType)
 	req.TimeInForce = strings.TrimSpace(req.TimeInForce)
+	req.Reason = strings.TrimSpace(req.Reason)
 
 	if req.AccountID == "" {
 		return errors.New("account id is required")

@@ -18,9 +18,20 @@ type PaperAgentAction struct {
 }
 
 type PaperEquityPoint struct {
-	TradingDay  string  `json:"tradingDay"`
-	TotalAssets float64 `json:"totalAssets"`
-	CreatedAt   string  `json:"createdAt"`
+	TradingDay   string  `json:"tradingDay"`
+	TotalAssets  float64 `json:"totalAssets"`
+	CreatedAt    string  `json:"createdAt"`
+	BuyQuantity  int64   `json:"buyQuantity"`
+	BuyAmount    float64 `json:"buyAmount"`
+	SellQuantity int64   `json:"sellQuantity"`
+	SellAmount   float64 `json:"sellAmount"`
+}
+
+type paperTradeSummary struct {
+	BuyQuantity  int64
+	BuyAmount    float64
+	SellQuantity int64
+	SellAmount   float64
 }
 
 type PaperEquitySeries struct {
@@ -307,7 +318,54 @@ func listPaperEquityCurve(
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	summaries, err := loadPaperTradeSummaries(store, accountID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range points {
+		summary := summaries[points[i].TradingDay]
+		points[i].BuyQuantity = summary.BuyQuantity
+		points[i].BuyAmount = summary.BuyAmount
+		points[i].SellQuantity = summary.SellQuantity
+		points[i].SellAmount = summary.SellAmount
+	}
 	return filterPaperEquityPoints(points, rangeName), nil
+}
+
+func loadPaperTradeSummaries(
+	store *PaperStore,
+	accountID string,
+) (map[string]paperTradeSummary, error) {
+	rows, err := store.db.Query(`
+		SELECT substr(traded_at, 1, 10), side, SUM(quantity), SUM(amount)
+		FROM paper_trades
+		WHERE account_id = ?
+		GROUP BY substr(traded_at, 1, 10), side
+	`, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	summaries := map[string]paperTradeSummary{}
+	for rows.Next() {
+		var day, side string
+		var quantity int64
+		var amount float64
+		if err := rows.Scan(&day, &side, &quantity, &amount); err != nil {
+			return nil, err
+		}
+		summary := summaries[day]
+		if side == paperSideBuy {
+			summary.BuyQuantity = quantity
+			summary.BuyAmount = amount
+		} else if side == paperSideSell {
+			summary.SellQuantity = quantity
+			summary.SellAmount = amount
+		}
+		summaries[day] = summary
+	}
+	return summaries, rows.Err()
 }
 
 func listPaperEquityCurves(
