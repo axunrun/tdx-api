@@ -399,6 +399,7 @@ func paperRulesMCPResult() map[string]any {
 		"matching": []string{
 			"首版不做部分成交；一笔委托要么整笔成交，要么保持 pending。",
 			"买入限价在行情价小于等于委托价时成交；卖出限价在行情价大于等于委托价时成交。",
+			"买入成交后增加总持仓，但当天不增加可卖持仓，按 A股 T+1 口径处理。",
 		},
 	}
 	text := strings.Join([]string{
@@ -407,7 +408,8 @@ func paperRulesMCPResult() map[string]any {
 		"2. 委托方向支持 buy/sell，类型支持 market/limit/auction。",
 		"3. 数量必须为正数且是 100 的整数倍；limit/auction 必须有正价格。",
 		"4. 费用包含佣金、股票过户费，股票卖出另收印花税。",
-		"5. 首版不支持部分成交；close/recreate 暂未实现。",
+		"5. 买入成交后当天不可卖，服务端按 A股 T+1 可卖口径约束。",
+		"6. 首版不支持部分成交；close/recreate 暂未实现。",
 	}, "\n")
 	return paperMCPResult(text, map[string]any{"rules": rules})
 }

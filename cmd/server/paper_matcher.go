@@ -454,6 +454,7 @@ func addPaperPosition(
 	totalCost float64,
 	now string,
 ) (int64, error) {
+	sellableDelta := paperBuySellableDelta(order)
 	position, err := getPaperPosition(tx, order)
 	if err == sql.ErrNoRows {
 		_, err = tx.Exec(`
@@ -462,7 +463,7 @@ func addPaperPosition(
 				sellable_quantity, frozen_quantity, avg_cost, updated_at
 			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`, newPaperID("pos"), order.AccountID, order.Code, nullIfEmpty(order.Name),
-			order.AssetType, order.Quantity, order.Quantity, 0,
+			order.AssetType, order.Quantity, sellableDelta, 0,
 			totalCost/float64(order.Quantity), now)
 		return order.Quantity, err
 	}
@@ -480,8 +481,12 @@ func addPaperPosition(
 			avg_cost = ?,
 			updated_at = ?
 		WHERE id = ?
-	`, quantityAfter, order.Quantity, avgCost, now, position.ID)
+	`, quantityAfter, sellableDelta, avgCost, now, position.ID)
 	return quantityAfter, err
+}
+
+func paperBuySellableDelta(_ PaperOrder) int64 {
+	return 0
 }
 
 func insertPaperTrade(tx *sql.Tx, trade PaperTrade) error {

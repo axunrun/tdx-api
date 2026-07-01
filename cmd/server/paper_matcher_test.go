@@ -142,6 +142,17 @@ func TestPaperMarketBuyFillsWithQuote(t *testing.T) {
 		Amount:    990,
 	}).Total()
 	assertFloatEqual(t, got.AvailableCash, wantCash)
+
+	positions, err := store.ListPositions(account.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(positions) != 1 {
+		t.Fatalf("len(positions) = %d, want 1", len(positions))
+	}
+	if positions[0].Quantity != 100 || positions[0].SellableQuantity != 0 {
+		t.Fatalf("position = %+v", positions[0])
+	}
 }
 
 func TestFillPaperOrderRejectsAlreadyFilledOrder(t *testing.T) {
