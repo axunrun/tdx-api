@@ -95,6 +95,40 @@ type PaperOrder struct {
 	FilledQuantity int64   `json:"filledQuantity"`
 }
 
+type PaperQuote struct {
+	Code  string  `json:"code"`
+	Name  string  `json:"name,omitempty"`
+	Price float64 `json:"price"`
+}
+
+type PaperTrade struct {
+	ID          string  `json:"id"`
+	OrderID     string  `json:"orderId"`
+	AccountID   string  `json:"accountId"`
+	Code        string  `json:"code"`
+	Side        string  `json:"side"`
+	TradedAt    string  `json:"tradedAt"`
+	Price       float64 `json:"price"`
+	Quantity    int64   `json:"quantity"`
+	Amount      float64 `json:"amount"`
+	Commission  float64 `json:"commission"`
+	StampTax    float64 `json:"stampTax"`
+	TransferFee float64 `json:"transferFee"`
+}
+
+type PaperClosedPosition struct {
+	ID          string  `json:"id"`
+	AccountID   string  `json:"accountId"`
+	Code        string  `json:"code"`
+	Name        string  `json:"name,omitempty"`
+	OpenedAt    string  `json:"openedAt,omitempty"`
+	ClosedAt    string  `json:"closedAt"`
+	Quantity    int64   `json:"quantity"`
+	OpenAmount  float64 `json:"openAmount"`
+	CloseAmount float64 `json:"closeAmount"`
+	RealizedPnL float64 `json:"realizedPnl"`
+}
+
 type PaperFeeInput struct {
 	AssetType string
 	Side      string

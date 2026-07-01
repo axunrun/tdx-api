@@ -63,8 +63,10 @@ func (s *PaperStore) PlaceOrder(req PaperPlaceOrderRequest) (PaperOrder, error) 
 		return PaperOrder{}, err
 	}
 	if req.Side == paperSideBuy {
-		if err := freezePaperOrderCash(tx, order, now); err != nil {
-			return PaperOrder{}, err
+		if req.OrderType != paperOrderMarket {
+			if err := freezePaperOrderCash(tx, order, now); err != nil {
+				return PaperOrder{}, err
+			}
 		}
 	} else if err := freezePaperOrderPosition(tx, order, now); err != nil {
 		return PaperOrder{}, err
@@ -170,9 +172,6 @@ func normalizePaperOrderRequest(req *PaperPlaceOrderRequest) error {
 	if (req.OrderType == paperOrderLimit || req.OrderType == paperOrderAuction) &&
 		req.Price <= 0 {
 		return errors.New("price must be positive for limit and auction orders")
-	}
-	if req.OrderType == paperOrderMarket && req.Side == paperSideBuy {
-		return errors.New("market buy requires quote matching support")
 	}
 	return nil
 }
