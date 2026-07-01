@@ -102,7 +102,7 @@ func handleMCP(w http.ResponseWriter, r *http.Request) {
 }
 
 func mcpTools() []mcpTool {
-	return []mcpTool{
+	tools := []mcpTool{
 		newMCPTool("tdx_asset_search_text", "按名称、代码或拼音搜索A股资产。用于用户只给股票名称或模糊关键词时先确认标准代码；返回候选股票、市场、名称和主要板块。", "/api/agent/assets/search-text", handleAgentAssetsSearchText,
 			requiredString("keyword", "股票名称、代码或拼音关键词"),
 			optionalNumberDefault("limit", "返回数量，默认20，最大50。", 20),
@@ -173,6 +173,7 @@ func mcpTools() []mcpTool {
 		),
 		newMCPTool("tdx_global_market_brief_text", "全球外围权重资产简报。用于A股分析前判断外围环境；输出全球指数、亚太市场、商品、汇率、债券和权重股的当日及20/60日表现。", "/api/agent/global-market-brief-text", handleAgentGlobalMarketBriefText),
 	}
+	return append(tools, paperMCPTools()...)
 }
 
 func newMCPTool(name, description, path string, handler http.HandlerFunc, params ...mcpToolParam) mcpTool {
@@ -239,6 +240,9 @@ func callMCPTool(raw json.RawMessage) (map[string]any, error) {
 	var params mcpToolCallParams
 	if err := json.Unmarshal(raw, &params); err != nil {
 		return nil, fmt.Errorf("工具参数解析失败: %w", err)
+	}
+	if result, ok, err := callPaperMCPTool(params.Name, params.Arguments); ok {
+		return result, err
 	}
 	for _, tool := range mcpTools() {
 		if tool.Name == params.Name {

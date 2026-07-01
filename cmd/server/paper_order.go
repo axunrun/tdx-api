@@ -101,6 +101,56 @@ func (s *PaperStore) GetOrder(orderID string) (PaperOrder, error) {
 	`, orderID))
 }
 
+func (s *PaperStore) CancelOrder(accountID, orderID string) (PaperOrder, error) {
+	accountID = strings.TrimSpace(accountID)
+	orderID = strings.TrimSpace(orderID)
+	if accountID == "" {
+		return PaperOrder{}, errors.New("account id is required")
+	}
+	if orderID == "" {
+		return PaperOrder{}, errors.New("order id is required")
+	}
+
+	now := time.Now().Format(time.RFC3339Nano)
+	tx, err := s.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return PaperOrder{}, err
+	}
+	defer tx.Rollback()
+
+	order, err := getPaperOrderForUpdate(tx, orderID)
+	if err == sql.ErrNoRows {
+		return PaperOrder{}, errors.New("order not found")
+	}
+	if err != nil {
+		return PaperOrder{}, err
+	}
+	if order.AccountID != accountID {
+		return PaperOrder{}, errors.New("order does not belong to account")
+	}
+	if order.Status != paperOrderPending {
+		return PaperOrder{}, errors.New("only pending orders can be cancelled")
+	}
+
+	if err := releasePaperCancelledOrder(tx, order, now); err != nil {
+		return PaperOrder{}, err
+	}
+	if err := markPaperOrderCancelled(tx, order.ID, now); err != nil {
+		return PaperOrder{}, err
+	}
+	if err := insertPaperCancelAction(tx, order, now); err != nil {
+		return PaperOrder{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return PaperOrder{}, err
+	}
+
+	order.Status = paperOrderCancelled
+	order.CancelledAt = now
+	order.UpdatedAt = now
+	return order, nil
+}
+
 func (s *PaperStore) ListOrders(accountID string) ([]PaperOrder, error) {
 	rows, err := s.db.Query(`
 		SELECT id, account_id, code, COALESCE(name, ''), asset_type, side,
@@ -193,6 +243,76 @@ func ensurePaperAccountActive(tx *sql.Tx, accountID string) error {
 		return errors.New("account is not active")
 	}
 	return nil
+}
+
+func releasePaperCancelledOrder(tx *sql.Tx, order PaperOrder, now string) error {
+	if order.Side == paperSideBuy && order.OrderType != paperOrderMarket {
+		amount := order.Price * float64(order.Quantity)
+		fee := calculatePaperFee(PaperFeeInput{
+			AssetType: order.AssetType,
+			Side:      order.Side,
+			Amount:    amount,
+		})
+		frozenCash := amount + fee.Total()
+		result, err := tx.Exec(`
+			UPDATE paper_accounts
+			SET frozen_cash = frozen_cash - ?,
+				available_cash = available_cash + ?,
+				updated_at = ?
+			WHERE id = ? AND frozen_cash >= ?
+		`, frozenCash, frozenCash, now, order.AccountID, frozenCash)
+		if err != nil {
+			return err
+		}
+		return requireRowsAffected(result, "insufficient frozen cash")
+	}
+	if order.Side == paperSideSell {
+		result, err := tx.Exec(`
+			UPDATE paper_positions
+			SET sellable_quantity = sellable_quantity + ?,
+				frozen_quantity = frozen_quantity - ?,
+				updated_at = ?
+			WHERE account_id = ? AND code = ? AND asset_type = ?
+				AND frozen_quantity >= ?
+		`, order.Quantity, order.Quantity, now, order.AccountID, order.Code,
+			order.AssetType, order.Quantity)
+		if err != nil {
+			return err
+		}
+		return requireRowsAffected(result, "insufficient frozen position")
+	}
+	return nil
+}
+
+func markPaperOrderCancelled(tx *sql.Tx, orderID string, now string) error {
+	result, err := tx.Exec(`
+		UPDATE paper_orders
+		SET status = ?,
+			cancelled_at = ?,
+			updated_at = ?
+		WHERE id = ? AND status = ?
+	`, paperOrderCancelled, now, now, orderID, paperOrderPending)
+	if err != nil {
+		return err
+	}
+	return requireRowsAffected(result, "only pending orders can be cancelled")
+}
+
+func insertPaperCancelAction(tx *sql.Tx, order PaperOrder, now string) error {
+	requestJSON, _ := json.Marshal(map[string]string{
+		"accountId": order.AccountID,
+		"orderId":   order.ID,
+	})
+	responseJSON, _ := json.Marshal(map[string]string{
+		"status": paperOrderCancelled,
+	})
+	_, err := tx.Exec(`
+		INSERT INTO paper_agent_actions (
+			id, account_id, action_type, request, response, created_at
+		) VALUES (?, ?, ?, ?, ?, ?)
+	`, newPaperID("act"), order.AccountID, "cancel_order", string(requestJSON),
+		string(responseJSON), now)
+	return err
 }
 
 func freezePaperOrderCash(tx *sql.Tx, order PaperOrder, now string) error {
