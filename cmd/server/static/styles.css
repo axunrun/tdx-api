@@ -8,8 +8,9 @@
   --text: #f3f6ff;
   --muted: #9aa3bc;
   --accent: #6aa7ff;
-  --good: #49f2c2;
-  --bad: #ff6b8b;
+  --good: #ff5a72;
+  --bad: #38d996;
+  --cash: #49f2c2;
   --warn: #ffcf5a;
   --shadow: rgb(0 0 0 / 55%);
   --pixel: 4px;
@@ -167,7 +168,7 @@ h2 {
 
 .status-cluster strong {
   display: block;
-  color: var(--good);
+  color: var(--cash);
   font-family: "Consolas", "Microsoft YaHei", monospace;
   font-size: 13px;
   font-weight: 800;
@@ -336,11 +337,12 @@ h2 {
 .account-card {
   padding: 16px;
   animation: enter .42s ease both;
+  cursor: pointer;
   transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
 }
 
 .account-card.selected {
-  border-color: var(--good);
+  border-color: var(--cash);
   box-shadow:
     0 0 0 1px rgb(73 242 194 / 26%) inset,
     0 0 24px rgb(73 242 194 / 12%),
@@ -356,7 +358,7 @@ h2 {
 
 .account-card .cash {
   margin-top: 14px;
-  color: var(--good);
+  color: var(--cash);
   font-family: "Consolas", "Microsoft YaHei", monospace;
   font-size: 27px;
   font-weight: 900;
@@ -481,7 +483,7 @@ h2 {
 
 .range-switch button:hover,
 .range-switch button.active {
-  background: var(--good);
+  background: var(--cash);
   color: #06110d;
 }
 
@@ -532,7 +534,7 @@ canvas {
 }
 
 .curve-tooltip strong {
-  color: var(--good);
+  color: var(--cash);
 }
 
 .curve-tooltip span {
@@ -560,7 +562,7 @@ canvas {
   border: 1px solid var(--line);
   border-radius: 0;
   background: #090a10;
-  color: var(--good);
+  color: var(--cash);
   font: inherit;
   font-weight: 800;
   text-align: right;
@@ -569,7 +571,7 @@ canvas {
 }
 
 .account-filter select:focus {
-  border-color: var(--good);
+  border-color: var(--cash);
 }
 
 .account-filter option {

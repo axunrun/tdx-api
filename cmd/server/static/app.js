@@ -4,7 +4,7 @@ const fmtMoney = new Intl.NumberFormat("zh-CN", {
   maximumFractionDigits: 2
 });
 const fmtNumber = new Intl.NumberFormat("zh-CN");
-const curveColors = ["#49f2c2", "#ffcf5a", "#6aa7ff", "#ff6b8b", "#b28cff", "#35d0ba"];
+const curveColors = ["#ff5a72", "#38d996", "#6aa7ff", "#ffcf5a", "#b28cff", "#35d0ba"];
 
 const state = {
   accountId: "",
@@ -29,17 +29,12 @@ async function loadAccount(accountId) {
     const dashboard = await fetchData(`/api/paper/dashboard?range=${state.range}${query}`);
     const selectedID = dashboard.selectedAccount?.id || "";
     const activityQuery = selectedID ? `&accountId=${encodeURIComponent(selectedID)}` : "";
-    const [activity, closed] = await Promise.all([
-      fetchData(`/api/paper/activity?limit=80${activityQuery}`),
-      selectedID
-        ? fetchData(`/api/paper/closed-positions?accountId=${encodeURIComponent(selectedID)}&range=60d`)
-        : Promise.resolve({ items: [] })
-    ]);
+    const activity = await fetchData(`/api/paper/activity?limit=80${activityQuery}`);
 
     state.accountId = selectedID;
     state.dashboard = dashboard;
     state.activity = activity.items || [];
-    state.closed = closed.items || [];
+    state.closed = dashboard.closedPositions || [];
     render();
   } catch (error) {
     renderError(error);
@@ -59,6 +54,7 @@ function render() {
   const dashboard = state.dashboard || {};
   const selectedAccount = dashboard.selectedAccount;
   const accounts = dashboard.accounts || [];
+  const accountNames = Object.fromEntries(accounts.map((item) => [item.id, item.name]));
 
   text("marketStatus", dashboard.marketSnapshot?.statusText || dashboard.marketStatus?.status || "未知");
   text("updatedAt", formatTime(dashboard.updatedAt));
@@ -67,9 +63,9 @@ function render() {
   renderMarketStrip(dashboard.marketSnapshot);
   renderAccounts(accounts, selectedAccount);
   renderMarketOverview(dashboard);
-  renderPositions(dashboard.positions || []);
-  renderOrdersTrades(dashboard.orders || [], dashboard.trades || []);
-  renderClosedPositions(state.closed);
+  renderPositions(dashboard.positions || [], accountNames, selectedAccount);
+  renderOrdersTrades(dashboard.orders || [], dashboard.trades || [], accountNames, selectedAccount);
+  renderClosedPositions(state.closed, accountNames, selectedAccount);
   renderActivity(state.activity, accounts);
   renderCurveRange();
   drawEquityCurve(getEquitySeries());
@@ -150,10 +146,10 @@ function renderAccounts(accounts, selectedAccount) {
     const isSelected = account.id === selectedAccount?.id;
     const totalCash = account.availableCash + account.frozenCash;
     return `
-      <article class="account-card ${isSelected ? "selected" : ""}">
+      <article class="account-card ${isSelected ? "selected" : ""}" data-account-id="${escapeHtml(account.id)}">
         <div class="name">
           <span>${escapeHtml(account.name)}</span>
-          <span class="pill">${isSelected ? "当前" : account.status}</span>
+          <span class="pill">${isSelected ? "当前" : "筛选"}</span>
         </div>
         <div class="cash">${fmtMoney.format(totalCash)}</div>
         <div class="subline">
@@ -163,6 +159,12 @@ function renderAccounts(accounts, selectedAccount) {
       </article>
     `;
   }).join("");
+  root.querySelectorAll(".account-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      const nextID = card.dataset.accountId === state.accountId ? "" : card.dataset.accountId;
+      loadAccount(nextID);
+    });
+  });
 }
 
 function renderMarketStrip(snapshot) {
@@ -228,18 +230,12 @@ function renderIndexTile(item) {
 
 function renderMarketOverview(dashboard) {
   const account = dashboard.selectedAccount;
-  const accounts = dashboard.accounts || [];
   const positions = dashboard.positions || [];
   const orders = dashboard.orders || [];
   const trades = dashboard.trades || [];
   const snapshot = dashboard.marketSnapshot || {};
-  const selectedID = account?.id || "";
-  const accountOptions = accounts.map((item) => `
-    <option value="${escapeHtml(item.id)}" ${item.id === selectedID ? "selected" : ""}>
-      ${escapeHtml(item.name)}
-    </option>
-  `).join("");
   const values = [
+    ["账户范围", account?.name || "全部账户", account ? "" : "warn"],
     ["市场状态", snapshot.statusText || "未知", "warn"],
     ["持仓标的", `${positions.length} 个`, ""],
     ["待处理委托", `${orders.filter((item) => item.status === "pending").length} 笔`, ""],
@@ -247,12 +243,6 @@ function renderMarketOverview(dashboard) {
   ];
 
   document.getElementById("marketOverview").innerHTML = `
-    <div class="metric account-filter">
-      <span class="muted">账户</span>
-      <select id="accountFilter" aria-label="切换账户">
-        ${accountOptions || "<option>未选择</option>"}
-      </select>
-    </div>
     ${values.map(([label, value, tone]) => `
       <div class="metric">
         <span class="muted">${label}</span>
@@ -260,12 +250,9 @@ function renderMarketOverview(dashboard) {
       </div>
     `).join("")}
   `;
-  const select = document.getElementById("accountFilter");
-  select.disabled = accounts.length === 0;
-  select.addEventListener("change", (event) => loadAccount(event.target.value));
 }
 
-function renderPositions(items) {
+function renderPositions(items, accountNames, selectedAccount) {
   text("positionCount", items.length);
   const body = document.getElementById("positionsBody");
   if (!items.length) {
@@ -275,7 +262,7 @@ function renderPositions(items) {
 
   body.innerHTML = items.map((item) => `
     <tr>
-      <td>${escapeHtml(item.name || item.code)}<div class="muted">${item.code}</div></td>
+      <td>${escapeHtml(item.name || item.code)}<div class="muted">${positionMeta(item, accountNames, selectedAccount)}</div></td>
       <td>${fmtNumber.format(item.quantity)}</td>
       <td>${fmtNumber.format(item.sellableQuantity)}</td>
       <td>${fmtMoney.format(item.avgCost)}</td>
@@ -283,18 +270,18 @@ function renderPositions(items) {
   `).join("");
 }
 
-function renderOrdersTrades(orders, trades) {
+function renderOrdersTrades(orders, trades, accountNames, selectedAccount) {
   const latest = [
     ...orders.map((item) => ({ type: "委托", at: item.updatedAt, item })),
     ...trades.map((item) => ({ type: "成交", at: item.tradedAt, item }))
   ].sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 8);
 
   document.getElementById("ordersTrades").innerHTML = latest.length
-    ? latest.map(renderOrderTradeRow).join("")
+    ? latest.map((entry) => renderOrderTradeRow(entry, accountNames, selectedAccount)).join("")
     : `<div class="empty-line">暂无委托或成交</div>`;
 }
 
-function renderOrderTradeRow(entry) {
+function renderOrderTradeRow(entry, accountNames, selectedAccount) {
   const item = entry.item;
   const side = item.side === "buy" ? "买入" : "卖出";
   const tone = item.side === "buy" ? "good" : "bad";
@@ -303,14 +290,14 @@ function renderOrderTradeRow(entry) {
     <div class="row">
       <div>
         <strong>${entry.type} · ${escapeHtml(item.name || item.code)}</strong>
-        <div class="meta">${formatTime(entry.at)} · ${item.code} · ${item.status || "filled"}</div>
+        <div class="meta">${orderTradeMeta(entry, accountNames, selectedAccount)}</div>
       </div>
       <div class="${tone}">${side} ${fmtMoney.format(amount || 0)}</div>
     </div>
   `;
 }
 
-function renderClosedPositions(items) {
+function renderClosedPositions(items, accountNames, selectedAccount) {
   document.getElementById("closedPositions").innerHTML = items.length
     ? items.slice(0, 8).map((item) => {
       const tone = item.realizedPnl >= 0 ? "good" : "bad";
@@ -318,13 +305,29 @@ function renderClosedPositions(items) {
         <div class="row">
           <div>
             <strong>${escapeHtml(item.name || item.code)}</strong>
-            <div class="meta">${item.openedAt || "--"} → ${item.closedAt}</div>
+            <div class="meta">${closedPositionMeta(item, accountNames, selectedAccount)}</div>
           </div>
           <div class="${tone}">${fmtMoney.format(item.realizedPnl)}</div>
         </div>
       `;
     }).join("")
     : `<div class="empty-line">暂无清仓记录</div>`;
+}
+
+function positionMeta(item, accountNames, selectedAccount) {
+  const account = selectedAccount ? "" : ` · ${accountNames[item.accountId] || item.accountId || "--"}`;
+  return `${item.code}${account}`;
+}
+
+function orderTradeMeta(entry, accountNames, selectedAccount) {
+  const item = entry.item;
+  const account = selectedAccount ? "" : ` · ${accountNames[item.accountId] || item.accountId || "--"}`;
+  return `${formatTime(entry.at)} · ${item.code} · ${item.status || "filled"}${account}`;
+}
+
+function closedPositionMeta(item, accountNames, selectedAccount) {
+  const account = selectedAccount ? "" : ` · ${accountNames[item.accountId] || item.accountId || "--"}`;
+  return `${item.openedAt || "--"} → ${item.closedAt}${account}`;
 }
 
 function renderActivity(items, accounts) {

@@ -126,8 +126,6 @@ func handlePaperDashboardWithStore(store *PaperStore) http.HandlerFunc {
 				return
 			}
 			selectedAccount = &account
-		} else if len(accounts) > 0 {
-			selectedAccount = &accounts[0]
 		}
 		equityRange := r.URL.Query().Get("range")
 
@@ -141,22 +139,11 @@ func handlePaperDashboardWithStore(store *PaperStore) http.HandlerFunc {
 			jsonErr(w, err.Error())
 			return
 		}
-		if selectedAccount != nil {
-			positions, orders, trades, err = loadPaperAccountActivity(store, selectedAccount.ID)
-			if err != nil {
-				jsonErr(w, err.Error())
-				return
-			}
-			closedPositions, err = store.ListClosedPositions(selectedAccount.ID, "")
-			if err != nil {
-				jsonErr(w, err.Error())
-				return
-			}
-			equityCurve, err = listPaperEquityCurve(store, selectedAccount.ID, equityRange)
-			if err != nil {
-				jsonErr(w, err.Error())
-				return
-			}
+		positions, orders, trades, closedPositions, equityCurve, err =
+			loadPaperDashboardRows(store, accounts, selectedAccount, equityRange)
+		if err != nil {
+			jsonErr(w, err.Error())
+			return
 		}
 
 		marketSnapshot := loadPaperMarketSnapshot(cli(), time.Now())
@@ -177,6 +164,50 @@ func handlePaperDashboardWithStore(store *PaperStore) http.HandlerFunc {
 			"equityCurves":    equityCurves,
 		})
 	}
+}
+
+func loadPaperDashboardRows(
+	store *PaperStore,
+	accounts []PaperAccount,
+	selectedAccount *PaperAccount,
+	equityRange string,
+) ([]PaperPosition, []PaperOrder, []PaperTrade, []PaperClosedPosition, []PaperEquityPoint, error) {
+	accountIDs := make([]string, 0, len(accounts))
+	if selectedAccount != nil {
+		accountIDs = append(accountIDs, selectedAccount.ID)
+	} else {
+		for _, account := range accounts {
+			accountIDs = append(accountIDs, account.ID)
+		}
+	}
+
+	positions := []PaperPosition{}
+	orders := []PaperOrder{}
+	trades := []PaperTrade{}
+	closedPositions := []PaperClosedPosition{}
+	equityCurve := []PaperEquityPoint{}
+	for _, accountID := range accountIDs {
+		accountPositions, accountOrders, accountTrades, err := loadPaperAccountActivity(store, accountID)
+		if err != nil {
+			return nil, nil, nil, nil, nil, err
+		}
+		accountClosed, err := store.ListClosedPositions(accountID, "")
+		if err != nil {
+			return nil, nil, nil, nil, nil, err
+		}
+		positions = append(positions, accountPositions...)
+		orders = append(orders, accountOrders...)
+		trades = append(trades, accountTrades...)
+		closedPositions = append(closedPositions, accountClosed...)
+	}
+	if selectedAccount != nil {
+		var err error
+		equityCurve, err = listPaperEquityCurve(store, selectedAccount.ID, equityRange)
+		if err != nil {
+			return nil, nil, nil, nil, nil, err
+		}
+	}
+	return positions, orders, trades, closedPositions, equityCurve, nil
 }
 
 func handlePaperActivityWithStore(store *PaperStore) http.HandlerFunc {

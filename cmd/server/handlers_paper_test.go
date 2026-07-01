@@ -87,6 +87,9 @@ func TestHandlePaperDashboardReturnsAllEquityCurves(t *testing.T) {
 	handlePaperDashboardWithStore(store)(rec, req)
 
 	data := decodePaperResponse(t, rec, http.StatusOK)
+	if data["selectedAccount"] != nil {
+		t.Fatalf("selectedAccount = %+v, want nil for all accounts", data["selectedAccount"])
+	}
 	curves := data["equityCurves"].([]any)
 	if len(curves) != 2 {
 		t.Fatalf("len(equityCurves) = %d, want 2", len(curves))
