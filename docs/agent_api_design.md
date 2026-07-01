@@ -579,3 +579,64 @@ Agent 聚合 API 建议保持统一外壳：
 
 - `docs/agent_sector-detail_raw_output.json`
 - `docs/agent_sector-detail-text_output.md`
+## 模拟交易与只读 WebUI
+
+模拟交易功能使用独立 SQLite，不与 Agent 行情分析库混用：
+
+- 默认路径：`data/database/tdx-paper.sqlite`
+- Docker 推荐挂载：`/app/data/database/tdx-paper.sqlite`
+- 覆盖环境变量：`PAPER_DB_PATH`
+
+服务端关系：
+
+```text
+Agent -> MCP 工具 -> Paper Broker Service -> tdx-paper.sqlite
+WebUI -> /api/paper/* HTTP API -> Paper Broker Service -> tdx-paper.sqlite
+```
+
+WebUI 只读展示，不提供人工下单按钮，不直接读取 SQLite，也不直接调用 TDX 原始方法。
+
+### Paper MCP 工具
+
+| MCP 工具 | 作用 | 关键参数 |
+|---|---|---|
+| `tdx_paper_account` | 创建、列出、查询模拟账户 | `action=create|list|get|close|recreate`；`name`；`initialCash`；`initialPositions`；`accountId` |
+| `tdx_paper_order` | 提交委托、撤单、查询委托 | `action=place|cancel|list|get`；`accountId`；`code`；`side=buy|sell`；`orderType=market|limit|auction`；`price`；`quantity`；`timeInForce=day|auction_only`；`orderId` |
+| `tdx_paper_portfolio` | 查询资金、持仓、成交、收益和清仓表现 | `accountId`；`view=summary|cash|positions|trades|orders|performance|closed_positions|actions`；`from`；`to`；`limit`；`code` |
+| `tdx_paper_rules` | 返回模拟交易规则说明 | 无必填参数 |
+
+当前第一版已实现账户创建/查询、下单、撤单、订单查询、持仓查询、成交查询、清仓查询和规则说明。
+账户 `close/recreate` 保留 schema，后续在需要销户重建审计流程时再打开。
+
+### Paper HTTP API
+
+| HTTP API | 作用 | 参数 |
+|---|---|---|
+| `/api/paper/dashboard` | WebUI 看板总览 | `accountId` 可选；`range=today|20d|60d|all` |
+| `/api/paper/accounts` | 账户列表 | 无 |
+| `/api/paper/account` | 单账户详情 | `accountId` 必填；`range` 可选 |
+| `/api/paper/activity` | Agent 行为与账户变动事件 | `accountId` 可选；`type` 可选；`limit` 默认 50 最大 200 |
+| `/api/paper/closed-positions` | 清仓后表现 | `accountId` 必填；`range=20d|60d|all` |
+
+### 第一版交易口径
+
+- 支持 A股股票与 A股 ETF。
+- 现金买入，持仓卖出，不支持真实券商接入、融资融券或做空。
+- 委托方向：`buy`、`sell`。
+- 委托类型：`market`、`limit`、`auction`。
+- 数量必须为 100 的整数倍。
+- 限价买入提交时冻结资金，限价卖出提交时冻结可卖持仓。
+- 市价买入不预冻结资金，撮合时按服务端实时行情校验现金并成交。
+- 买入成交后当天不增加可卖持仓，服务端按 A股 T+1 可卖口径约束。
+- 第一版不做部分成交；一笔委托要么整笔成交，要么保持 pending。
+- 撤单会释放冻结资金或冻结持仓。
+- 费用固定：佣金万 1，全佣；股票卖出收印花税；股票收过户费；ETF 不收印花税。
+
+### 验证输出
+
+以下文件用于人工核查模拟交易接口输出：
+
+- `docs/agent_api_test_outputs/paper_mcp_tools.json`
+- `docs/agent_api_test_outputs/paper_account_create.json`
+- `docs/agent_api_test_outputs/paper_rules.json`
+- `docs/agent_api_test_outputs/paper_dashboard.json`

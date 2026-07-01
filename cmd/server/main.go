@@ -19,6 +19,7 @@ var (
 	mainClient *tdx.Client
 	exClient   *tdx.Client
 	gbbq       *tdx.Gbbq
+	paperStore *PaperStore
 	startTime  = time.Now()
 )
 
@@ -26,34 +27,43 @@ func main() {
 	var err error
 
 	sorted := tdx.SortHosts()
-	log.Printf("🌐 A股行情服务器测速完成，可用 %d 台，首选 %s", len(sorted), sorted[0])
+	log.Printf("馃寪 A鑲¤鎯呮湇鍔″櫒娴嬮€熷畬鎴愶紝鍙敤 %d 鍙帮紝棣栭€?%s", len(sorted), sorted[0])
 
 	mainClient, err = tdx.DialDefault(tdx.WithDebug(false))
 	if err != nil {
-		log.Printf("⚠️ A股连接失败: %v", err)
+		log.Printf("鈿狅笍 A鑲¤繛鎺ュけ璐? %v", err)
 	} else {
-		log.Println("✅ A股行情已连接")
+		log.Println("鉁?A鑲¤鎯呭凡杩炴帴")
 	}
 
 	go func() {
 		var err error
 		gbbq, err = tdx.NewGbbq(tdx.WithGbbqClient(mainClient))
 		if err != nil {
-			log.Printf("⚠️ 复权模块初始化失败: %v", err)
+			log.Printf("鈿狅笍 澶嶆潈妯″潡鍒濆鍖栧け璐? %v", err)
 			return
 		}
-		log.Println("✅ 复权模块已就绪")
+		log.Println("gbbq module ready")
 		if err := gbbq.Update(); err != nil {
-			log.Printf("⚠️ 复权数据更新失败: %v", err)
+			log.Printf("鈿狅笍 澶嶆潈鏁版嵁鏇存柊澶辫触: %v", err)
 		} else {
-			log.Println("✅ 复权数据已更新")
+			log.Println("gbbq data updated")
 		}
 	}()
 
+	paperDB, err := openPaperDB(paperDBPath())
+	if err != nil {
+		log.Printf("paper db init failed: %v", err)
+	} else {
+		paperStore = NewPaperStore(paperDB)
+		startPaperBackgroundTasks(paperStore, quotePaperFromTDX)
+		log.Println("paper trading store initialized")
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", handleWebUI)
-	// A股行情
 	mux.HandleFunc("/api/quote", handleQuote)
+	// quote endpoints
 	mux.HandleFunc("/api/kline", handleKline)
 	mux.HandleFunc("/api/kline/all", handleKlineAll)
 	mux.HandleFunc("/api/kline/qfq", handleQfqKline)
@@ -61,13 +71,13 @@ func main() {
 	mux.HandleFunc("/api/minute", handleMinute)
 	mux.HandleFunc("/api/trade", handleTrade)
 	mux.HandleFunc("/api/call-auction", handleCallAuction)
-	// 复权系统
+	// 澶嶆潈绯荤粺
 	mux.HandleFunc("/api/gbbq", handleGbbq)
 	mux.HandleFunc("/api/adjust-factors", handleFactors)
 	mux.HandleFunc("/api/gbbq/adjust", handleGbbqAdjust)
 	mux.HandleFunc("/api/gbbq/all", handleGbbqAll)
-	// 基本面
 	mux.HandleFunc("/api/finance", handleFinance)
+	// finance endpoints
 	mux.HandleFunc("/api/f10", handleF10)
 	mux.HandleFunc("/api/agent/technical-summary", handleAgentTechnicalSummary)
 	mux.HandleFunc("/api/agent/stock-brief", handleAgentStockBrief)
@@ -99,24 +109,29 @@ func main() {
 	mux.HandleFunc("/api/agent/kline-summary-text", handleAgentKlineSummaryText)
 	mux.HandleFunc("/api/agent/trade-flow-estimate", handleAgentTradeFlowEstimate)
 	mux.HandleFunc("/api/agent/trade-flow-estimate-text", handleAgentTradeFlowEstimateText)
+	mux.HandleFunc("/api/paper/dashboard", handlePaperDashboard)
+	mux.HandleFunc("/api/paper/accounts", handlePaperAccounts)
+	mux.HandleFunc("/api/paper/account", handlePaperAccount)
+	mux.HandleFunc("/api/paper/activity", handlePaperActivity)
+	mux.HandleFunc("/api/paper/closed-positions", handlePaperClosedPositions)
 	// MCP
 	mux.HandleFunc("/mcp", handleMCP)
-	// 全市场统计
 	mux.HandleFunc("/api/stat", handleStat)
+	// market statistics endpoints
 	mux.HandleFunc("/api/moneyflow", handleMoneyflow)
 	mux.HandleFunc("/api/blocks", handleBlocks)
 	mux.HandleFunc("/api/hy", handleHy)
 	mux.HandleFunc("/api/codes", handleCodes)
 	mux.HandleFunc("/api/codes/etf", handleCodesETF)
 	mux.HandleFunc("/api/codes/index", handleCodesIndex)
-	// 指数
+	// 鎸囨暟
 	mux.HandleFunc("/api/index/kline", handleIndexKline)
 	mux.HandleFunc("/api/index/all", handleIndexKlineAll)
-	// 工具
+	// 宸ュ叿
 	mux.HandleFunc("/api/search", handleSearch)
 	mux.HandleFunc("/api/history-trade", handleHistoryTrade)
-	// 股票对照表（SQLite）
 	mux.HandleFunc("/api/stocks/refresh", handleStocksRefresh)
+	// stock sqlite endpoints
 	mux.HandleFunc("/api/stocks/search", handleStocksSearch)
 	mux.HandleFunc("/api/admin/trade-flow-thresholds/refresh", handleAdminTradeFlowThresholdsRefresh)
 
@@ -124,16 +139,16 @@ func main() {
 	if p := os.Getenv("PORT"); p != "" {
 		port = p
 	}
-	nEndpoints := 46
-	log.Printf("🚀 TDX API Server v2.1 准备监听 :%s (%d endpoints)", port, nEndpoints)
+	nEndpoints := 51
+	log.Printf("馃殌 TDX API Server v2.1 鍑嗗鐩戝惉 :%s (%d endpoints)", port, nEndpoints)
 
 	startBackgroundInitializers(
-		func() { log.Println("✅ SQLite 后台初始化任务已完成") },
+		func() { log.Println("鉁?SQLite 鍚庡彴鍒濆鍖栦换鍔″凡瀹屾垚") },
 		func() { initStocksDB(mainClient) },
 		func() { initBlocksDB(mainClient) },
 	)
 
-	log.Printf("✅ TDX API Server v2.1 已开始监听 :%s", port)
+	log.Printf("鉁?TDX API Server v2.1 宸插紑濮嬬洃鍚?:%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, mux))
 }
 
