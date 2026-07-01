@@ -1,15 +1,15 @@
-# Stage 1: Build
 FROM golang:1.23-alpine AS builder
-WORKDIR /build
+WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /tdx-server ./cmd/server/
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /tdx-api ./cmd/server
 
-# Stage 2: Runtime
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata
+WORKDIR /app
 ENV TZ=Asia/Shanghai
-COPY --from=builder /tdx-server /tdx-server
+ENV PORT=8080
+COPY --from=builder /tdx-api /usr/local/bin/tdx-api
 EXPOSE 8080
-ENTRYPOINT ["/tdx-server"]
+ENTRYPOINT ["tdx-api"]

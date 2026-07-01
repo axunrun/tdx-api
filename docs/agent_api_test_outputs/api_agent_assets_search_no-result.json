@@ -1,0 +1,16 @@
+﻿{
+    "code":  0,
+    "message":  "success",
+    "data":  {
+                 "source":  "tdx_agent_assets",
+                 "keyword":  "不存在股票XYZ",
+                 "count":  0,
+                 "limit":  20,
+                 "items":  [
+
+                           ],
+                 "warnings":  [
+                                  "查无此股票：未找到与“不存在股票XYZ”匹配的A股资产。"
+                              ]
+             }
+}

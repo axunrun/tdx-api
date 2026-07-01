@@ -1,0 +1,244 @@
+﻿{
+    "code":  0,
+    "message":  "success",
+    "data":  {
+                 "code":  "300499",
+                 "source":  "tdx_kline_local_indicators",
+                 "periods":  [
+                                 {
+                                     "period":  "day",
+                                     "name":  "日线",
+                                     "klineCount":  250,
+                                     "latestDate":  "2026-06-30",
+                                     "close":  38.7,
+                                     "ma":  {
+                                                "ma10":  {
+                                                             "available":  true,
+                                                             "value":  39.714,
+                                                             "text":  "MA10=39.714"
+                                                         },
+                                                "ma120":  {
+                                                              "available":  true,
+                                                              "value":  36.922,
+                                                              "text":  "MA120=36.922"
+                                                          },
+                                                "ma20":  {
+                                                             "available":  true,
+                                                             "value":  37.859,
+                                                             "text":  "MA20=37.859"
+                                                         },
+                                                "ma5":  {
+                                                            "available":  true,
+                                                            "value":  40.26,
+                                                            "text":  "MA5=40.260"
+                                                        },
+                                                "ma60":  {
+                                                             "available":  true,
+                                                             "value":  40.204,
+                                                             "text":  "MA60=40.204"
+                                                         }
+                                            },
+                                     "macd":  {
+                                                  "available":  true,
+                                                  "dif":  -0.102,
+                                                  "dea":  -0.385,
+                                                  "hist":  0.566,
+                                                  "signal":  "MACD柱为正，多头动能占优"
+                                              },
+                                     "rsi":  {
+                                                 "rsi12":  {
+                                                               "available":  true,
+                                                               "value":  62,
+                                                               "text":  "RSI12=62"
+                                                           },
+                                                 "rsi24":  {
+                                                               "available":  true,
+                                                               "value":  42,
+                                                               "text":  "RSI24=42"
+                                                           },
+                                                 "rsi6":  {
+                                                              "available":  true,
+                                                              "value":  49,
+                                                              "text":  "RSI6=49"
+                                                          }
+                                             },
+                                     "boll":  {
+                                                  "available":  true,
+                                                  "upper":  42.787,
+                                                  "middle":  37.859,
+                                                  "lower":  32.931,
+                                                  "position":  "价格位于布林线中轨上方"
+                                              },
+                                     "atr":  {
+                                                 "available":  true,
+                                                 "atr14":  2.747,
+                                                 "usage":  "衡量近期波动，不直接代表方向。"
+                                             },
+                                     "signals":  [
+                                                     "价格在MA20上方",
+                                                     "价格在MA60下方",
+                                                     "MACD柱为正，多头动能占优",
+                                                     "价格位于布林线中轨上方"
+                                                 ]
+                                 },
+                                 {
+                                     "period":  "week",
+                                     "name":  "周线",
+                                     "klineCount":  156,
+                                     "latestDate":  "2026-06-30",
+                                     "close":  38.7,
+                                     "ma":  {
+                                                "ma10":  {
+                                                             "available":  true,
+                                                             "value":  39.747,
+                                                             "text":  "MA10=39.747"
+                                                         },
+                                                "ma120":  {
+                                                              "available":  true,
+                                                              "value":  22.198,
+                                                              "text":  "MA120=22.198"
+                                                          },
+                                                "ma20":  {
+                                                             "available":  true,
+                                                             "value":  38.751,
+                                                             "text":  "MA20=38.751"
+                                                         },
+                                                "ma5":  {
+                                                            "available":  true,
+                                                            "value":  37.722,
+                                                            "text":  "MA5=37.722"
+                                                        },
+                                                "ma60":  {
+                                                             "available":  true,
+                                                             "value":  29.843,
+                                                             "text":  "MA60=29.843"
+                                                         }
+                                            },
+                                     "macd":  {
+                                                  "available":  true,
+                                                  "dif":  2.103,
+                                                  "dea":  2.707,
+                                                  "hist":  -1.208,
+                                                  "signal":  "MACD柱为负，空头动能占优"
+                                              },
+                                     "rsi":  {
+                                                 "rsi12":  {
+                                                               "available":  true,
+                                                               "value":  50,
+                                                               "text":  "RSI12=50"
+                                                           },
+                                                 "rsi24":  {
+                                                               "available":  true,
+                                                               "value":  54,
+                                                               "text":  "RSI24=54"
+                                                           },
+                                                 "rsi6":  {
+                                                              "available":  true,
+                                                              "value":  32,
+                                                              "text":  "RSI6=32"
+                                                          }
+                                             },
+                                     "boll":  {
+                                                  "available":  true,
+                                                  "upper":  45.435,
+                                                  "middle":  38.751,
+                                                  "lower":  32.067,
+                                                  "position":  "价格位于布林线中轨下方"
+                                              },
+                                     "atr":  {
+                                                 "available":  true,
+                                                 "atr14":  5.425,
+                                                 "usage":  "衡量近期波动，不直接代表方向。"
+                                             },
+                                     "signals":  [
+                                                     "价格在MA20下方",
+                                                     "价格在MA60上方",
+                                                     "MACD柱为负，空头动能占优",
+                                                     "价格位于布林线中轨下方"
+                                                 ]
+                                 },
+                                 {
+                                     "period":  "month",
+                                     "name":  "月线",
+                                     "klineCount":  120,
+                                     "latestDate":  "2026-06-30",
+                                     "close":  38.7,
+                                     "ma":  {
+                                                "ma10":  {
+                                                             "available":  true,
+                                                             "value":  33.54,
+                                                             "text":  "MA10=33.540"
+                                                         },
+                                                "ma120":  {
+                                                              "available":  true,
+                                                              "value":  19.192,
+                                                              "text":  "MA120=19.192"
+                                                          },
+                                                "ma20":  {
+                                                             "available":  true,
+                                                             "value":  26.617,
+                                                             "text":  "MA20=26.617"
+                                                         },
+                                                "ma5":  {
+                                                            "available":  true,
+                                                            "value":  37.898,
+                                                            "text":  "MA5=37.898"
+                                                        },
+                                                "ma60":  {
+                                                             "available":  true,
+                                                             "value":  17.634,
+                                                             "text":  "MA60=17.634"
+                                                         }
+                                            },
+                                     "macd":  {
+                                                  "available":  true,
+                                                  "dif":  6.074,
+                                                  "dea":  4.825,
+                                                  "hist":  2.498,
+                                                  "signal":  "MACD柱为正，多头动能占优"
+                                              },
+                                     "rsi":  {
+                                                 "rsi12":  {
+                                                               "available":  true,
+                                                               "value":  72,
+                                                               "text":  "RSI12=72"
+                                                           },
+                                                 "rsi24":  {
+                                                               "available":  true,
+                                                               "value":  70,
+                                                               "text":  "RSI24=70"
+                                                           },
+                                                 "rsi6":  {
+                                                              "available":  true,
+                                                              "value":  69,
+                                                              "text":  "RSI6=69"
+                                                          }
+                                             },
+                                     "boll":  {
+                                                  "available":  true,
+                                                  "upper":  43.211,
+                                                  "middle":  26.617,
+                                                  "lower":  10.023,
+                                                  "position":  "价格位于布林线中轨上方"
+                                              },
+                                     "atr":  {
+                                                 "available":  true,
+                                                 "atr14":  8.105,
+                                                 "usage":  "衡量近期波动，不直接代表方向。"
+                                             },
+                                     "signals":  [
+                                                     "价格在MA20上方",
+                                                     "价格在MA60上方",
+                                                     "MACD柱为正，多头动能占优",
+                                                     "价格位于布林线中轨上方"
+                                                 ]
+                                 }
+                             ],
+                 "limits":  {
+                                "day":  250,
+                                "month":  120,
+                                "week":  156
+                            },
+                 "note":  "技术指标由tdx K线在本地计算，仅返回日线、周线、月线最后一个有效指标值；available=false表示该周期K线数量不足。"
+             }
+}

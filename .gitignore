@@ -1,4 +1,8 @@
 *.bak
 *.tmp
+*.exe
+.tmp/
+bin/
 .vscode/
 .idea/
+data/

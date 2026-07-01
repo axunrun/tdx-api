@@ -1,0 +1,1011 @@
+﻿{
+    "code":  0,
+    "message":  "success",
+    "data":  {
+                 "source":  "tdx_agent_multi_brief",
+                 "count":  2,
+                 "items":  [
+                               {
+                                   "code":  "603063",
+                                   "name":  "禾望电气",
+                                   "brief":  {
+                                                 "code":  "603063",
+                                                 "name":  "禾望电气",
+                                                 "source":  "tdx_agent_stock_brief",
+                                                 "quote":  {
+                                                               "code":  "603063",
+                                                               "market":  "沪市",
+                                                               "price":  51.13,
+                                                               "lastClose":  52.03,
+                                                               "open":  51.52,
+                                                               "high":  52.95,
+                                                               "low":  48.35,
+                                                               "changePct":  -1.7297712857966532,
+                                                               "amplitudePct":  8.841053238516244,
+                                                               "turnoverRate":  7.025056512347472,
+                                                               "volume":  324680,
+                                                               "amount":  1639437952,
+                                                               "amountText":  "16.39亿元",
+                                                               "text":  "现价51.13，涨跌幅-1.73%，成交额16.39亿元"
+                                                           },
+                                                 "finance":  {
+                                                                 "updatedDate":  "2026-06-24",
+                                                                 "ipoDate":  "2017-07-28",
+                                                                 "totalShares":  464084218.75,
+                                                                 "totalSharesText":  "4.64亿股",
+                                                                 "floatShares":  462174218.75,
+                                                                 "floatSharesText":  "4.62亿股",
+                                                                 "totalMarketValue":  23728626104.6875,
+                                                                 "totalMarketValueText":  "237.29亿元",
+                                                                 "floatMarketValue":  23630967804.6875,
+                                                                 "floatMarketValueText":  "236.31亿元",
+                                                                 "totalAssets":  9175967000,
+                                                                 "totalAssetsText":  "91.76亿元",
+                                                                 "netAssets":  5219941500,
+                                                                 "netAssetsText":  "52.20亿元",
+                                                                 "mainRevenue":  573774125,
+                                                                 "mainRevenueText":  "5.74亿元",
+                                                                 "mainProfit":  340465000,
+                                                                 "mainProfitText":  "3.40亿元",
+                                                                 "operatingProfit":  51196097.65625,
+                                                                 "operatingProfitText":  "5119.61万元",
+                                                                 "netProfit":  51121296.875,
+                                                                 "netProfitText":  "5112.13万元",
+                                                                 "operatingCashflow":  -208990609.375,
+                                                                 "operatingCashflowText":  "-2.09亿元",
+                                                                 "shareholders":  66784,
+                                                                 "meaning":  "股本单位为股，资产、收入、利润和现金流单位为元；用于快速判断公司规模、盈利和现金流质量。"
+                                                             },
+                                                 "latestReport":  {
+                                                                      "reportDate":  "2026-03-31",
+                                                                      "basis":  "按06-23股本",
+                                                                      "netAssetPerShare":  11.3774,
+                                                                      "operatingCashflowPerShare":  -0.456,
+                                                                      "weightedRoe":  0.99,
+                                                                      "revenue":  573774200,
+                                                                      "revenueText":  "5.74亿元",
+                                                                      "revenueYoY":  -25.82,
+                                                                      "netProfit":  51121300,
+                                                                      "netProfitText":  "5112.13万元",
+                                                                      "netProfitYoY":  -51.48,
+                                                                      "source":  "f10_cat0_latest_prompt",
+                                                                      "meaning":  "来自F10最新提示，保留最新一期关键财报字段；用于速览中的财报时点、每股净资产和同比变化判断。"
+                                                                  },
+                                                 "blocks":  [
+                                                                {
+                                                                    "type":  "concept",
+                                                                    "typeName":  "概念板块",
+                                                                    "name":  "光伏",
+                                                                    "indexCode":  "880544",
+                                                                    "memberCount":  400,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "concept",
+                                                                    "typeName":  "概念板块",
+                                                                    "name":  "智能电网",
+                                                                    "indexCode":  "880520",
+                                                                    "memberCount":  276,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "concept",
+                                                                    "typeName":  "概念板块",
+                                                                    "name":  "氢能源",
+                                                                    "indexCode":  "880705",
+                                                                    "memberCount":  400,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "concept",
+                                                                    "typeName":  "概念板块",
+                                                                    "name":  "粤港澳",
+                                                                    "indexCode":  "880919",
+                                                                    "memberCount":  361,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "concept",
+                                                                    "typeName":  "概念板块",
+                                                                    "name":  "风电",
+                                                                    "indexCode":  "880582",
+                                                                    "memberCount":  400,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "style_region",
+                                                                    "typeName":  "地域/风格板块",
+                                                                    "name":  "保险新进",
+                                                                    "indexCode":  "880782",
+                                                                    "memberCount":  140,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "style_region",
+                                                                    "typeName":  "地域/风格板块",
+                                                                    "name":  "拟减持",
+                                                                    "indexCode":  "880815",
+                                                                    "memberCount":  400,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "style_region",
+                                                                    "typeName":  "地域/风格板块",
+                                                                    "name":  "昨日振荡",
+                                                                    "indexCode":  "880864",
+                                                                    "memberCount":  324,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "style_region",
+                                                                    "typeName":  "地域/风格板块",
+                                                                    "name":  "昨日较弱",
+                                                                    "indexCode":  "880784",
+                                                                    "memberCount":  311,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "style_region",
+                                                                    "typeName":  "地域/风格板块",
+                                                                    "name":  "最近情绪",
+                                                                    "indexCode":  "880699",
+                                                                    "memberCount":  400,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "style_region",
+                                                                    "typeName":  "地域/风格板块",
+                                                                    "name":  "高融资盘",
+                                                                    "indexCode":  "880779",
+                                                                    "memberCount":  100,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "index",
+                                                                    "typeName":  "指数板块",
+                                                                    "name":  "上证380",
+                                                                    "memberCount":  380,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                }
+                                                            ],
+                                                 "stat":  {
+                                                              "date":  "20260626",
+                                                              "peTtm":  50.64,
+                                                              "peStatic":  45.4713,
+                                                              "pb":  4.493996870989857,
+                                                              "divYield":  0.25,
+                                                              "changePct":  -5.69,
+                                                              "trendDays":  -1,
+                                                              "chg5":  -1.06,
+                                                              "chg10":  4.23,
+                                                              "chg20":  -13.7,
+                                                              "chg60":  51.65,
+                                                              "chgYtd":  57.95,
+                                                              "meaning":  "盘后个股综合统计，适合做估值、阶段涨跌幅和连续涨跌状态的快速判断。"
+                                                          },
+                                                 "moneyflow":  {
+                                                                   "date":  "20260626",
+                                                                   "blockIndex":  "880774",
+                                                                   "amount":  238936.73,
+                                                                   "amountPrev":  178474.87,
+                                                                   "amountChangePct":  33.87695982072995,
+                                                                   "amountChangeText":  "6.05亿元",
+                                                                   "ipoPrice":  13.36,
+                                                                   "high52w":  67,
+                                                                   "low52w":  27.85,
+                                                                   "amountMeaning":  "Amount和AmountPrev单位为万元，用于比较今日/昨日成交活跃度；BlockIndex为通达信板块指数代码。"
+                                                               },
+                                                 "technical":  {
+                                                                   "code":  "603063",
+                                                                   "source":  "tdx_kline_local_indicators",
+                                                                   "periods":  [
+                                                                                   {
+                                                                                       "period":  "day",
+                                                                                       "name":  "日线",
+                                                                                       "klineCount":  250,
+                                                                                       "latestDate":  "2026-06-29",
+                                                                                       "close":  51.13,
+                                                                                       "ma":  {
+                                                                                                  "ma10":  {
+                                                                                                               "available":  true,
+                                                                                                               "value":  51.334,
+                                                                                                               "text":  "MA10=51.334"
+                                                                                                           },
+                                                                                                  "ma120":  {
+                                                                                                                "available":  true,
+                                                                                                                "value":  39.884,
+                                                                                                                "text":  "MA120=39.884"
+                                                                                                            },
+                                                                                                  "ma20":  {
+                                                                                                               "available":  true,
+                                                                                                               "value":  51.987,
+                                                                                                               "text":  "MA20=51.987"
+                                                                                                           },
+                                                                                                  "ma5":  {
+                                                                                                              "available":  true,
+                                                                                                              "value":  51.438,
+                                                                                                              "text":  "MA5=51.438"
+                                                                                                          },
+                                                                                                  "ma60":  {
+                                                                                                               "available":  true,
+                                                                                                               "value":  48.107,
+                                                                                                               "text":  "MA60=48.107"
+                                                                                                           }
+                                                                                              },
+                                                                                       "macd":  {
+                                                                                                    "available":  true,
+                                                                                                    "dif":  -0.234,
+                                                                                                    "dea":  -0.038,
+                                                                                                    "hist":  -0.392,
+                                                                                                    "signal":  "MACD柱为负，空头动能占优"
+                                                                                                },
+                                                                                       "rsi":  {
+                                                                                                   "rsi12":  {
+                                                                                                                 "available":  true,
+                                                                                                                 "value":  50,
+                                                                                                                 "text":  "RSI12=50"
+                                                                                                             },
+                                                                                                   "rsi24":  {
+                                                                                                                 "available":  true,
+                                                                                                                 "value":  40,
+                                                                                                                 "text":  "RSI24=40"
+                                                                                                             },
+                                                                                                   "rsi6":  {
+                                                                                                                "available":  true,
+                                                                                                                "value":  44,
+                                                                                                                "text":  "RSI6=44"
+                                                                                                            }
+                                                                                               },
+                                                                                       "boll":  {
+                                                                                                    "available":  true,
+                                                                                                    "upper":  56.537,
+                                                                                                    "middle":  51.987,
+                                                                                                    "lower":  47.437,
+                                                                                                    "position":  "价格位于布林线中轨下方"
+                                                                                                },
+                                                                                       "atr":  {
+                                                                                                   "available":  true,
+                                                                                                   "atr14":  3.48,
+                                                                                                   "usage":  "衡量近期波动，不直接代表方向。"
+                                                                                               },
+                                                                                       "signals":  [
+                                                                                                       "价格在MA20下方",
+                                                                                                       "价格在MA60上方",
+                                                                                                       "MACD柱为负，空头动能占优",
+                                                                                                       "价格位于布林线中轨下方"
+                                                                                                   ]
+                                                                                   },
+                                                                                   {
+                                                                                       "period":  "week",
+                                                                                       "name":  "周线",
+                                                                                       "klineCount":  156,
+                                                                                       "latestDate":  "2026-06-29",
+                                                                                       "close":  51.13,
+                                                                                       "ma":  {
+                                                                                                  "ma10":  {
+                                                                                                               "available":  true,
+                                                                                                               "value":  52.499,
+                                                                                                               "text":  "MA10=52.499"
+                                                                                                           },
+                                                                                                  "ma120":  {
+                                                                                                                "available":  true,
+                                                                                                                "value":  28.588,
+                                                                                                                "text":  "MA120=28.588"
+                                                                                                            },
+                                                                                                  "ma20":  {
+                                                                                                               "available":  true,
+                                                                                                               "value":  43.003,
+                                                                                                               "text":  "MA20=43.003"
+                                                                                                           },
+                                                                                                  "ma5":  {
+                                                                                                              "available":  true,
+                                                                                                              "value":  51.412,
+                                                                                                              "text":  "MA5=51.412"
+                                                                                                          },
+                                                                                                  "ma60":  {
+                                                                                                               "available":  true,
+                                                                                                               "value":  35.984,
+                                                                                                               "text":  "MA60=35.984"
+                                                                                                           }
+                                                                                              },
+                                                                                       "macd":  {
+                                                                                                    "available":  true,
+                                                                                                    "dif":  5.45,
+                                                                                                    "dea":  4.878,
+                                                                                                    "hist":  1.144,
+                                                                                                    "signal":  "MACD柱为正，多头动能占优"
+                                                                                                },
+                                                                                       "rsi":  {
+                                                                                                   "rsi12":  {
+                                                                                                                 "available":  true,
+                                                                                                                 "value":  70,
+                                                                                                                 "text":  "RSI12=70"
+                                                                                                             },
+                                                                                                   "rsi24":  {
+                                                                                                                 "available":  true,
+                                                                                                                 "value":  63,
+                                                                                                                 "text":  "RSI24=63"
+                                                                                                             },
+                                                                                                   "rsi6":  {
+                                                                                                                "available":  true,
+                                                                                                                "value":  30,
+                                                                                                                "text":  "RSI6=30"
+                                                                                                            }
+                                                                                               },
+                                                                                       "boll":  {
+                                                                                                    "available":  true,
+                                                                                                    "upper":  63.723,
+                                                                                                    "middle":  43.003,
+                                                                                                    "lower":  22.283,
+                                                                                                    "position":  "价格位于布林线中轨上方"
+                                                                                                },
+                                                                                       "atr":  {
+                                                                                                   "available":  true,
+                                                                                                   "atr14":  7.41,
+                                                                                                   "usage":  "衡量近期波动，不直接代表方向。"
+                                                                                               },
+                                                                                       "signals":  [
+                                                                                                       "价格在MA20上方",
+                                                                                                       "价格在MA60上方",
+                                                                                                       "MACD柱为正，多头动能占优",
+                                                                                                       "价格位于布林线中轨上方"
+                                                                                                   ]
+                                                                                   },
+                                                                                   {
+                                                                                       "period":  "month",
+                                                                                       "name":  "月线",
+                                                                                       "klineCount":  108,
+                                                                                       "latestDate":  "2026-06-29",
+                                                                                       "close":  51.13,
+                                                                                       "ma":  {
+                                                                                                  "ma10":  {
+                                                                                                               "available":  true,
+                                                                                                               "value":  37.07,
+                                                                                                               "text":  "MA10=37.070"
+                                                                                                           },
+                                                                                                  "ma120":  {
+                                                                                                                "available":  false,
+                                                                                                                "reason":  "K线数量不足120根"
+                                                                                                            },
+                                                                                                  "ma20":  {
+                                                                                                               "available":  true,
+                                                                                                               "value":  33.604,
+                                                                                                               "text":  "MA20=33.604"
+                                                                                                           },
+                                                                                                  "ma5":  {
+                                                                                                              "available":  true,
+                                                                                                              "value":  42.414,
+                                                                                                              "text":  "MA5=42.414"
+                                                                                                          },
+                                                                                                  "ma60":  {
+                                                                                                               "available":  true,
+                                                                                                               "value":  29.106,
+                                                                                                               "text":  "MA60=29.106"
+                                                                                                           }
+                                                                                              },
+                                                                                       "macd":  {
+                                                                                                    "available":  true,
+                                                                                                    "dif":  5.411,
+                                                                                                    "dea":  3.269,
+                                                                                                    "hist":  4.284,
+                                                                                                    "signal":  "MACD柱为正，多头动能占优"
+                                                                                                },
+                                                                                       "rsi":  {
+                                                                                                   "rsi12":  {
+                                                                                                                 "available":  true,
+                                                                                                                 "value":  67,
+                                                                                                                 "text":  "RSI12=67"
+                                                                                                             },
+                                                                                                   "rsi24":  {
+                                                                                                                 "available":  true,
+                                                                                                                 "value":  68,
+                                                                                                                 "text":  "RSI24=68"
+                                                                                                             },
+                                                                                                   "rsi6":  {
+                                                                                                                "available":  true,
+                                                                                                                "value":  76,
+                                                                                                                "text":  "RSI6=76"
+                                                                                                            }
+                                                                                               },
+                                                                                       "boll":  {
+                                                                                                    "available":  true,
+                                                                                                    "upper":  50.202,
+                                                                                                    "middle":  33.604,
+                                                                                                    "lower":  17.006,
+                                                                                                    "position":  "价格位于布林线上轨附近或上方"
+                                                                                                },
+                                                                                       "atr":  {
+                                                                                                   "available":  true,
+                                                                                                   "atr14":  7.955,
+                                                                                                   "usage":  "衡量近期波动，不直接代表方向。"
+                                                                                               },
+                                                                                       "signals":  [
+                                                                                                       "价格在MA20上方",
+                                                                                                       "价格在MA60上方",
+                                                                                                       "MACD柱为正，多头动能占优",
+                                                                                                       "价格位于布林线上轨附近或上方"
+                                                                                                   ]
+                                                                                   }
+                                                                               ],
+                                                                   "limits":  {
+                                                                                  "day":  250,
+                                                                                  "month":  120,
+                                                                                  "week":  156
+                                                                              },
+                                                                   "note":  "技术指标由tdx K线在本地计算，仅返回日线、周线、月线最后一个有效指标值；available=false表示该周期K线数量不足。"
+                                                               },
+                                                 "limits":  {
+                                                                "technicalDay":  250,
+                                                                "technicalMonth":  120,
+                                                                "technicalWeek":  156
+                                                            },
+                                                 "note":  "面向Agent的单股概览聚合接口；板块返回该股完整所属板块摘要；技术指标只返回各周期最新有效值。"
+                                             }
+                               },
+                               {
+                                   "code":  "000001",
+                                   "name":  "平安银行",
+                                   "brief":  {
+                                                 "code":  "000001",
+                                                 "name":  "平安银行",
+                                                 "source":  "tdx_agent_stock_brief",
+                                                 "quote":  {
+                                                               "code":  "000001",
+                                                               "market":  "深市",
+                                                               "price":  10.24,
+                                                               "lastClose":  10.23,
+                                                               "open":  10.22,
+                                                               "high":  10.32,
+                                                               "low":  10.02,
+                                                               "changePct":  0.09775171065493438,
+                                                               "amplitudePct":  2.9325513196481006,
+                                                               "turnoverRate":  0.5792858389275621,
+                                                               "volume":  1124139,
+                                                               "amount":  1144166912,
+                                                               "amountText":  "11.44亿元",
+                                                               "text":  "现价10.24，涨跌幅0.10%，成交额11.44亿元"
+                                                           },
+                                                 "finance":  {
+                                                                 "updatedDate":  "2026-04-25",
+                                                                 "ipoDate":  "1991-04-03",
+                                                                 "totalShares":  19405918750,
+                                                                 "totalSharesText":  "194.06亿股",
+                                                                 "floatShares":  19405601250,
+                                                                 "floatSharesText":  "194.06亿股",
+                                                                 "totalMarketValue":  198716608000,
+                                                                 "totalMarketValueText":  "1987.17亿元",
+                                                                 "floatMarketValue":  198713356800,
+                                                                 "floatMarketValueText":  "1987.13亿元",
+                                                                 "totalAssets":  6033961984000,
+                                                                 "totalAssetsText":  "60339.62亿元",
+                                                                 "netAssets":  544083008000,
+                                                                 "netAssetsText":  "5440.83亿元",
+                                                                 "mainRevenue":  35277000000,
+                                                                 "mainRevenueText":  "352.77亿元",
+                                                                 "mainProfit":  17888000000,
+                                                                 "mainProfitText":  "178.88亿元",
+                                                                 "operatingProfit":  17389000000,
+                                                                 "operatingProfitText":  "173.89亿元",
+                                                                 "netProfit":  14523000000,
+                                                                 "netProfitText":  "145.23亿元",
+                                                                 "operatingCashflow":  37802000000,
+                                                                 "operatingCashflowText":  "378.02亿元",
+                                                                 "shareholders":  457610,
+                                                                 "meaning":  "股本单位为股，资产、收入、利润和现金流单位为元；用于快速判断公司规模、盈利和现金流质量。"
+                                                             },
+                                                 "latestReport":  {
+                                                                      "reportDate":  "2026-03-31",
+                                                                      "netAssetPerShare":  23.91,
+                                                                      "operatingCashflowPerShare":  1.95,
+                                                                      "weightedRoe":  2.83,
+                                                                      "revenue":  35277000000,
+                                                                      "revenueText":  "352.77亿元",
+                                                                      "revenueYoY":  4.65,
+                                                                      "netProfit":  14523000000,
+                                                                      "netProfitText":  "145.23亿元",
+                                                                      "netProfitYoY":  3.03,
+                                                                      "source":  "f10_cat0_latest_prompt",
+                                                                      "meaning":  "来自F10最新提示，保留最新一期关键财报字段；用于速览中的财报时点、每股净资产和同比变化判断。"
+                                                                  },
+                                                 "blocks":  [
+                                                                {
+                                                                    "type":  "concept",
+                                                                    "typeName":  "概念板块",
+                                                                    "name":  "跨境支付",
+                                                                    "indexCode":  "880609",
+                                                                    "memberCount":  75,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "style_region",
+                                                                    "typeName":  "地域/风格板块",
+                                                                    "name":  "MSCI成份",
+                                                                    "indexCode":  "880883",
+                                                                    "memberCount":  370,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "style_region",
+                                                                    "typeName":  "地域/风格板块",
+                                                                    "name":  "低市净率",
+                                                                    "indexCode":  "880829",
+                                                                    "memberCount":  200,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "style_region",
+                                                                    "typeName":  "地域/风格板块",
+                                                                    "name":  "低市盈率",
+                                                                    "indexCode":  "880826",
+                                                                    "memberCount":  200,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "style_region",
+                                                                    "typeName":  "地域/风格板块",
+                                                                    "name":  "保险重仓",
+                                                                    "indexCode":  "880805",
+                                                                    "memberCount":  200,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "style_region",
+                                                                    "typeName":  "地域/风格板块",
+                                                                    "name":  "北上重仓",
+                                                                    "indexCode":  "880721",
+                                                                    "memberCount":  200,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "style_region",
+                                                                    "typeName":  "地域/风格板块",
+                                                                    "name":  "周期股",
+                                                                    "indexCode":  "880679",
+                                                                    "memberCount":  200,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "style_region",
+                                                                    "typeName":  "地域/风格板块",
+                                                                    "name":  "基金重仓",
+                                                                    "indexCode":  "880801",
+                                                                    "memberCount":  200,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "style_region",
+                                                                    "typeName":  "地域/风格板块",
+                                                                    "name":  "大盘股",
+                                                                    "indexCode":  "880821",
+                                                                    "memberCount":  200,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "style_region",
+                                                                    "typeName":  "地域/风格板块",
+                                                                    "name":  "破净资产",
+                                                                    "indexCode":  "880846",
+                                                                    "memberCount":  400,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "style_region",
+                                                                    "typeName":  "地域/风格板块",
+                                                                    "name":  "融资融券",
+                                                                    "memberCount":  386,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "style_region",
+                                                                    "typeName":  "地域/风格板块",
+                                                                    "name":  "高股息股",
+                                                                    "indexCode":  "880845",
+                                                                    "memberCount":  200,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "index",
+                                                                    "typeName":  "指数板块",
+                                                                    "name":  "300ESG",
+                                                                    "memberCount":  233,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "index",
+                                                                    "typeName":  "指数板块",
+                                                                    "name":  "300周期",
+                                                                    "memberCount":  103,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "index",
+                                                                    "typeName":  "指数板块",
+                                                                    "name":  "MSCIA50",
+                                                                    "memberCount":  50,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "index",
+                                                                    "typeName":  "指数板块",
+                                                                    "name":  "中华A80",
+                                                                    "memberCount":  80,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "index",
+                                                                    "typeName":  "指数板块",
+                                                                    "name":  "分析师指",
+                                                                    "memberCount":  99,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "index",
+                                                                    "typeName":  "指数板块",
+                                                                    "name":  "区块链50",
+                                                                    "memberCount":  50,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "index",
+                                                                    "typeName":  "指数板块",
+                                                                    "name":  "国证价值",
+                                                                    "memberCount":  332,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "index",
+                                                                    "typeName":  "指数板块",
+                                                                    "name":  "国证红利",
+                                                                    "memberCount":  50,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "index",
+                                                                    "typeName":  "指数板块",
+                                                                    "name":  "大盘价值",
+                                                                    "memberCount":  66,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "index",
+                                                                    "typeName":  "指数板块",
+                                                                    "name":  "沪深300",
+                                                                    "memberCount":  300,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "index",
+                                                                    "typeName":  "指数板块",
+                                                                    "name":  "深主板50",
+                                                                    "memberCount":  50,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "index",
+                                                                    "typeName":  "指数板块",
+                                                                    "name":  "深证100",
+                                                                    "memberCount":  100,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "index",
+                                                                    "typeName":  "指数板块",
+                                                                    "name":  "深证300",
+                                                                    "memberCount":  300,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "index",
+                                                                    "typeName":  "指数板块",
+                                                                    "name":  "深证价值",
+                                                                    "memberCount":  100,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "index",
+                                                                    "typeName":  "指数板块",
+                                                                    "name":  "深证成指",
+                                                                    "memberCount":  39,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "index",
+                                                                    "typeName":  "指数板块",
+                                                                    "name":  "珠三角",
+                                                                    "memberCount":  40,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "index",
+                                                                    "typeName":  "指数板块",
+                                                                    "name":  "红利低波",
+                                                                    "memberCount":  50,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                },
+                                                                {
+                                                                    "type":  "index",
+                                                                    "typeName":  "指数板块",
+                                                                    "name":  "腾讯济安",
+                                                                    "memberCount":  100,
+                                                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                                }
+                                                            ],
+                                                 "stat":  {
+                                                              "date":  "20260626",
+                                                              "peTtm":  4.61,
+                                                              "peStatic":  4.6565,
+                                                              "pb":  0.42827268925135925,
+                                                              "divYield":  5.83,
+                                                              "changePct":  -1.82,
+                                                              "trendDays":  -3,
+                                                              "chg5":  -2.76,
+                                                              "chg10":  -6.49,
+                                                              "chg20":  -0.68,
+                                                              "chg60":  -4.03,
+                                                              "chgYtd":  -7.42,
+                                                              "meaning":  "盘后个股综合统计，适合做估值、阶段涨跌幅和连续涨跌状态的快速判断。"
+                                                          },
+                                                 "moneyflow":  {
+                                                                   "date":  "20260626",
+                                                                   "blockIndex":  "880826",
+                                                                   "amount":  127090.29,
+                                                                   "amountPrev":  113674.21,
+                                                                   "amountChangePct":  11.80221969433523,
+                                                                   "amountChangeText":  "1.34亿元",
+                                                                   "ipoPrice":  40,
+                                                                   "high52w":  12.73,
+                                                                   "low52w":  10.07,
+                                                                   "amountMeaning":  "Amount和AmountPrev单位为万元，用于比较今日/昨日成交活跃度；BlockIndex为通达信板块指数代码。"
+                                                               },
+                                                 "technical":  {
+                                                                   "code":  "000001",
+                                                                   "source":  "tdx_kline_local_indicators",
+                                                                   "periods":  [
+                                                                                   {
+                                                                                       "period":  "day",
+                                                                                       "name":  "日线",
+                                                                                       "klineCount":  250,
+                                                                                       "latestDate":  "2026-06-29",
+                                                                                       "close":  10.24,
+                                                                                       "ma":  {
+                                                                                                  "ma10":  {
+                                                                                                               "available":  true,
+                                                                                                               "value":  10.606,
+                                                                                                               "text":  "MA10=10.606"
+                                                                                                           },
+                                                                                                  "ma120":  {
+                                                                                                                "available":  true,
+                                                                                                                "value":  11.03,
+                                                                                                                "text":  "MA120=11.030"
+                                                                                                            },
+                                                                                                  "ma20":  {
+                                                                                                               "available":  true,
+                                                                                                               "value":  10.847,
+                                                                                                               "text":  "MA20=10.847"
+                                                                                                           },
+                                                                                                  "ma5":  {
+                                                                                                              "available":  true,
+                                                                                                              "value":  10.422,
+                                                                                                              "text":  "MA5=10.422"
+                                                                                                          },
+                                                                                                  "ma60":  {
+                                                                                                               "available":  true,
+                                                                                                               "value":  10.999,
+                                                                                                               "text":  "MA60=10.999"
+                                                                                                           }
+                                                                                              },
+                                                                                       "macd":  {
+                                                                                                    "available":  true,
+                                                                                                    "dif":  -0.168,
+                                                                                                    "dea":  -0.087,
+                                                                                                    "hist":  -0.162,
+                                                                                                    "signal":  "MACD柱为负，空头动能占优"
+                                                                                                },
+                                                                                       "rsi":  {
+                                                                                                   "rsi12":  {
+                                                                                                                 "available":  true,
+                                                                                                                 "value":  13,
+                                                                                                                 "text":  "RSI12=13"
+                                                                                                             },
+                                                                                                   "rsi24":  {
+                                                                                                                 "available":  true,
+                                                                                                                 "value":  42,
+                                                                                                                 "text":  "RSI24=42"
+                                                                                                             },
+                                                                                                   "rsi6":  {
+                                                                                                                "available":  true,
+                                                                                                                "value":  29,
+                                                                                                                "text":  "RSI6=29"
+                                                                                                            }
+                                                                                               },
+                                                                                       "boll":  {
+                                                                                                    "available":  true,
+                                                                                                    "upper":  11.491,
+                                                                                                    "middle":  10.847,
+                                                                                                    "lower":  10.203,
+                                                                                                    "position":  "价格位于布林线中轨下方"
+                                                                                                },
+                                                                                       "atr":  {
+                                                                                                   "available":  true,
+                                                                                                   "atr14":  0.24,
+                                                                                                   "usage":  "衡量近期波动，不直接代表方向。"
+                                                                                               },
+                                                                                       "signals":  [
+                                                                                                       "价格在MA20下方",
+                                                                                                       "价格在MA60下方",
+                                                                                                       "MACD柱为负，空头动能占优",
+                                                                                                       "价格位于布林线中轨下方"
+                                                                                                   ]
+                                                                                   },
+                                                                                   {
+                                                                                       "period":  "week",
+                                                                                       "name":  "周线",
+                                                                                       "klineCount":  156,
+                                                                                       "latestDate":  "2026-06-29",
+                                                                                       "close":  10.24,
+                                                                                       "ma":  {
+                                                                                                  "ma10":  {
+                                                                                                               "available":  true,
+                                                                                                               "value":  10.86,
+                                                                                                               "text":  "MA10=10.860"
+                                                                                                           },
+                                                                                                  "ma120":  {
+                                                                                                                "available":  true,
+                                                                                                                "value":  11.205,
+                                                                                                                "text":  "MA120=11.205"
+                                                                                                            },
+                                                                                                  "ma20":  {
+                                                                                                               "available":  true,
+                                                                                                               "value":  10.908,
+                                                                                                               "text":  "MA20=10.908"
+                                                                                                           },
+                                                                                                  "ma5":  {
+                                                                                                              "available":  true,
+                                                                                                              "value":  10.642,
+                                                                                                              "text":  "MA5=10.642"
+                                                                                                          },
+                                                                                                  "ma60":  {
+                                                                                                               "available":  true,
+                                                                                                               "value":  11.423,
+                                                                                                               "text":  "MA60=11.423"
+                                                                                                           }
+                                                                                              },
+                                                                                       "macd":  {
+                                                                                                    "available":  true,
+                                                                                                    "dif":  -0.204,
+                                                                                                    "dea":  -0.137,
+                                                                                                    "hist":  -0.134,
+                                                                                                    "signal":  "MACD柱为负，空头动能占优"
+                                                                                                },
+                                                                                       "rsi":  {
+                                                                                                   "rsi12":  {
+                                                                                                                 "available":  true,
+                                                                                                                 "value":  35,
+                                                                                                                 "text":  "RSI12=35"
+                                                                                                             },
+                                                                                                   "rsi24":  {
+                                                                                                                 "available":  true,
+                                                                                                                 "value":  37,
+                                                                                                                 "text":  "RSI24=37"
+                                                                                                             },
+                                                                                                   "rsi6":  {
+                                                                                                                "available":  true,
+                                                                                                                "value":  36,
+                                                                                                                "text":  "RSI6=36"
+                                                                                                            }
+                                                                                               },
+                                                                                       "boll":  {
+                                                                                                    "available":  true,
+                                                                                                    "upper":  11.516,
+                                                                                                    "middle":  10.908,
+                                                                                                    "lower":  10.3,
+                                                                                                    "position":  "价格位于布林线下轨附近或下方"
+                                                                                                },
+                                                                                       "atr":  {
+                                                                                                   "available":  true,
+                                                                                                   "atr14":  0.368,
+                                                                                                   "usage":  "衡量近期波动，不直接代表方向。"
+                                                                                               },
+                                                                                       "signals":  [
+                                                                                                       "价格在MA20下方",
+                                                                                                       "价格在MA60下方",
+                                                                                                       "MACD柱为负，空头动能占优",
+                                                                                                       "价格位于布林线下轨附近或下方"
+                                                                                                   ]
+                                                                                   },
+                                                                                   {
+                                                                                       "period":  "month",
+                                                                                       "name":  "月线",
+                                                                                       "klineCount":  120,
+                                                                                       "latestDate":  "2026-06-29",
+                                                                                       "close":  10.24,
+                                                                                       "ma":  {
+                                                                                                  "ma10":  {
+                                                                                                               "available":  true,
+                                                                                                               "value":  11.115,
+                                                                                                               "text":  "MA10=11.115"
+                                                                                                           },
+                                                                                                  "ma120":  {
+                                                                                                                "available":  true,
+                                                                                                                "value":  12.876,
+                                                                                                                "text":  "MA120=12.876"
+                                                                                                            },
+                                                                                                  "ma20":  {
+                                                                                                               "available":  true,
+                                                                                                               "value":  11.365,
+                                                                                                               "text":  "MA20=11.365"
+                                                                                                           },
+                                                                                                  "ma5":  {
+                                                                                                              "available":  true,
+                                                                                                              "value":  10.928,
+                                                                                                              "text":  "MA5=10.928"
+                                                                                                          },
+                                                                                                  "ma60":  {
+                                                                                                               "available":  true,
+                                                                                                               "value":  12.447,
+                                                                                                               "text":  "MA60=12.447"
+                                                                                                           }
+                                                                                              },
+                                                                                       "macd":  {
+                                                                                                    "available":  true,
+                                                                                                    "dif":  -0.246,
+                                                                                                    "dea":  -0.198,
+                                                                                                    "hist":  -0.096,
+                                                                                                    "signal":  "MACD柱为负，空头动能占优"
+                                                                                                },
+                                                                                       "rsi":  {
+                                                                                                   "rsi12":  {
+                                                                                                                 "available":  true,
+                                                                                                                 "value":  27,
+                                                                                                                 "text":  "RSI12=27"
+                                                                                                             },
+                                                                                                   "rsi24":  {
+                                                                                                                 "available":  true,
+                                                                                                                 "value":  50,
+                                                                                                                 "text":  "RSI24=50"
+                                                                                                             },
+                                                                                                   "rsi6":  {
+                                                                                                                "available":  true,
+                                                                                                                "value":  26,
+                                                                                                                "text":  "RSI6=26"
+                                                                                                            }
+                                                                                               },
+                                                                                       "boll":  {
+                                                                                                    "available":  true,
+                                                                                                    "upper":  12.285,
+                                                                                                    "middle":  11.365,
+                                                                                                    "lower":  10.445,
+                                                                                                    "position":  "价格位于布林线下轨附近或下方"
+                                                                                                },
+                                                                                       "atr":  {
+                                                                                                   "available":  true,
+                                                                                                   "atr14":  0.749,
+                                                                                                   "usage":  "衡量近期波动，不直接代表方向。"
+                                                                                               },
+                                                                                       "signals":  [
+                                                                                                       "价格在MA20下方",
+                                                                                                       "价格在MA60下方",
+                                                                                                       "MACD柱为负，空头动能占优",
+                                                                                                       "价格位于布林线下轨附近或下方"
+                                                                                                   ]
+                                                                                   }
+                                                                               ],
+                                                                   "limits":  {
+                                                                                  "day":  250,
+                                                                                  "month":  120,
+                                                                                  "week":  156
+                                                                              },
+                                                                   "note":  "技术指标由tdx K线在本地计算，仅返回日线、周线、月线最后一个有效指标值；available=false表示该周期K线数量不足。"
+                                                               },
+                                                 "limits":  {
+                                                                "technicalDay":  250,
+                                                                "technicalMonth":  120,
+                                                                "technicalWeek":  156
+                                                            },
+                                                 "note":  "面向Agent的单股概览聚合接口；板块返回该股完整所属板块摘要；技术指标只返回各周期最新有效值。"
+                                             }
+                               }
+                           ],
+                 "note":  "多股简讯聚合接口；由请求参数传入股票列表，批量返回每只股票的 stock-brief。"
+             }
+}

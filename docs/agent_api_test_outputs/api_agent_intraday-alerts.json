@@ -1,0 +1,28 @@
+﻿{
+    "code":  0,
+    "message":  "success",
+    "data":  {
+                 "source":  "tdx_agent_intraday_alerts",
+                 "tradingDay":  true,
+                 "windowMinutes":  30,
+                 "count":  1,
+                 "items":  [
+                               {
+                                   "code":  "300499",
+                                   "name":  "高澜股份",
+                                   "latestTime":  "15:00",
+                                   "latestPrice":  38.7,
+                                   "changePct":  4.284559417946655,
+                                   "openChangePct":  3.753351206434332,
+                                   "recentChangePct":  0.4151530877010994,
+                                   "recentVolume":  30524,
+                                   "recentVolumeRatio":  1.471674461212092,
+                                   "signals":  [
+                                                   "无明显异动"
+                                               ],
+                                   "text":  "高澜股份（300499） 15:00，最新38.70，当日+4.28%，开盘以来+3.75%，近段+0.42%，近段量比1.47；信号：无明显异动"
+                               }
+                           ],
+                 "note":  "盘中异动提醒接口；调用一次计算当前分时状态，不做后台轮询和推送。"
+             }
+}

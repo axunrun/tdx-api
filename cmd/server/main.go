@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/injoyai/tdx"
@@ -68,6 +69,38 @@ func main() {
 	// 基本面
 	mux.HandleFunc("/api/finance", handleFinance)
 	mux.HandleFunc("/api/f10", handleF10)
+	mux.HandleFunc("/api/agent/technical-summary", handleAgentTechnicalSummary)
+	mux.HandleFunc("/api/agent/stock-brief", handleAgentStockBrief)
+	mux.HandleFunc("/api/agent/stock-brief-text", handleAgentStockBriefText)
+	mux.HandleFunc("/api/agent/f10-summary", handleAgentF10Summary)
+	mux.HandleFunc("/api/agent/f10-summary-text", handleAgentF10SummaryText)
+	mux.HandleFunc("/api/agent/assets/search", handleAgentAssetsSearch)
+	mux.HandleFunc("/api/agent/assets/search-text", handleAgentAssetsSearchText)
+	mux.HandleFunc("/api/agent/assets/detail", handleAgentAssetsDetail)
+	mux.HandleFunc("/api/agent/sector-membership", handleAgentSectorMembership)
+	mux.HandleFunc("/api/agent/sector-membership-text", handleAgentSectorMembershipText)
+	mux.HandleFunc("/api/agent/stock-in-sector", handleAgentStockInSector)
+	mux.HandleFunc("/api/agent/stock-in-sector-text", handleAgentStockInSectorText)
+	mux.HandleFunc("/api/agent/sector-detail", handleAgentSectorDetail)
+	mux.HandleFunc("/api/agent/sector-detail-text", handleAgentSectorDetailText)
+	mux.HandleFunc("/api/agent/hotspot-scan", handleAgentHotspotScan)
+	mux.HandleFunc("/api/agent/hotspot-scan-text", handleAgentHotspotScanText)
+	mux.HandleFunc("/api/agent/multi-brief", handleAgentMultiBrief)
+	mux.HandleFunc("/api/agent/multi-brief-text", handleAgentMultiBriefText)
+	mux.HandleFunc("/api/agent/auction", handleAgentAuction)
+	mux.HandleFunc("/api/agent/auction-text", handleAgentAuctionText)
+	mux.HandleFunc("/api/agent/market-review", handleAgentMarketReview)
+	mux.HandleFunc("/api/agent/market-review-text", handleAgentMarketReviewText)
+	mux.HandleFunc("/api/agent/intraday-alerts", handleAgentIntradayAlerts)
+	mux.HandleFunc("/api/agent/intraday-alerts-text", handleAgentIntradayAlertsText)
+	mux.HandleFunc("/api/agent/global-market-brief", handleAgentGlobalMarketBrief)
+	mux.HandleFunc("/api/agent/global-market-brief-text", handleAgentGlobalMarketBriefText)
+	mux.HandleFunc("/api/agent/kline-summary", handleAgentKlineSummary)
+	mux.HandleFunc("/api/agent/kline-summary-text", handleAgentKlineSummaryText)
+	mux.HandleFunc("/api/agent/trade-flow-estimate", handleAgentTradeFlowEstimate)
+	mux.HandleFunc("/api/agent/trade-flow-estimate-text", handleAgentTradeFlowEstimateText)
+	// MCP
+	mux.HandleFunc("/mcp", handleMCP)
 	// 全市场统计
 	mux.HandleFunc("/api/stat", handleStat)
 	mux.HandleFunc("/api/moneyflow", handleMoneyflow)
@@ -85,23 +118,51 @@ func main() {
 	// 股票对照表（SQLite）
 	mux.HandleFunc("/api/stocks/refresh", handleStocksRefresh)
 	mux.HandleFunc("/api/stocks/search", handleStocksSearch)
+	mux.HandleFunc("/api/admin/trade-flow-thresholds/refresh", handleAdminTradeFlowThresholdsRefresh)
 
 	port := "8080"
 	if p := os.Getenv("PORT"); p != "" {
 		port = p
 	}
-	nEndpoints := 26
-	log.Printf("🚀 TDX API Server v2.1 启动于 :%s (%d endpoints)", port, nEndpoints)
+	nEndpoints := 46
+	log.Printf("🚀 TDX API Server v2.1 准备监听 :%s (%d endpoints)", port, nEndpoints)
 
-	// 初始化 SQLite 股票库
-	initStocksDB()
+	startBackgroundInitializers(
+		func() { log.Println("✅ SQLite 后台初始化任务已完成") },
+		func() { initStocksDB(mainClient) },
+		func() { initBlocksDB(mainClient) },
+	)
 
+	log.Printf("✅ TDX API Server v2.1 已开始监听 :%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, mux))
 }
 
-func cli() *tdx.Client         { return mainClient }
-func getEx() *tdx.Client       { return exClient }
-func getGbbq() *tdx.Gbbq       { return gbbq }
+func startBackgroundInitializers(onDone func(), tasks ...func()) {
+	if len(tasks) == 0 {
+		return
+	}
+	go func() {
+		var wg sync.WaitGroup
+		wg.Add(len(tasks))
+		for _, task := range tasks {
+			task := task
+			go func() {
+				defer wg.Done()
+				if task != nil {
+					task()
+				}
+			}()
+		}
+		wg.Wait()
+		if onDone != nil {
+			onDone()
+		}
+	}()
+}
+
+func cli() *tdx.Client   { return mainClient }
+func getEx() *tdx.Client { return exClient }
+func getGbbq() *tdx.Gbbq { return gbbq }
 
 func parseMkt(s string) uint8 {
 	switch s {

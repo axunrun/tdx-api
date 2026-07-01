@@ -1,0 +1,97 @@
+推荐新增聚合 API
+API	用途	组合方法
+/api/agent/stock-brief	个股快速画像	GetQuote + 最近日K + GetFinanceInfo + GetTdxHy + GetTdxStat/Stat2
+/api/agent/stock-deep	个股深度分析数据包	前复权K线 + 财务 + 行业板块 + 所属板块成分 + 指数环境
+/api/agent/stock-monitor	交易日关注个股	GetQuote + GetMinute + GetMinuteTrade + 涨跌/量比/竞价
+/api/agent/auction	9:25 集合竞价分析	GetCallAuction + 昨收/近期K线 + 所属板块
+/api/agent/noon-review	上午盘收盘分析	个股 quote + 分时 + 指数分时 + 板块表现
+/api/agent/close-review	下午收盘分析	当日K线/分时/成交额 + 指数 + 板块 + 资金统计
+/api/agent/hotspot-scan	热点分析、推荐股票候选	GetTdxStat + GetTdxStat2 + /api/blocks + 指数/板块K线
+/api/agent/market-impact	非交易日消息影响分析的数据底座	A股指数K线 + 港股/美股/日韩指数/相关标的走势摘要
+
+
+下面是建议的 Agent 接口清单。
+一、个股分析接口
+API	目的	内部组合方法
+/api/agent/stock-brief	个股快速概览	GetQuote、GetKlineDay、GetFinanceInfo、GetTdxHy、GetBlockDataWithIndex
+/api/agent/stock-deep	个股深度分析	GetQuote、GetKlineDay、GetKlineWeek、GetKlineMonth、GetMinute、GetFinanceInfo、GetCompanyCategory、GetCompanyContent、GetTdxHy、GetBlockDataWithIndex、GetTdxStat2、GetGbbq
+/api/agent/company-profile	公司基本面资料	GetFinanceInfo、GetCompanyCategory、GetCompanyContent
+/api/agent/stock-technical	技术面分析数据	GetQuote、GetKlineDay、GetKlineWeek、GetKlineMonth、GetKlineMinute、GetMinute
+/api/agent/stock-capital	股本、换手、复权、除权	GetFinanceInfo、GetQuote、GetGbbq、复权计算工具
+
+二、板块与热点接口
+API	目的	内部组合方法
+/api/agent/hotspot-scan	热点板块扫描、推荐候选股	GetTdxStat、GetTdxStat2、GetBlockDataWithIndex、GetQuote、GetKlineDay
+/api/agent/sector-detail	某个板块深度分析	GetBlockDataWithIndex、GetTdxStat2、GetQuote、GetKlineDay、GetFinanceInfo
+/api/agent/sector-ranking	板块强弱排名	GetTdxStat2、GetBlockDataWithIndex
+/api/agent/stock-in-sector	个股在行业/板块中的位置	GetTdxHy、GetBlockDataWithIndex、GetTdxStat2、GetFinanceInfo、GetQuote
+
+三、交易日监控接口
+API	目的	内部组合方法
+/api/agent/watchlist	持仓/关注股周期监控	GetQuote、GetMinute、GetTrade、GetKlineDay、GetTdxStat2
+/api/agent/auction	9:25 集合竞价分析	GetCallAuction、GetQuote、GetKlineDay、GetTdxStat2
+/api/agent/noon-review	上午收盘总结	GetQuote、GetMinute、GetKlineDay、GetTdxStat、GetTdxStat2、GetBlockDataWithIndex
+/api/agent/close-review	下午收盘总结	GetQuote、GetKlineDay、GetTdxStat、GetTdxStat2、GetBlockDataWithIndex
+/api/agent/intraday-alerts	盘中异动提醒	GetQuote、GetMinute、GetTrade、GetTdxStat2
+
+四、外围市场与关联资产接口
+API	目的	内部组合方法
+/api/agent/related-assets	获取个股相关港股、美股、指数、商品、汇率	SQLite 精选资产池、ExQuote、ExBars
+/api/agent/sector-related-assets	获取板块相关外围资产	SQLite 板块映射、ExQuote、ExBars
+/api/agent/global-market-brief	全球市场概览	ExQuote、ExBars、精选指数池
+/api/agent/market-baseline	非交易日/节假日市场基准	ExQuote、ExBars、精选指数池、商品汇率池
+
+这里的 SQLite 很关键，负责维护：
+A 股全量代码
+港股核心资产
+美股核心资产
+标普500核心成分股
+纳斯达克100
+道琼斯30
+恒生指数成分股
+恒生科技成分股
+中概股
+商品、汇率、全球指数
+tdx 负责行情，SQLite 负责“哪些资产值得看”。
+五、资产池与字典接口
+这些主要给 Agent 和 WebUI 查询含义，不是分析结论接口。
+API	目的	内部组合方法
+/api/agent/assets/search	搜索 A 股/港股/美股/指数资产	SQLite
+/api/agent/assets/detail	查询资产中文解释	SQLite、ExInstruments、GetCodeAll
+/api/agent/universe/list	查看有哪些资产池	SQLite
+/api/agent/universe/assets	查看某资产池成分	SQLite
+/api/agent/asset-quote	获取单个资产行情，自动补中文名称	GetQuote 或 ExQuote + SQLite
+
+六、底层调试 API
+这些保留，但不是 Agent 的主入口。主要给 WebUI、调试、开发使用。
+API	对应方法
+/api/quote	GetQuote
+/api/kline	GetKlineDay / GetKline
+/api/minute	GetMinute
+/api/trade	GetTrade
+/api/history-trade	GetHistoryTrade
+/api/finance	GetFinanceInfo
+/api/f10	GetCompanyCategory、GetCompanyContent
+/api/stat	GetTdxStat
+/api/moneyflow	GetTdxStat2
+/api/blocks	GetBlockDataWithIndex
+/api/ex/quote	ExQuote
+/api/ex/kline	ExBars
+/api/ex/markets	ExMarkets
+
+推荐优先实现顺序
+第一阶段先做 5 个 Agent 主接口：
+/api/agent/stock-brief
+/api/agent/stock-deep
+/api/agent/hotspot-scan
+/api/agent/watchlist
+/api/agent/related-assets
+第二阶段做盘中和复盘：
+/api/agent/auction
+/api/agent/noon-review
+/api/agent/close-review
+/api/agent/sector-detail
+第三阶段做外围市场：
+/api/agent/global-market-brief
+/api/agent/sector-related-assets
+/api/agent/market-baseline

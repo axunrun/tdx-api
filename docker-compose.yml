@@ -1,0 +1,12 @@
+services:
+  tdx-api:
+    image: ghcr.io/axunrun/tdx-api:latest
+    container_name: tdx-api
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      PORT: "8080"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data

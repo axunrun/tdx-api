@@ -1,0 +1,39 @@
+﻿{
+    "code":  0,
+    "message":  "success",
+    "data":  {
+                 "source":  "tdx_agent_intraday_alerts",
+                 "tradingDay":  false,
+                 "windowMinutes":  30,
+                 "count":  2,
+                 "items":  [
+                               {
+                                   "code":  "603063",
+                                   "name":  "禾望电气",
+                                   "latestPrice":  52.03,
+                                   "changePct":  -5.691499003081386,
+                                   "signals":  [
+                                                   "当日弱势"
+                                               ],
+                                   "text":  "禾望电气（603063），最新52.03，当日-5.69%；信号：当日弱势",
+                                   "warnings":  [
+                                                    "非交易日无可用分时数据，已退化为当前行情快照"
+                                                ]
+                               },
+                               {
+                                   "code":  "000001",
+                                   "name":  "平安银行",
+                                   "latestPrice":  10.23,
+                                   "changePct":  -1.8234165067178454,
+                                   "signals":  [
+                                                   "无明显异动"
+                                               ],
+                                   "text":  "平安银行（000001），最新10.23，当日-1.82%；信号：无明显异动",
+                                   "warnings":  [
+                                                    "非交易日无可用分时数据，已退化为当前行情快照"
+                                                ]
+                               }
+                           ],
+                 "note":  "盘中异动提醒接口；调用一次计算当前分时状态，不做后台轮询和推送。"
+             }
+}

@@ -41,29 +41,6 @@
 
 ## 🚀 快速开始
 
-### Docker 局域网部署
-
-```bash
-docker compose up -d
-```
-
-默认监听 `8080`，HTTP API 和 MCP 共用同一个服务：
-
-- REST API: `http://<服务器IP>:8080/api/agent/stock-brief-text?code=300499`
-- MCP endpoint: `http://<服务器IP>:8080/mcp`
-
-GitHub Actions 会在 `master`、`main` 或 `v*.*.*` tag 推送时自动构建并发布镜像：
-
-```bash
-docker pull ghcr.io/axunrun/tdx-api:latest
-```
-
-MCP 当前暴露的是已经完成的 agent 文本聚合工具，例如
-`tdx_stock_brief_text`、`tdx_kline_summary_text`、`tdx_market_review_text` 和
-`tdx_global_market_brief_text`。JSON 调试接口继续通过原 REST API 使用。
-
----
-
 ```go
 package main
 
@@ -324,3 +301,4 @@ _ = markets; _ = n; _ = insts; _ = q; _ = bars; _ = ticks
 MIT License - 详见 [LICENSE](LICENSE)
 
 ⭐ 喜欢这个项目吗？点个 Star 支持一下吧！  
+

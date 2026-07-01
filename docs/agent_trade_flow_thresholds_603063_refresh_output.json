@@ -1,0 +1,1 @@
+{"code":0,"message":"success","data":{"code":"603063","asOfDate":"2026-06-27","lookbackDays":200,"sampleCount":828640,"superLargeAmount":5470455,"largeAmount":1961388,"mediumAmount":751941,"source":"tdx_history_tick","method":"historical_tick_amount_cumulative_share","updatedAt":"2026-06-27T22:09:07+08:00"}}

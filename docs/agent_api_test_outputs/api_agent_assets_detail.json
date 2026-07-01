@@ -1,0 +1,206 @@
+﻿{
+    "code":  0,
+    "message":  "success",
+    "data":  {
+                 "code":  "300499",
+                 "name":  "高澜股份",
+                 "exchange":  "SZ",
+                 "market":  "A股",
+                 "assetType":  "stock",
+                 "displayName":  "高澜股份（300499.SZ）",
+                 "blocks":  [
+                                {
+                                    "type":  "concept",
+                                    "typeName":  "概念板块",
+                                    "name":  "一带一路",
+                                    "indexCode":  "880594",
+                                    "memberCount":  400,
+                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                },
+                                {
+                                    "type":  "concept",
+                                    "typeName":  "概念板块",
+                                    "name":  "东数西算",
+                                    "indexCode":  "880607",
+                                    "memberCount":  400,
+                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                },
+                                {
+                                    "type":  "concept",
+                                    "typeName":  "概念板块",
+                                    "name":  "中俄贸易",
+                                    "indexCode":  "880610",
+                                    "memberCount":  181,
+                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                },
+                                {
+                                    "type":  "concept",
+                                    "typeName":  "概念板块",
+                                    "name":  "储能",
+                                    "indexCode":  "880730",
+                                    "memberCount":  400,
+                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                },
+                                {
+                                    "type":  "concept",
+                                    "typeName":  "概念板块",
+                                    "name":  "充电桩",
+                                    "indexCode":  "880583",
+                                    "memberCount":  386,
+                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                },
+                                {
+                                    "type":  "concept",
+                                    "typeName":  "概念板块",
+                                    "name":  "可控核变",
+                                    "indexCode":  "880666",
+                                    "memberCount":  115,
+                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                },
+                                {
+                                    "type":  "concept",
+                                    "typeName":  "概念板块",
+                                    "name":  "国防军工",
+                                    "indexCode":  "880507",
+                                    "memberCount":  400,
+                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                },
+                                {
+                                    "type":  "concept",
+                                    "typeName":  "概念板块",
+                                    "name":  "抖音概念",
+                                    "indexCode":  "880720",
+                                    "memberCount":  243,
+                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                },
+                                {
+                                    "type":  "concept",
+                                    "typeName":  "概念板块",
+                                    "name":  "数据中心",
+                                    "indexCode":  "880799",
+                                    "memberCount":  400,
+                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                },
+                                {
+                                    "type":  "concept",
+                                    "typeName":  "概念板块",
+                                    "name":  "新能源车",
+                                    "indexCode":  "880951",
+                                    "memberCount":  400,
+                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                },
+                                {
+                                    "type":  "concept",
+                                    "typeName":  "概念板块",
+                                    "name":  "核电核能",
+                                    "indexCode":  "880537",
+                                    "memberCount":  338,
+                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                },
+                                {
+                                    "type":  "concept",
+                                    "typeName":  "概念板块",
+                                    "name":  "汽车电子",
+                                    "indexCode":  "880930",
+                                    "memberCount":  400,
+                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                },
+                                {
+                                    "type":  "concept",
+                                    "typeName":  "概念板块",
+                                    "name":  "液冷服务",
+                                    "indexCode":  "880685",
+                                    "memberCount":  219,
+                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                },
+                                {
+                                    "type":  "concept",
+                                    "typeName":  "概念板块",
+                                    "name":  "特高压",
+                                    "indexCode":  "880964",
+                                    "memberCount":  129,
+                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                },
+                                {
+                                    "type":  "concept",
+                                    "typeName":  "概念板块",
+                                    "name":  "粤港澳",
+                                    "indexCode":  "880919",
+                                    "memberCount":  362,
+                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                },
+                                {
+                                    "type":  "concept",
+                                    "typeName":  "概念板块",
+                                    "name":  "腾讯概念",
+                                    "indexCode":  "880956",
+                                    "memberCount":  298,
+                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                },
+                                {
+                                    "type":  "concept",
+                                    "typeName":  "概念板块",
+                                    "name":  "锂电池",
+                                    "indexCode":  "880534",
+                                    "memberCount":  400,
+                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                },
+                                {
+                                    "type":  "concept",
+                                    "typeName":  "概念板块",
+                                    "name":  "阿里概念",
+                                    "indexCode":  "880921",
+                                    "memberCount":  347,
+                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                },
+                                {
+                                    "type":  "concept",
+                                    "typeName":  "概念板块",
+                                    "name":  "风电",
+                                    "indexCode":  "880582",
+                                    "memberCount":  400,
+                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                },
+                                {
+                                    "type":  "style_region",
+                                    "typeName":  "地域/风格板块",
+                                    "name":  "QFII重仓",
+                                    "indexCode":  "880802",
+                                    "memberCount":  200,
+                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                },
+                                {
+                                    "type":  "style_region",
+                                    "typeName":  "地域/风格板块",
+                                    "name":  "专精特新",
+                                    "indexCode":  "880735",
+                                    "memberCount":  400,
+                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                },
+                                {
+                                    "type":  "style_region",
+                                    "typeName":  "地域/风格板块",
+                                    "name":  "活跃股",
+                                    "indexCode":  "880837",
+                                    "memberCount":  100,
+                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                },
+                                {
+                                    "type":  "style_region",
+                                    "typeName":  "地域/风格板块",
+                                    "name":  "重组预案",
+                                    "indexCode":  "880813",
+                                    "memberCount":  161,
+                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                },
+                                {
+                                    "type":  "index",
+                                    "typeName":  "指数板块",
+                                    "name":  "创业小盘",
+                                    "memberCount":  400,
+                                    "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                }
+                            ],
+                 "agentUsage":  "A股资产详情；可作为stock-brief、kline-summary、trade-flow-estimate、f10-summary等接口的入口参数说明。"
+             }
+}

@@ -1,0 +1,79 @@
+﻿{
+    "code":  0,
+    "message":  "success",
+    "data":  {
+                 "source":  "tdx_agent_assets",
+                 "keyword":  "博盈特焊",
+                 "count":  1,
+                 "limit":  20,
+                 "items":  [
+                               {
+                                   "code":  "301468",
+                                   "name":  "博盈特焊",
+                                   "exchange":  "SZ",
+                                   "market":  "A股",
+                                   "assetType":  "stock",
+                                   "displayName":  "博盈特焊（301468.SZ）",
+                                   "blocks":  [
+                                                  {
+                                                      "type":  "concept",
+                                                      "typeName":  "概念板块",
+                                                      "name":  "核电核能",
+                                                      "indexCode":  "880537",
+                                                      "memberCount":  338,
+                                                      "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                  },
+                                                  {
+                                                      "type":  "style_region",
+                                                      "typeName":  "地域/风格板块",
+                                                      "name":  "QFII新进",
+                                                      "indexCode":  "880781",
+                                                      "memberCount":  400,
+                                                      "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                  },
+                                                  {
+                                                      "type":  "style_region",
+                                                      "typeName":  "地域/风格板块",
+                                                      "name":  "专项贷款",
+                                                      "indexCode":  "880578",
+                                                      "memberCount":  400,
+                                                      "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                  },
+                                                  {
+                                                      "type":  "style_region",
+                                                      "typeName":  "地域/风格板块",
+                                                      "name":  "即将解禁",
+                                                      "indexCode":  "880897",
+                                                      "memberCount":  92,
+                                                      "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                  },
+                                                  {
+                                                      "type":  "style_region",
+                                                      "typeName":  "地域/风格板块",
+                                                      "name":  "密集调研",
+                                                      "indexCode":  "880816",
+                                                      "memberCount":  30,
+                                                      "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                  },
+                                                  {
+                                                      "type":  "style_region",
+                                                      "typeName":  "地域/风格板块",
+                                                      "name":  "昨日较弱",
+                                                      "indexCode":  "880784",
+                                                      "memberCount":  112,
+                                                      "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                  },
+                                                  {
+                                                      "type":  "style_region",
+                                                      "typeName":  "地域/风格板块",
+                                                      "name":  "昨高换手",
+                                                      "indexCode":  "880867",
+                                                      "memberCount":  84,
+                                                      "meaning":  "该股所属板块摘要，可用于后续抓取板块指数、板块成分股强弱和题材归因。"
+                                                  }
+                                              ],
+                                   "agentUsage":  "搜索候选项已包含资产详情；如候选唯一，可直接使用code调用后续分析接口。"
+                               }
+                           ]
+             }
+}

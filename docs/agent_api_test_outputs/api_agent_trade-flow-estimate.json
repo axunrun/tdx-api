@@ -1,0 +1,91 @@
+﻿{
+    "code":  0,
+    "message":  "success",
+    "data":  {
+                 "code":  "300499",
+                 "date":  "2026-06-30",
+                 "source":  "tdx_tick_estimate",
+                 "isOfficial":  false,
+                 "method":  "按逐笔成交金额或成交量阈值估算",
+                 "isIntraday":  true,
+                 "timeRange":  {
+                                   "start":  "09:25:00",
+                                   "end":  "15:17:00"
+                               },
+                 "direction":  {
+                                   "status0":  "outflow",
+                                   "status1":  "inflow",
+                                   "status2":  "neutral"
+                               },
+                 "thresholds":  {
+                                    "superLarge":  {
+                                                       "amount":  1000000,
+                                                       "volume":  500000
+                                                   },
+                                    "large":  {
+                                                  "amount":  200000,
+                                                  "volume":  100000
+                                              },
+                                    "medium":  {
+                                                   "amount":  40000,
+                                                   "volume":  20000
+                                               }
+                                },
+                 "thresholdSource":  "fixed",
+                 "summary":  {
+                                 "totalAmount":  994299751,
+                                 "totalBuyAmount":  439541895,
+                                 "totalSellAmount":  518605901,
+                                 "netInflow":  -79064006,
+                                 "netInflowPct":  -7.951727426310097,
+                                 "mainNetInflow":  -76222348,
+                                 "mainNetInflowPct":  -7.665932524205169,
+                                 "tradeCount":  4485,
+                                 "buyCount":  2085,
+                                 "sellCount":  2252,
+                                 "neutralCount":  148
+                             },
+                 "levels":  [
+                                {
+                                    "level":  "super_large",
+                                    "name":  "超大单",
+                                    "buyAmount":  104014534,
+                                    "sellAmount":  136762620,
+                                    "netAmount":  -32748086,
+                                    "netPct":  -3.2935828423032563,
+                                    "tradeCount":  151
+                                },
+                                {
+                                    "level":  "large",
+                                    "name":  "大单",
+                                    "buyAmount":  230694258,
+                                    "sellAmount":  274168520,
+                                    "netAmount":  -43474262,
+                                    "netPct":  -4.372349681901912,
+                                    "tradeCount":  1241
+                                },
+                                {
+                                    "level":  "medium",
+                                    "name":  "中单",
+                                    "buyAmount":  94259895,
+                                    "sellAmount":  96946503,
+                                    "netAmount":  -2686608,
+                                    "netPct":  -0.27020101305446265,
+                                    "tradeCount":  1930
+                                },
+                                {
+                                    "level":  "small",
+                                    "name":  "小单",
+                                    "buyAmount":  10573208,
+                                    "sellAmount":  10728258,
+                                    "netAmount":  -155050,
+                                    "netPct":  -0.01559388905046603,
+                                    "tradeCount":  1163
+                                }
+                            ],
+                 "warnings":  [
+                                  "该结果为TDX逐笔成交估算，不等同于东方财富/同花顺官方资金流；方向按平台对照修正为Status=1流入、Status=0流出。",
+                                  "未找到自适应阈值缓存，已回退固定阈值。"
+                              ]
+             }
+}

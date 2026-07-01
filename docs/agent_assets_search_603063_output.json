@@ -1,0 +1,1 @@
+{"code":0,"message":"success","data":{"source":"tdx_agent_assets","keyword":"603063","count":1,"limit":5,"items":[{"code":"603063","name":"禾望电气","exchange":"SH","market":"A股","assetType":"stock","displayName":"禾望电气（603063.SH）","agentUsage":"用于把用户输入的代码、名称或拼音解析为标准A股资产；后续行情和分析接口请使用code参数。"}]}}

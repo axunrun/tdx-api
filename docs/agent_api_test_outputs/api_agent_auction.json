@@ -1,0 +1,227 @@
+﻿{
+    "code":  0,
+    "message":  "success",
+    "data":  {
+                 "source":  "tdx_agent_auction",
+                 "code":  "300499",
+                 "name":  "高澜股份",
+                 "session":  "open",
+                 "quote":  {
+                               "code":  "300499",
+                               "market":  "深市",
+                               "price":  38.7,
+                               "lastClose":  37.11,
+                               "open":  37.77,
+                               "high":  39.15,
+                               "low":  36.58,
+                               "changePct":  4.284559417946655,
+                               "amplitudePct":  6.9253570466181635,
+                               "volume":  259673,
+                               "amount":  994164160,
+                               "amountText":  "9.94亿元",
+                               "text":  "现价38.70，涨跌幅4.28%，成交额9.94亿元"
+                           },
+                 "auction":  {
+                                 "count":  31,
+                                 "latestTime":  "09:24:57",
+                                 "latestPrice":  37.12,
+                                 "changePct":  0.026946914578275423,
+                                 "matchedVolume":  1311,
+                                 "unmatchedVolume":  103,
+                                 "unmatchedSide":  "sell",
+                                 "unmatchedSideText":  "卖盘未匹配",
+                                 "items":  [
+                                               {
+                                                   "time":  "09:21:48",
+                                                   "price":  37.12,
+                                                   "match":  185,
+                                                   "unmatched":  85,
+                                                   "flag":  1,
+                                                   "side":  "buy",
+                                                   "sideText":  "买盘未匹配"
+                                               },
+                                               {
+                                                   "time":  "09:21:57",
+                                                   "price":  37.12,
+                                                   "match":  201,
+                                                   "unmatched":  69,
+                                                   "flag":  1,
+                                                   "side":  "buy",
+                                                   "sideText":  "买盘未匹配"
+                                               },
+                                               {
+                                                   "time":  "09:22:06",
+                                                   "price":  37.12,
+                                                   "match":  201,
+                                                   "unmatched":  72,
+                                                   "flag":  1,
+                                                   "side":  "buy",
+                                                   "sideText":  "买盘未匹配"
+                                               },
+                                               {
+                                                   "time":  "09:22:15",
+                                                   "price":  37.12,
+                                                   "match":  210,
+                                                   "unmatched":  66,
+                                                   "flag":  1,
+                                                   "side":  "buy",
+                                                   "sideText":  "买盘未匹配"
+                                               },
+                                               {
+                                                   "time":  "09:22:24",
+                                                   "price":  37.12,
+                                                   "match":  224,
+                                                   "unmatched":  56,
+                                                   "flag":  1,
+                                                   "side":  "buy",
+                                                   "sideText":  "买盘未匹配"
+                                               },
+                                               {
+                                                   "time":  "09:22:33",
+                                                   "price":  37.12,
+                                                   "match":  224,
+                                                   "unmatched":  61,
+                                                   "flag":  1,
+                                                   "side":  "buy",
+                                                   "sideText":  "买盘未匹配"
+                                               },
+                                               {
+                                                   "time":  "09:22:42",
+                                                   "price":  37.12,
+                                                   "match":  250,
+                                                   "unmatched":  36,
+                                                   "flag":  1,
+                                                   "side":  "buy",
+                                                   "sideText":  "买盘未匹配"
+                                               },
+                                               {
+                                                   "time":  "09:22:51",
+                                                   "price":  37.12,
+                                                   "match":  252,
+                                                   "unmatched":  35,
+                                                   "flag":  1,
+                                                   "side":  "buy",
+                                                   "sideText":  "买盘未匹配"
+                                               },
+                                               {
+                                                   "time":  "09:23:00",
+                                                   "price":  37.12,
+                                                   "match":  258,
+                                                   "unmatched":  29,
+                                                   "flag":  1,
+                                                   "side":  "buy",
+                                                   "sideText":  "买盘未匹配"
+                                               },
+                                               {
+                                                   "time":  "09:23:18",
+                                                   "price":  37.12,
+                                                   "match":  294,
+                                                   "unmatched":  47,
+                                                   "flag":  -1,
+                                                   "side":  "sell",
+                                                   "sideText":  "卖盘未匹配"
+                                               },
+                                               {
+                                                   "time":  "09:23:27",
+                                                   "price":  37.12,
+                                                   "match":  298,
+                                                   "unmatched":  43,
+                                                   "flag":  -1,
+                                                   "side":  "sell",
+                                                   "sideText":  "卖盘未匹配"
+                                               },
+                                               {
+                                                   "time":  "09:23:45",
+                                                   "price":  37.12,
+                                                   "match":  335,
+                                                   "unmatched":  106,
+                                                   "flag":  -1,
+                                                   "side":  "sell",
+                                                   "sideText":  "卖盘未匹配"
+                                               },
+                                               {
+                                                   "time":  "09:23:54",
+                                                   "price":  37.12,
+                                                   "match":  361,
+                                                   "unmatched":  87,
+                                                   "flag":  -1,
+                                                   "side":  "sell",
+                                                   "sideText":  "卖盘未匹配"
+                                               },
+                                               {
+                                                   "time":  "09:24:03",
+                                                   "price":  37.12,
+                                                   "match":  393,
+                                                   "unmatched":  571,
+                                                   "flag":  -1,
+                                                   "side":  "sell",
+                                                   "sideText":  "卖盘未匹配"
+                                               },
+                                               {
+                                                   "time":  "09:24:12",
+                                                   "price":  37.12,
+                                                   "match":  397,
+                                                   "unmatched":  572,
+                                                   "flag":  -1,
+                                                   "side":  "sell",
+                                                   "sideText":  "卖盘未匹配"
+                                               },
+                                               {
+                                                   "time":  "09:24:21",
+                                                   "price":  37.12,
+                                                   "match":  413,
+                                                   "unmatched":  563,
+                                                   "flag":  -1,
+                                                   "side":  "sell",
+                                                   "sideText":  "卖盘未匹配"
+                                               },
+                                               {
+                                                   "time":  "09:24:30",
+                                                   "price":  37.12,
+                                                   "match":  449,
+                                                   "unmatched":  558,
+                                                   "flag":  -1,
+                                                   "side":  "sell",
+                                                   "sideText":  "卖盘未匹配"
+                                               },
+                                               {
+                                                   "time":  "09:24:39",
+                                                   "price":  37.11,
+                                                   "match":  533,
+                                                   "unmatched":  168,
+                                                   "flag":  1,
+                                                   "side":  "buy",
+                                                   "sideText":  "买盘未匹配"
+                                               },
+                                               {
+                                                   "time":  "09:24:48",
+                                                   "price":  37.12,
+                                                   "match":  715,
+                                                   "unmatched":  501,
+                                                   "flag":  -1,
+                                                   "side":  "sell",
+                                                   "sideText":  "卖盘未匹配"
+                                               },
+                                               {
+                                                   "time":  "09:24:57",
+                                                   "price":  37.12,
+                                                   "match":  1311,
+                                                   "unmatched":  103,
+                                                   "flag":  -1,
+                                                   "side":  "sell",
+                                                   "sideText":  "卖盘未匹配"
+                                               }
+                                           ]
+                             },
+                 "context":  {
+                                 "prevClose":  37.11,
+                                 "ret5":  -8.876854250058857,
+                                 "ret20":  4.878048780487817
+                             },
+                 "limits":  {
+                                "auctionItems":  20,
+                                "klineDays":  20
+                            },
+                 "note":  "集合竞价聚合接口；聚焦竞价末笔、相对昨收、未匹配方向和近5/20日背景。"
+             }
+}
