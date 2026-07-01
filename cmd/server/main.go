@@ -19,6 +19,7 @@ var (
 	mainClient *tdx.Client
 	exClient   *tdx.Client
 	gbbq       *tdx.Gbbq
+	paperStore *PaperStore
 	startTime  = time.Now()
 )
 
@@ -50,8 +51,18 @@ func main() {
 		}
 	}()
 
+	paperDB, err := openPaperDB(paperDBPath())
+	if err != nil {
+		log.Printf("paper db init failed: %v", err)
+	} else {
+		paperStore = NewPaperStore(paperDB)
+		startPaperBackgroundTasks(paperStore, quotePaperFromTDX)
+		log.Println("paper trading store initialized")
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", handleWebUI)
+	mux.HandleFunc("/api/quote", handleQuote)
 	// A股行情
 	mux.HandleFunc("/api/quote", handleQuote)
 	mux.HandleFunc("/api/kline", handleKline)
@@ -66,6 +77,7 @@ func main() {
 	mux.HandleFunc("/api/adjust-factors", handleFactors)
 	mux.HandleFunc("/api/gbbq/adjust", handleGbbqAdjust)
 	mux.HandleFunc("/api/gbbq/all", handleGbbqAll)
+	mux.HandleFunc("/api/finance", handleFinance)
 	// 基本面
 	mux.HandleFunc("/api/finance", handleFinance)
 	mux.HandleFunc("/api/f10", handleF10)
@@ -99,8 +111,14 @@ func main() {
 	mux.HandleFunc("/api/agent/kline-summary-text", handleAgentKlineSummaryText)
 	mux.HandleFunc("/api/agent/trade-flow-estimate", handleAgentTradeFlowEstimate)
 	mux.HandleFunc("/api/agent/trade-flow-estimate-text", handleAgentTradeFlowEstimateText)
+	mux.HandleFunc("/api/paper/dashboard", handlePaperDashboard)
+	mux.HandleFunc("/api/paper/accounts", handlePaperAccounts)
+	mux.HandleFunc("/api/paper/account", handlePaperAccount)
+	mux.HandleFunc("/api/paper/activity", handlePaperActivity)
+	mux.HandleFunc("/api/paper/closed-positions", handlePaperClosedPositions)
 	// MCP
 	mux.HandleFunc("/mcp", handleMCP)
+	mux.HandleFunc("/api/stat", handleStat)
 	// 全市场统计
 	mux.HandleFunc("/api/stat", handleStat)
 	mux.HandleFunc("/api/moneyflow", handleMoneyflow)
@@ -115,6 +133,7 @@ func main() {
 	// 工具
 	mux.HandleFunc("/api/search", handleSearch)
 	mux.HandleFunc("/api/history-trade", handleHistoryTrade)
+	mux.HandleFunc("/api/stocks/refresh", handleStocksRefresh)
 	// 股票对照表（SQLite）
 	mux.HandleFunc("/api/stocks/refresh", handleStocksRefresh)
 	mux.HandleFunc("/api/stocks/search", handleStocksSearch)
@@ -124,7 +143,7 @@ func main() {
 	if p := os.Getenv("PORT"); p != "" {
 		port = p
 	}
-	nEndpoints := 46
+	nEndpoints := 51
 	log.Printf("🚀 TDX API Server v2.1 准备监听 :%s (%d endpoints)", port, nEndpoints)
 
 	startBackgroundInitializers(
