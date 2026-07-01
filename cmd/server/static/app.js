@@ -229,8 +229,16 @@ function drawEquityCurve(series) {
   ctx.strokeStyle = "#243140";
   ctx.lineWidth = 1;
 
+  const plot = {
+    left: 18,
+    right: 14,
+    top: 28,
+    bottom: 238,
+    axisY: 258,
+    labelY: 284
+  };
   for (let i = 0; i < 5; i++) {
-    const y = 24 + i * 56;
+    const y = plot.top + i * ((plot.bottom - plot.top) / 4);
     ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.lineTo(rect.width, y);
@@ -246,22 +254,37 @@ function drawEquityCurve(series) {
     return;
   }
 
-  const values = series.flatMap((item) => item.points.map((point) => point.totalAssets));
+  const days = getCurveDays(series);
+  const values = series.flatMap((item) => dailyCurvePoints(item.points).map(
+    (point) => point.totalAssets
+  ));
   const min = Math.min(...values);
   const max = Math.max(...values);
   const span = max - min || 1;
-  const width = rect.width - 28;
-  const height = 230;
+  const width = rect.width - plot.left - plot.right;
+  const height = plot.bottom - plot.top;
+
+  drawCurveXAxis(ctx, days, plot, width);
 
   series.forEach((item, seriesIndex) => {
+    const pointsByDay = Object.fromEntries(dailyCurvePoints(item.points).map((point) => [
+      point.tradingDay,
+      point
+    ]));
     ctx.strokeStyle = curveColors[seriesIndex % curveColors.length];
     ctx.lineWidth = 2;
     ctx.beginPath();
-    item.points.forEach((point, index) => {
-      const x = 14 + (width * index) / Math.max(1, item.points.length - 1);
-      const y = 252 - ((point.totalAssets - min) / span) * height;
-      if (index === 0) {
+    let started = false;
+    days.forEach((day, index) => {
+      const point = pointsByDay[day];
+      if (!point) {
+        return;
+      }
+      const x = plot.left + (width * index) / Math.max(1, days.length - 1);
+      const y = plot.bottom - ((point.totalAssets - min) / span) * height;
+      if (!started) {
         ctx.moveTo(x, y);
+        started = true;
       } else {
         ctx.lineTo(x, y);
       }
@@ -273,7 +296,50 @@ function drawEquityCurve(series) {
   ctx.font = "12px Microsoft YaHei, sans-serif";
   ctx.textAlign = "left";
   ctx.fillText(`最高 ${fmtMoney.format(max)}`, 14, 20);
-  ctx.fillText(`最低 ${fmtMoney.format(min)}`, 14, 292);
+  ctx.fillText(`最低 ${fmtMoney.format(min)}`, 14, 250);
+}
+
+function getCurveDays(series) {
+  return Array.from(new Set(
+    series.flatMap((item) => dailyCurvePoints(item.points).map((point) => point.tradingDay))
+  )).sort();
+}
+
+function dailyCurvePoints(points) {
+  const byDay = new Map();
+  for (const point of points || []) {
+    if (point.tradingDay) {
+      byDay.set(point.tradingDay, point);
+    }
+  }
+  return Array.from(byDay.values()).sort((a, b) => a.tradingDay.localeCompare(b.tradingDay));
+}
+
+function drawCurveXAxis(ctx, days, plot, width) {
+  ctx.strokeStyle = "#2b3a4a";
+  ctx.fillStyle = "#8795a5";
+  ctx.font = "11px Microsoft YaHei, sans-serif";
+  ctx.textAlign = "center";
+  const labelStep = Math.max(1, Math.ceil(days.length / Math.max(1, Math.floor(width / 72))));
+  days.forEach((day, index) => {
+    const x = plot.left + (width * index) / Math.max(1, days.length - 1);
+    ctx.beginPath();
+    ctx.moveTo(x, plot.axisY - 4);
+    ctx.lineTo(x, plot.axisY + 4);
+    ctx.stroke();
+    if (index % labelStep === 0 || index === days.length - 1) {
+      ctx.fillText(formatDayLabel(day), x, plot.labelY);
+    }
+  });
+  ctx.beginPath();
+  ctx.moveTo(plot.left, plot.axisY);
+  ctx.lineTo(plot.left + width, plot.axisY);
+  ctx.stroke();
+}
+
+function formatDayLabel(day) {
+  const [, month, date] = String(day).split("-");
+  return month && date ? `${month}/${date}` : day;
 }
 
 function renderCurveLegend(series) {
