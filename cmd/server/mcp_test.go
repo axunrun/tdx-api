@@ -59,6 +59,38 @@ func TestMCPInitializeAndToolsList(t *testing.T) {
 	}
 }
 
+func TestMCPToolSchemasDescribeHotspotParameters(t *testing.T) {
+	var hotspot *mcpTool
+	for _, tool := range mcpTools() {
+		if tool.Name == "tdx_hotspot_scan_text" {
+			tool := tool
+			hotspot = &tool
+			break
+		}
+	}
+	if hotspot == nil {
+		t.Fatal("tdx_hotspot_scan_text missing")
+	}
+	if hotspot.Description == "" {
+		t.Fatal("hotspot tool description missing")
+	}
+
+	properties := hotspot.InputSchema["properties"].(map[string]any)
+	for _, name := range []string{"metric", "sectorType", "startDate", "endDate", "limit"} {
+		property := properties[name].(map[string]any)
+		if property["description"] == "" {
+			t.Fatalf("%s description missing", name)
+		}
+	}
+	metric := properties["metric"].(map[string]any)
+	if len(metric["enum"].([]string)) == 0 {
+		t.Fatal("metric enum missing")
+	}
+	if properties["limit"].(map[string]any)["default"] != 20 {
+		t.Fatal("limit default missing")
+	}
+}
+
 func TestMCPCallUnknownToolReturnsError(t *testing.T) {
 	body := bytes.NewBufferString(`{
 		"jsonrpc":"2.0",
