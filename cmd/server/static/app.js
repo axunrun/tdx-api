@@ -4,6 +4,7 @@ const fmtMoney = new Intl.NumberFormat("zh-CN", {
   maximumFractionDigits: 2
 });
 const fmtNumber = new Intl.NumberFormat("zh-CN");
+const curveColors = ["#4fb3ff", "#42d392", "#f4c95d", "#ff626e", "#b68cff", "#35d0ba"];
 
 const state = {
   dashboard: null,
@@ -12,7 +13,7 @@ const state = {
 };
 
 document.addEventListener("DOMContentLoaded", init);
-window.addEventListener("resize", () => drawEquityCurve(state.dashboard?.equityCurve || []));
+window.addEventListener("resize", () => drawEquityCurve(getEquitySeries()));
 
 async function init() {
   try {
@@ -61,8 +62,8 @@ function render() {
   renderPositions(dashboard.positions || []);
   renderOrdersTrades(dashboard.orders || [], dashboard.trades || []);
   renderClosedPositions(state.closed);
-  renderActivity(state.activity);
-  drawEquityCurve(dashboard.equityCurve || []);
+  renderActivity(state.activity, accounts);
+  drawEquityCurve(getEquitySeries());
 }
 
 function renderAccounts(accounts, selectedAccount) {
@@ -170,19 +171,35 @@ function renderClosedPositions(items) {
     : `<div class="empty-line">暂无清仓记录</div>`;
 }
 
-function renderActivity(items) {
+function renderActivity(items, accounts) {
+  const accountNames = Object.fromEntries(accounts.map((item) => [item.id, item.name]));
   text("activityCount", items.length);
   document.getElementById("activityTimeline").innerHTML = items.length
     ? items.slice(0, 12).map((item) => `
       <li>
-        <strong>${escapeHtml(item.actionType)}</strong>
-        <span class="muted">${formatTime(item.createdAt)} · ${escapeHtml(item.accountId || "--")}</span>
+        <strong>${escapeHtml(describeActivity(item))}</strong>
+        <span class="muted">${formatTime(item.createdAt)} · ${escapeHtml(accountNames[item.accountId] || item.accountId || "--")}</span>
       </li>
     `).join("")
     : `<li class="empty-line">暂无 Agent 行为</li>`;
 }
 
-function drawEquityCurve(points) {
+function getEquitySeries() {
+  const dashboard = state.dashboard || {};
+  if (Array.isArray(dashboard.equityCurves) && dashboard.equityCurves.length) {
+    return dashboard.equityCurves.filter((item) => item.points?.length);
+  }
+  if (dashboard.equityCurve?.length) {
+    return [{
+      accountId: dashboard.selectedAccount?.id || "selected",
+      accountName: dashboard.selectedAccount?.name || "当前账户",
+      points: dashboard.equityCurve
+    }];
+  }
+  return [];
+}
+
+function drawEquityCurve(series) {
   const canvas = document.getElementById("equityCanvas");
   const rect = canvas.getBoundingClientRect();
   const scale = window.devicePixelRatio || 1;
@@ -203,7 +220,8 @@ function drawEquityCurve(points) {
     ctx.stroke();
   }
 
-  if (!points.length) {
+  renderCurveLegend(series);
+  if (!series.length) {
     ctx.fillStyle = "#8795a5";
     ctx.font = "13px Microsoft YaHei, sans-serif";
     ctx.textAlign = "center";
@@ -211,32 +229,86 @@ function drawEquityCurve(points) {
     return;
   }
 
-  const values = points.map((item) => item.totalAssets);
+  const values = series.flatMap((item) => item.points.map((point) => point.totalAssets));
   const min = Math.min(...values);
   const max = Math.max(...values);
   const span = max - min || 1;
   const width = rect.width - 28;
   const height = 230;
 
-  ctx.strokeStyle = "#4fb3ff";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  points.forEach((point, index) => {
-    const x = 14 + (width * index) / Math.max(1, points.length - 1);
-    const y = 252 - ((point.totalAssets - min) / span) * height;
-    if (index === 0) {
-      ctx.moveTo(x, y);
-    } else {
-      ctx.lineTo(x, y);
-    }
+  series.forEach((item, seriesIndex) => {
+    ctx.strokeStyle = curveColors[seriesIndex % curveColors.length];
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    item.points.forEach((point, index) => {
+      const x = 14 + (width * index) / Math.max(1, item.points.length - 1);
+      const y = 252 - ((point.totalAssets - min) / span) * height;
+      if (index === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    });
+    ctx.stroke();
   });
-  ctx.stroke();
 
   ctx.fillStyle = "#e7edf4";
   ctx.font = "12px Microsoft YaHei, sans-serif";
   ctx.textAlign = "left";
   ctx.fillText(`最高 ${fmtMoney.format(max)}`, 14, 20);
   ctx.fillText(`最低 ${fmtMoney.format(min)}`, 14, 292);
+}
+
+function renderCurveLegend(series) {
+  const canvas = document.getElementById("equityCanvas");
+  let legend = document.getElementById("equityLegend");
+  if (!legend) {
+    legend = document.createElement("div");
+    legend.id = "equityLegend";
+    legend.className = "curve-legend";
+    canvas.insertAdjacentElement("afterend", legend);
+  }
+  legend.innerHTML = series.map((item, index) => `
+    <span>
+      <i style="background:${curveColors[index % curveColors.length]}"></i>
+      ${escapeHtml(item.accountName || item.accountId)}
+    </span>
+  `).join("");
+}
+
+function describeActivity(item) {
+  const request = parseJSON(item.request);
+  const response = parseJSON(item.response);
+  if (item.actionType === "create_account") {
+    const positions = request.initialPositions || [];
+    return `创建账户 ${request.name || ""}，初始资金 ${fmtMoney.format(request.initialCash || 0)}，初始持仓 ${positions.length} 只`;
+  }
+  if (item.actionType === "place_order") {
+    const side = request.side === "sell" ? "卖出" : "买入";
+    const name = request.name || request.code || response.name || response.code || "";
+    const price = request.price ? `，委托价 ${fmtMoney.format(request.price)}` : "";
+    return `提交委托：${side} ${name} ${fmtNumber.format(request.quantity || 0)} 股${price}`;
+  }
+  if (item.actionType === "fill_order") {
+    const side = response.side === "sell" ? "卖出成交" : "买入成交";
+    const name = response.name || response.code || request.code || "";
+    return `${side}：${name} ${fmtNumber.format(response.quantity || 0)} 股，成交额 ${fmtMoney.format(response.amount || 0)}`;
+  }
+  if (item.actionType === "cancel_order") {
+    return `撤销委托：${request.orderId || ""}`;
+  }
+  return item.actionType || "账户行为";
+}
+
+function parseJSON(value) {
+  if (!value) {
+    return {};
+  }
+  try {
+    return JSON.parse(value);
+  } catch {
+    return {};
+  }
 }
 
 function renderError(error) {

@@ -23,6 +23,12 @@ type PaperEquityPoint struct {
 	CreatedAt   string  `json:"createdAt"`
 }
 
+type PaperEquitySeries struct {
+	AccountID   string             `json:"accountId"`
+	AccountName string             `json:"accountName"`
+	Points      []PaperEquityPoint `json:"points"`
+}
+
 func handlePaperAccounts(w http.ResponseWriter, r *http.Request) {
 	handlePaperAccountsWithStore(paperStore)(w, r)
 }
@@ -118,6 +124,11 @@ func handlePaperDashboardWithStore(store *PaperStore) http.HandlerFunc {
 		trades := []PaperTrade{}
 		closedPositions := []PaperClosedPosition{}
 		equityCurve := []PaperEquityPoint{}
+		equityCurves, err := listPaperEquityCurves(store, accounts)
+		if err != nil {
+			jsonErr(w, err.Error())
+			return
+		}
 		if selectedAccount != nil {
 			positions, orders, trades, err = loadPaperAccountActivity(store, selectedAccount.ID)
 			if err != nil {
@@ -149,6 +160,7 @@ func handlePaperDashboardWithStore(store *PaperStore) http.HandlerFunc {
 			"trades":          emptyPaperTrades(trades),
 			"closedPositions": emptyPaperClosedPositions(closedPositions),
 			"equityCurve":     equityCurve,
+			"equityCurves":    equityCurves,
 		})
 	}
 }
@@ -276,6 +288,25 @@ func listPaperEquityCurve(store *PaperStore, accountID string) ([]PaperEquityPoi
 		points = append(points, point)
 	}
 	return points, rows.Err()
+}
+
+func listPaperEquityCurves(
+	store *PaperStore,
+	accounts []PaperAccount,
+) ([]PaperEquitySeries, error) {
+	series := make([]PaperEquitySeries, 0, len(accounts))
+	for _, account := range accounts {
+		points, err := listPaperEquityCurve(store, account.ID)
+		if err != nil {
+			return nil, err
+		}
+		series = append(series, PaperEquitySeries{
+			AccountID:   account.ID,
+			AccountName: account.Name,
+			Points:      points,
+		})
+	}
+	return series, nil
 }
 
 func paperActivityLimit(r *http.Request) int {

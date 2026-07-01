@@ -179,6 +179,27 @@ canvas {
   height: 300px;
 }
 
+.curve-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.curve-legend span {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.curve-legend i {
+  width: 18px;
+  height: 3px;
+  border-radius: 999px;
+}
+
 .metric {
   display: flex;
   justify-content: space-between;
