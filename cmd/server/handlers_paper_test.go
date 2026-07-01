@@ -96,6 +96,40 @@ func TestHandlePaperDashboardReturnsAllEquityCurves(t *testing.T) {
 	}
 }
 
+func TestHandlePaperActivityFiltersAccount(t *testing.T) {
+	store := newTestPaperStore(t)
+	first, err := store.CreateAccount(PaperCreateAccountRequest{
+		Name:        "alpha",
+		InitialCash: 100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CreateAccount(PaperCreateAccountRequest{
+		Name:        "beta",
+		InitialCash: 100,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/paper/activity?accountId="+first.ID,
+		nil,
+	)
+	handlePaperActivityWithStore(store)(rec, req)
+
+	data := decodePaperResponse(t, rec, http.StatusOK)
+	items := data["items"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("len(items) = %d, want 1", len(items))
+	}
+	if items[0].(map[string]any)["accountId"] != first.ID {
+		t.Fatalf("items = %+v, want account %s", items, first.ID)
+	}
+}
+
 func TestHandlePaperClosedPositionsRequiresAccountID(t *testing.T) {
 	store := newTestPaperStore(t)
 

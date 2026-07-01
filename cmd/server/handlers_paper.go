@@ -170,7 +170,8 @@ func handlePaperActivityWithStore(store *PaperStore) http.HandlerFunc {
 		if !requirePaperGET(w, r) || !requirePaperStore(w, store) {
 			return
 		}
-		actions, err := listPaperAgentActions(store, paperActivityLimit(r))
+		accountID := strings.TrimSpace(r.URL.Query().Get("accountId"))
+		actions, err := listPaperAgentActions(store, accountID, paperActivityLimit(r))
 		if err != nil {
 			jsonErr(w, err.Error())
 			return
@@ -241,14 +242,25 @@ func loadPaperAccountActivity(
 	return positions, orders, trades, nil
 }
 
-func listPaperAgentActions(store *PaperStore, limit int) ([]PaperAgentAction, error) {
-	rows, err := store.db.Query(`
+func listPaperAgentActions(
+	store *PaperStore,
+	accountID string,
+	limit int,
+) ([]PaperAgentAction, error) {
+	query := `
 		SELECT id, account_id, action_type, COALESCE(request, ''),
 			COALESCE(response, ''), created_at
 		FROM paper_agent_actions
-		ORDER BY created_at DESC, rowid DESC
-		LIMIT ?
-	`, limit)
+	`
+	args := []any{}
+	if accountID != "" {
+		query += ` WHERE account_id = ?`
+		args = append(args, accountID)
+	}
+	query += ` ORDER BY created_at DESC, rowid DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := store.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}

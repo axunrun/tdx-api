@@ -318,7 +318,7 @@ func callPaperPortfolioMCP(args map[string]any) (map[string]any, error) {
 			"count": len(positions),
 		}), nil
 	case "actions":
-		actions, err := listPaperAgentActions(store, limit)
+		actions, err := listPaperAgentActions(store, accountID, limit)
 		if err != nil {
 			return nil, err
 		}

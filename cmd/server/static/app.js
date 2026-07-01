@@ -7,32 +7,32 @@ const fmtNumber = new Intl.NumberFormat("zh-CN");
 const curveColors = ["#4fb3ff", "#42d392", "#f4c95d", "#ff626e", "#b68cff", "#35d0ba"];
 
 const state = {
+  accountId: "",
   dashboard: null,
   activity: [],
   closed: []
 };
 
-document.addEventListener("DOMContentLoaded", init);
+document.addEventListener("DOMContentLoaded", () => loadAccount(""));
 window.addEventListener("resize", () => drawEquityCurve(getEquitySeries()));
 
-async function init() {
+async function loadAccount(accountId) {
   try {
-    const [dashboard, activity] = await Promise.all([
-      fetchData("/api/paper/dashboard?range=20d"),
-      fetchData("/api/paper/activity?limit=80")
+    const query = accountId ? `&accountId=${encodeURIComponent(accountId)}` : "";
+    const dashboard = await fetchData(`/api/paper/dashboard?range=20d${query}`);
+    const selectedID = dashboard.selectedAccount?.id || "";
+    const activityQuery = selectedID ? `&accountId=${encodeURIComponent(selectedID)}` : "";
+    const [activity, closed] = await Promise.all([
+      fetchData(`/api/paper/activity?limit=80${activityQuery}`),
+      selectedID
+        ? fetchData(`/api/paper/closed-positions?accountId=${encodeURIComponent(selectedID)}&range=60d`)
+        : Promise.resolve({ items: [] })
     ]);
 
+    state.accountId = selectedID;
     state.dashboard = dashboard;
     state.activity = activity.items || [];
-
-    if (dashboard.selectedAccount?.id) {
-      state.closed = (await fetchData(
-        `/api/paper/closed-positions?accountId=${encodeURIComponent(
-          dashboard.selectedAccount.id
-        )}&range=60d`
-      )).items || [];
-    }
-
+    state.closed = closed.items || [];
     render();
   } catch (error) {
     renderError(error);
@@ -72,7 +72,7 @@ function renderAccounts(accounts, selectedAccount) {
     const isSelected = account.id === selectedAccount?.id;
     const totalCash = account.availableCash + account.frozenCash;
     return `
-      <article class="account-card">
+      <article class="account-card ${isSelected ? "selected" : ""}">
         <div class="name">
           <span>${escapeHtml(account.name)}</span>
           <span class="pill">${isSelected ? "当前" : account.status}</span>
@@ -89,24 +89,41 @@ function renderAccounts(accounts, selectedAccount) {
 
 function renderMarketOverview(dashboard) {
   const account = dashboard.selectedAccount;
+  const accounts = dashboard.accounts || [];
   const positions = dashboard.positions || [];
   const orders = dashboard.orders || [];
   const trades = dashboard.trades || [];
   const status = dashboard.marketStatus || {};
+  const selectedID = account?.id || "";
+  const accountOptions = accounts.map((item) => `
+    <option value="${escapeHtml(item.id)}" ${item.id === selectedID ? "selected" : ""}>
+      ${escapeHtml(item.name)}
+    </option>
+  `).join("");
   const values = [
-    ["账户", account ? account.name : "未选择", account ? "good" : "warn"],
     ["市场状态", status.note || status.status || "未知", "warn"],
     ["持仓标的", `${positions.length} 个`, ""],
     ["待处理委托", `${orders.filter((item) => item.status === "pending").length} 笔`, ""],
     ["成交记录", `${trades.length} 笔`, ""]
   ];
 
-  document.getElementById("marketOverview").innerHTML = values.map(([label, value, tone]) => `
-    <div class="metric">
-      <span class="muted">${label}</span>
-      <strong class="${tone}">${escapeHtml(value)}</strong>
+  document.getElementById("marketOverview").innerHTML = `
+    <div class="metric account-filter">
+      <span class="muted">账户</span>
+      <select id="accountFilter" aria-label="切换账户">
+        ${accountOptions || "<option>未选择</option>"}
+      </select>
     </div>
-  `).join("");
+    ${values.map(([label, value, tone]) => `
+      <div class="metric">
+        <span class="muted">${label}</span>
+        <strong class="${tone}">${escapeHtml(value)}</strong>
+      </div>
+    `).join("")}
+  `;
+  const select = document.getElementById("accountFilter");
+  select.disabled = accounts.length === 0;
+  select.addEventListener("change", (event) => loadAccount(event.target.value));
 }
 
 function renderPositions(items) {
@@ -291,7 +308,7 @@ function describeActivity(item) {
   }
   if (item.actionType === "fill_order") {
     const side = response.side === "sell" ? "卖出成交" : "买入成交";
-    const name = response.name || response.code || request.code || "";
+    const name = response.name || response.code || request.name || request.code || "";
     return `${side}：${name} ${fmtNumber.format(response.quantity || 0)} 股，成交额 ${fmtMoney.format(response.amount || 0)}`;
   }
   if (item.actionType === "cancel_order") {
