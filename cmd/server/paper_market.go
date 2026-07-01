@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/injoyai/tdx"
+	"github.com/injoyai/tdx/protocol"
 )
 
 type PaperMarketSnapshot struct {
@@ -42,6 +43,8 @@ func loadPaperMarketSnapshot(c *tdx.Client, now time.Time) PaperMarketSnapshot {
 	ttl := paperMarketSnapshotTTL(session, now)
 
 	paperMarketCache.mu.Lock()
+	previous := paperMarketCache.snapshot
+	hasPrevious := paperMarketCache.loaded
 	if paperMarketCache.loaded && now.Before(paperMarketCache.expiresAt) {
 		snapshot := paperMarketCache.snapshot
 		paperMarketCache.mu.Unlock()
@@ -50,12 +53,25 @@ func loadPaperMarketSnapshot(c *tdx.Client, now time.Time) PaperMarketSnapshot {
 	paperMarketCache.mu.Unlock()
 
 	snapshot := buildPaperMarketSnapshot(c, session, now, ttl)
+	snapshot = applyPaperMarketFallback(snapshot, previous, hasPrevious)
 
 	paperMarketCache.mu.Lock()
 	paperMarketCache.snapshot = snapshot
 	paperMarketCache.expiresAt = now.Add(ttl)
 	paperMarketCache.loaded = true
 	paperMarketCache.mu.Unlock()
+	return snapshot
+}
+
+func applyPaperMarketFallback(
+	snapshot PaperMarketSnapshot,
+	previous PaperMarketSnapshot,
+	hasPrevious bool,
+) PaperMarketSnapshot {
+	if snapshot.Breadth.Total == 0 && hasPrevious && previous.Breadth.Total > 0 {
+		snapshot.Breadth = previous.Breadth
+		snapshot.Warnings = append(snapshot.Warnings, "市场广度获取失败，沿用上一笔有效快照")
+	}
 	return snapshot
 }
 
@@ -79,7 +95,7 @@ func buildPaperMarketSnapshot(
 		warnings = append(warnings, indexWarnings...)
 		indexes = paperMarketIndexes(agentIndexes)
 
-		stats, err := c.GetTdxStat()
+		stats, err := fetchPaperMarketStats(c)
 		if err != nil {
 			warnings = append(warnings, "GetTdxStat失败: "+err.Error())
 		} else {
@@ -97,6 +113,15 @@ func buildPaperMarketSnapshot(
 		NextRefresh: now.Add(ttl).Format(time.RFC3339),
 		Warnings:    warnings,
 	}
+}
+
+func fetchPaperMarketStats(c *tdx.Client) ([]*protocol.TdxStat, error) {
+	stats, err := c.GetTdxStat()
+	if err == nil {
+		return stats, nil
+	}
+	time.Sleep(300 * time.Millisecond)
+	return c.GetTdxStat()
 }
 
 func paperMarketIndexes(items []AgentMarketIndex) []PaperMarketIndex {

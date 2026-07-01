@@ -20,7 +20,7 @@ func TestHandleWebUI(t *testing.T) {
 			path:        "/",
 			wantStatus:  http.StatusOK,
 			contentType: "text/html",
-			contains:    "只读模拟交易看板",
+			contains:    "AI Agent 投资策略看板",
 		},
 		{
 			name:        "css",

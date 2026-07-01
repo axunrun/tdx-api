@@ -82,3 +82,22 @@ func TestPaperMarketSnapshotTTL(t *testing.T) {
 		t.Fatalf("boundary ttl = %s", got)
 	}
 }
+
+func TestApplyPaperMarketFallbackKeepsPreviousBreadth(t *testing.T) {
+	previous := PaperMarketSnapshot{
+		Breadth: AgentMarketBreadth{Total: 10, Rising: 6, Falling: 3, Flat: 1},
+	}
+	snapshot := PaperMarketSnapshot{
+		Breadth:  AgentMarketBreadth{Total: 0},
+		Warnings: []string{"GetTdxStat失败: 超时"},
+	}
+
+	got := applyPaperMarketFallback(snapshot, previous, true)
+
+	if got.Breadth.Total != 10 || got.Breadth.Rising != 6 {
+		t.Fatalf("breadth = %+v, want previous breadth", got.Breadth)
+	}
+	if len(got.Warnings) != 2 {
+		t.Fatalf("warnings = %+v, want original warning plus fallback note", got.Warnings)
+	}
+}
