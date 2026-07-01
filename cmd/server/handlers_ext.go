@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
-	"html/template"
 	"net/http"
 	"strings"
 	"unicode/utf8"
@@ -15,10 +14,30 @@ import (
 // ====== WebUI ======
 
 func handleWebUI(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" { http.NotFound(w, r); return }
-	tmpl, _ := template.ParseFS(staticFiles, "static/index.html")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	tmpl.Execute(w, nil)
+	fileName := ""
+	contentType := ""
+	switch r.URL.Path {
+	case "/":
+		fileName = "static/index.html"
+		contentType = "text/html; charset=utf-8"
+	case "/static/styles.css":
+		fileName = "static/styles.css"
+		contentType = "text/css; charset=utf-8"
+	case "/static/app.js":
+		fileName = "static/app.js"
+		contentType = "application/javascript; charset=utf-8"
+	default:
+		http.NotFound(w, r)
+		return
+	}
+
+	body, err := staticFiles.ReadFile(fileName)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Write(body)
 }
 
 // ====== 搜索 ======
@@ -124,16 +143,25 @@ func parseProfileNames(data []byte, m map[string]string) {
 
 func handleSearch(w http.ResponseWriter, r *http.Request) {
 	kw := r.URL.Query().Get("keyword")
-	if kw == "" { jsonErr(w, "缺少keyword"); return }
+	if kw == "" {
+		jsonErr(w, "缺少keyword")
+		return
+	}
 	c := cli()
-	if c == nil { jsonErr(w, "未连接"); return }
+	if c == nil {
+		jsonErr(w, "未连接")
+		return
+	}
 
 	// 加载代码→名称映射
 	nameMap := loadStockNames(c)
 	if len(nameMap) == 0 {
 		// 如果名称映射获取失败，降级为直接用协议拉代码列表
 		allCodes, err := c.GetStockCodeAll()
-		if err != nil { jsonErr(w, err.Error()); return }
+		if err != nil {
+			jsonErr(w, err.Error())
+			return
+		}
 		kw = strings.ToUpper(kw)
 		type Item struct {
 			Code     string `json:"code"`
@@ -143,14 +171,22 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 		seen := make(map[string]bool)
 		for _, full := range allCodes {
 			short := full[2:]
-			if seen[short] { continue }
+			if seen[short] {
+				continue
+			}
 			ex := "sh"
-			if strings.HasPrefix(full, "sz") { ex = "sz" } else if strings.HasPrefix(full, "bj") { ex = "bj" }
+			if strings.HasPrefix(full, "sz") {
+				ex = "sz"
+			} else if strings.HasPrefix(full, "bj") {
+				ex = "bj"
+			}
 			if strings.Contains(strings.ToUpper(short), kw) {
 				results = append(results, Item{short, ex})
 				seen[short] = true
 			}
-			if len(results) >= 50 { break }
+			if len(results) >= 50 {
+				break
+			}
 		}
 		jsonResp(w, map[string]interface{}{"keyword": kw, "count": len(results), "list": results})
 		return
@@ -167,7 +203,9 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 	seen := make(map[string]bool)
 	// 遍历名称映射字典（code→name）
 	for short, name := range nameMap {
-		if seen[short] { continue }
+		if seen[short] {
+			continue
+		}
 		upperName := strings.ToUpper(name)
 		matched := strings.Contains(strings.ToUpper(short), kw) ||
 			(name != "" && strings.Contains(upperName, kw))
@@ -175,7 +213,9 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 			// 拼音首字母匹配
 			pinyinShort := ""
 			for _, r := range name {
-				if r > 127 { break }
+				if r > 127 {
+					break
+				}
 				pinyinShort += string(r)
 			}
 			if strings.Contains(strings.ToUpper(pinyinShort), kw) {
@@ -192,7 +232,9 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 			results = append(results, Item{short, ex, name})
 			seen[short] = true
 		}
-		if len(results) >= 50 { break }
+		if len(results) >= 50 {
+			break
+		}
 	}
 	jsonResp(w, map[string]interface{}{"keyword": kw, "count": len(results), "list": results})
 }
@@ -202,60 +244,124 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 func handleIndexKline(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
 	typ := r.URL.Query().Get("type")
-	if code == "" { jsonErr(w, "缺少code"); return }
+	if code == "" {
+		jsonErr(w, "缺少code")
+		return
+	}
 	cnt := parseCount(r.URL.Query().Get("count"), 10)
 	c := cli()
-	if c == nil { jsonErr(w, "未连接"); return }
-	var err error; var list []KlineItem
+	if c == nil {
+		jsonErr(w, "未连接")
+		return
+	}
+	var err error
+	var list []KlineItem
 	switch typ {
 	case "minute1":
 		rp, e := c.GetIndex(0x0008, code, 0, uint16(cnt))
-		if e != nil { err = e } else { list = toKlineList(rp.List) }
+		if e != nil {
+			err = e
+		} else {
+			list = toKlineList(rp.List)
+		}
 	case "minute5":
 		rp, e := c.GetIndex5Minute(code, 0, uint16(cnt))
-		if e != nil { err = e } else { list = toKlineList(rp.List) }
+		if e != nil {
+			err = e
+		} else {
+			list = toKlineList(rp.List)
+		}
 	case "minute15":
 		rp, e := c.GetIndex15Minute(code, 0, uint16(cnt))
-		if e != nil { err = e } else { list = toKlineList(rp.List) }
+		if e != nil {
+			err = e
+		} else {
+			list = toKlineList(rp.List)
+		}
 	case "minute30":
 		rp, e := c.GetIndex30Minute(code, 0, uint16(cnt))
-		if e != nil { err = e } else { list = toKlineList(rp.List) }
+		if e != nil {
+			err = e
+		} else {
+			list = toKlineList(rp.List)
+		}
 	case "hour", "minute60":
 		rp, e := c.GetIndex60Minute(code, 0, uint16(cnt))
-		if e != nil { err = e } else { list = toKlineList(rp.List) }
+		if e != nil {
+			err = e
+		} else {
+			list = toKlineList(rp.List)
+		}
 	default:
 		rp, e := c.GetIndexDay(code, 0, uint16(cnt))
-		if e != nil { err = e } else { list = toKlineList(rp.List) }
+		if e != nil {
+			err = e
+		} else {
+			list = toKlineList(rp.List)
+		}
 	}
-	if err != nil { jsonErr(w, err.Error()); return }
+	if err != nil {
+		jsonErr(w, err.Error())
+		return
+	}
 	jsonResp(w, map[string]interface{}{"code": code, "type": typ, "count": len(list), "list": list})
 }
 
 func handleIndexKlineAll(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
 	typ := r.URL.Query().Get("type")
-	if code == "" { jsonErr(w, "缺少code"); return }
+	if code == "" {
+		jsonErr(w, "缺少code")
+		return
+	}
 	c := cli()
-	if c == nil { jsonErr(w, "未连接"); return }
-	var err error; var list []KlineItem
+	if c == nil {
+		jsonErr(w, "未连接")
+		return
+	}
+	var err error
+	var list []KlineItem
 	switch typ {
 	case "week":
 		rp, e := c.GetIndexWeekAll(code)
-		if e != nil { err = e } else { list = toKlineList(rp.List) }
+		if e != nil {
+			err = e
+		} else {
+			list = toKlineList(rp.List)
+		}
 	case "month":
 		rp, e := c.GetIndexMonthAll(code)
-		if e != nil { err = e } else { list = toKlineList(rp.List) }
+		if e != nil {
+			err = e
+		} else {
+			list = toKlineList(rp.List)
+		}
 	case "quarter":
 		rp, e := c.GetIndexQuarterAll(code)
-		if e != nil { err = e } else { list = toKlineList(rp.List) }
+		if e != nil {
+			err = e
+		} else {
+			list = toKlineList(rp.List)
+		}
 	case "year":
 		rp, e := c.GetIndexYearAll(code)
-		if e != nil { err = e } else { list = toKlineList(rp.List) }
+		if e != nil {
+			err = e
+		} else {
+			list = toKlineList(rp.List)
+		}
 	default:
 		rp, e := c.GetIndexDayAll(code)
-		if e != nil { err = e } else { list = toKlineList(rp.List) }
+		if e != nil {
+			err = e
+		} else {
+			list = toKlineList(rp.List)
+		}
 	}
-	if err != nil { jsonErr(w, err.Error()); return }
+	if err != nil {
+		jsonErr(w, err.Error())
+		return
+	}
 	jsonResp(w, map[string]interface{}{"code": code, "type": typ, "count": len(list), "list": list})
 }
 
@@ -266,13 +372,24 @@ func handleGbbqAdjust(w http.ResponseWriter, r *http.Request) {
 	typ := r.URL.Query().Get("type")
 	adj := r.URL.Query().Get("adjust")
 	cnt := parseCount(r.URL.Query().Get("count"), 60)
-	if code == "" { jsonErr(w, "缺少code"); return }
-	if adj == "" { adj = "qfq" }
+	if code == "" {
+		jsonErr(w, "缺少code")
+		return
+	}
+	if adj == "" {
+		adj = "qfq"
+	}
 
 	gb := getGbbq()
-	if gb == nil { jsonErr(w, "复权模块未就绪"); return }
+	if gb == nil {
+		jsonErr(w, "复权模块未就绪")
+		return
+	}
 	c := cli()
-	if c == nil { jsonErr(w, "未连接"); return }
+	if c == nil {
+		jsonErr(w, "未连接")
+		return
+	}
 
 	var resp *protocol.KlineResp
 	var err error
@@ -288,7 +405,10 @@ func handleGbbqAdjust(w http.ResponseWriter, r *http.Request) {
 	default:
 		resp, err = c.GetKlineDayAll(code)
 	}
-	if err != nil || resp == nil { jsonErr(w, "K线获取失败"); return }
+	if err != nil || resp == nil {
+		jsonErr(w, "K线获取失败")
+		return
+	}
 
 	var klines protocol.Klines
 	if adj == "hfq" {
@@ -296,9 +416,14 @@ func handleGbbqAdjust(w http.ResponseWriter, r *http.Request) {
 	} else {
 		klines = gb.QFQ(code, resp.List)
 	}
-	if len(klines) == 0 { jsonErr(w, "复权后无数据"); return }
+	if len(klines) == 0 {
+		jsonErr(w, "复权后无数据")
+		return
+	}
 	list := toKlineList(klines)
-	if cnt > 0 && cnt < len(list) { list = list[len(list)-cnt:] }
+	if cnt > 0 && cnt < len(list) {
+		list = list[len(list)-cnt:]
+	}
 	jsonResp(w, map[string]interface{}{
 		"code": code, "type": typ, "adjust": adj,
 		"count": len(list), "list": list,
@@ -310,15 +435,26 @@ func handleGbbqAdjust(w http.ResponseWriter, r *http.Request) {
 func handleHistoryTrade(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
 	date := r.URL.Query().Get("date")
-	if code == "" || date == "" { jsonErr(w, "缺少code或date"); return }
+	if code == "" || date == "" {
+		jsonErr(w, "缺少code或date")
+		return
+	}
 	c := cli()
-	if c == nil { jsonErr(w, "未连接"); return }
+	if c == nil {
+		jsonErr(w, "未连接")
+		return
+	}
 	date = strings.ReplaceAll(date, "-", "")
 	resp, err := c.GetHistoryMinuteTradeDay(date, code)
-	if err != nil || resp == nil { jsonErr(w, "无数据"); return }
+	if err != nil || resp == nil {
+		jsonErr(w, "无数据")
+		return
+	}
 	type Item struct {
-		Time string `json:"time"`; Price float64 `json:"price"`
-		Volume int `json:"volume"`; Status int `json:"status"`
+		Time   string  `json:"time"`
+		Price  float64 `json:"price"`
+		Volume int     `json:"volume"`
+		Status int     `json:"status"`
 	}
 	list := make([]Item, 0)
 	for _, t := range resp.List {
@@ -332,7 +468,9 @@ func handleHistoryTrade(w http.ResponseWriter, r *http.Request) {
 func parseInt(s string) (int, error) {
 	n := 0
 	for _, c := range s {
-		if c < '0' || c > '9' { return 0, nil }
+		if c < '0' || c > '9' {
+			return 0, nil
+		}
 		n = n*10 + int(c-'0')
 	}
 	return n, nil

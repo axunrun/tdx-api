@@ -1,0 +1,288 @@
+:root {
+  --bg: #080b0f;
+  --panel: #10151c;
+  --panel-2: #151b24;
+  --line: #243140;
+  --text: #e7edf4;
+  --muted: #8795a5;
+  --accent: #4fb3ff;
+  --good: #42d392;
+  --bad: #ff626e;
+  --warn: #f4c95d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+  letter-spacing: 0;
+}
+
+.shell {
+  width: min(1440px, 100%);
+  margin: 0 auto;
+  padding: 22px;
+}
+
+.topbar,
+.panel,
+.empty-state,
+.account-card {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 8px;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 18px 20px;
+  margin-bottom: 14px;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 24px;
+  font-weight: 650;
+}
+
+h2 {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.eyebrow,
+.label {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+  text-transform: uppercase;
+}
+
+.status-cluster,
+.account-grid,
+.layout-main,
+.data-grid,
+.metric-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.status-cluster {
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+}
+
+.status-cluster > div {
+  padding-left: 14px;
+  border-left: 1px solid var(--line);
+}
+
+.status-cluster strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.empty-state {
+  padding: 34px;
+  margin-bottom: 14px;
+  text-align: center;
+  background: var(--panel-2);
+}
+
+.empty-state h2 {
+  margin: 4px 0 8px;
+  font-size: 24px;
+}
+
+.empty-state p:last-child {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.account-grid {
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  margin-bottom: 14px;
+}
+
+.account-card {
+  padding: 16px;
+}
+
+.account-card .name {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: 650;
+}
+
+.account-card .cash {
+  margin-top: 14px;
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.account-card .subline,
+.row .meta,
+.muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.layout-main {
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  margin-bottom: 12px;
+}
+
+.data-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.panel {
+  min-width: 0;
+  padding: 16px;
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 12px;
+}
+
+.panel-head > span,
+.pill {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: 300px;
+}
+
+.metric {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  background: #0c1118;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.metric strong {
+  font-size: 14px;
+}
+
+.table-wrap {
+  overflow: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+th,
+td {
+  padding: 9px 6px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+
+th {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.compact-list {
+  display: grid;
+  gap: 8px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  background: #0c1118;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.timeline {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.timeline li {
+  padding-left: 14px;
+  border-left: 2px solid var(--line);
+  font-size: 12px;
+}
+
+.timeline strong {
+  display: block;
+  margin-bottom: 3px;
+}
+
+.good {
+  color: var(--good);
+}
+
+.bad {
+  color: var(--bad);
+}
+
+.warn {
+  color: var(--warn);
+}
+
+.empty-line {
+  padding: 24px 0;
+  color: var(--muted);
+  text-align: center;
+  font-size: 13px;
+}
+
+@media (max-width: 900px) {
+  .topbar,
+  .layout-main,
+  .data-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar {
+    display: grid;
+  }
+
+  .status-cluster {
+    grid-template-columns: 1fr 1fr;
+  }
+}
