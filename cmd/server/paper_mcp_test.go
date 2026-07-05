@@ -33,9 +33,30 @@ func TestPaperOrderMCPSchemaDescribesEnums(t *testing.T) {
 	assertMCPEnum(t, properties, "orderType", "market", "limit", "auction")
 	assertMCPEnum(t, properties, "timeInForce", "day", "auction_only")
 
+	quantity := properties["quantity"].(map[string]any)
+	if quantity["type"] != "integer" || quantity["minimum"] != 100 ||
+		quantity["multipleOf"] != 100 {
+		t.Fatalf("quantity schema = %+v", quantity)
+	}
+
 	required := tool.InputSchema["required"].([]string)
 	if !hasString(required, "action") || !hasString(required, "accountId") {
 		t.Fatalf("required = %+v, want action and accountId", required)
+	}
+	if len(tool.InputSchema["allOf"].([]map[string]any)) == 0 {
+		t.Fatal("paper order conditional schema missing")
+	}
+}
+
+func TestPaperAccountMCPSchemaRequiresConfirmForSideEffects(t *testing.T) {
+	tool := findPaperMCPTool(t, "tdx_paper_account")
+	properties := tool.InputSchema["properties"].(map[string]any)
+	confirm := properties["confirm"].(map[string]any)
+	if confirm["type"] != "boolean" {
+		t.Fatalf("confirm schema = %+v", confirm)
+	}
+	if len(tool.InputSchema["allOf"].([]map[string]any)) == 0 {
+		t.Fatal("paper account conditional schema missing")
 	}
 }
 
@@ -64,6 +85,7 @@ func TestPaperMCPAccountCreateWithInitialPositions(t *testing.T) {
 		"action":      "create",
 		"name":        "alpha",
 		"initialCash": 10000,
+		"confirm":     true,
 		"initialPositions": []map[string]any{
 			{
 				"code":      "600000",
@@ -128,6 +150,7 @@ func TestPaperMCPCancelLimitBuyReleasesCash(t *testing.T) {
 		"action":    "cancel",
 		"accountId": account.ID,
 		"orderId":   order.ID,
+		"confirm":   true,
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -174,6 +197,7 @@ func TestPaperMCPCancelLimitSellReleasesPosition(t *testing.T) {
 		"action":    "cancel",
 		"accountId": account.ID,
 		"orderId":   order.ID,
+		"confirm":   true,
 	})); err != nil {
 		t.Fatal(err)
 	}
@@ -218,6 +242,7 @@ func TestPaperMCPCancelRejectsFilledOrder(t *testing.T) {
 		"action":    "cancel",
 		"accountId": account.ID,
 		"orderId":   order.ID,
+		"confirm":   true,
 	})); err == nil {
 		t.Fatal("cancel filled order error = nil, want error")
 	}

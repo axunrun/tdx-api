@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -86,8 +87,45 @@ func TestMCPToolSchemasDescribeHotspotParameters(t *testing.T) {
 	if len(metric["enum"].([]string)) == 0 {
 		t.Fatal("metric enum missing")
 	}
-	if properties["limit"].(map[string]any)["default"] != 20 {
-		t.Fatal("limit default missing")
+	if metric["default"] != "chg20" {
+		t.Fatalf("metric default = %v, want chg20", metric["default"])
+	}
+	limit := properties["limit"].(map[string]any)
+	if limit["type"] != "integer" || limit["default"] != 20 || limit["maximum"] != 50 {
+		t.Fatalf("limit schema = %+v", limit)
+	}
+	startDate := properties["startDate"].(map[string]any)
+	if startDate["pattern"] != `^(\d{4}-\d{2}-\d{2}|\d{8})$` {
+		t.Fatalf("startDate pattern = %+v", startDate["pattern"])
+	}
+}
+
+func TestMCPToolSchemasDescribeAgentReadableConstraints(t *testing.T) {
+	brief := findMCPTool(t, "tdx_stock_brief_text")
+	briefProperties := brief.InputSchema["properties"].(map[string]any)
+	mkt := briefProperties["mkt"].(map[string]any)
+	if !hasString(mkt["enum"].([]string), "sh") ||
+		!strings.Contains(mkt["description"].(string), "自动识别") {
+		t.Fatalf("mkt schema = %+v", mkt)
+	}
+	if brief.OutputSchema["type"] != "object" {
+		t.Fatalf("output schema = %+v", brief.OutputSchema)
+	}
+
+	kline := findMCPTool(t, "tdx_kline_summary_text")
+	klineProperties := kline.InputSchema["properties"].(map[string]any)
+	level := klineProperties["level"].(map[string]any)
+	if level["default"] != "normal" {
+		t.Fatalf("level default = %v, want normal", level["default"])
+	}
+	dayCount := klineProperties["dayCount"].(map[string]any)
+	if dayCount["type"] != "integer" || dayCount["maximum"] != 500 {
+		t.Fatalf("dayCount schema = %+v", dayCount)
+	}
+
+	sectorDetail := findMCPTool(t, "tdx_sector_detail_text")
+	if len(sectorDetail.InputSchema["anyOf"].([]map[string]any)) != 2 {
+		t.Fatalf("sector detail anyOf = %+v", sectorDetail.InputSchema["anyOf"])
 	}
 }
 
@@ -112,4 +150,16 @@ func TestMCPCallUnknownToolReturnsError(t *testing.T) {
 	if resp.Error == nil {
 		t.Fatalf("expected error, got %s", rec.Body.String())
 	}
+}
+
+func findMCPTool(t *testing.T, name string) mcpTool {
+	t.Helper()
+
+	for _, tool := range mcpTools() {
+		if tool.Name == name {
+			return tool
+		}
+	}
+	t.Fatalf("%s missing", name)
+	return mcpTool{}
 }

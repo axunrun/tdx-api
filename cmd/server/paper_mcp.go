@@ -11,21 +11,38 @@ import (
 func paperMCPTools() []mcpTool {
 	account := newMCPTool(
 		"tdx_paper_account",
-		"纸上交易账户生命周期工具。账户创建后初始资金和初始持仓会锁定，只有用户明确要求时才执行 close 或 recreate；首版 close/recreate 仅保留 schema。",
+		"纸上交易账户生命周期工具。create/close/recreate 是副作用操作，必须由用户明确确认并传 confirm=true；账户创建后初始资金和初始持仓会锁定，首版 close/recreate 仅保留 schema。",
 		"",
 		nil,
 		requiredEnum("action", "操作：create 创建、list 列表、get 详情、close 关闭、recreate 重建。", "create", "list", "get", "close", "recreate"),
 		optionalString("accountId", "账户 ID；get/close/recreate 时需要。"),
 		optionalString("name", "账户名称；create 时需要。"),
-		optionalNumber("initialCash", "初始现金；create 可选，默认 0。"),
+		optionalNumberSchema("initialCash", "初始现金；create 可选，默认 0。", map[string]any{"minimum": 0}),
 		optionalString("note", "账户备注。"),
+		optionalBool("confirm", "执行 create/close/recreate 等有副作用操作时必须由用户确认，并传 true。"),
 	)
 	account.InputSchema["properties"].(map[string]any)["initialPositions"] =
 		paperInitialPositionsSchema()
+	account.InputSchema["allOf"] = []map[string]any{
+		{
+			"if": map[string]any{
+				"properties": map[string]any{
+					"action": map[string]any{"enum": []string{"create", "close", "recreate"}},
+				},
+				"required": []string{"action"},
+			},
+			"then": map[string]any{
+				"properties": map[string]any{
+					"confirm": map[string]any{"const": true},
+				},
+				"required": []string{"confirm"},
+			},
+		},
+	}
 
 	order := newMCPTool(
 		"tdx_paper_order",
-		"纸上交易委托工具。支持下单、撤单、委托列表和委托详情。",
+		"纸上交易委托工具。place/cancel 是副作用操作，必须由用户明确确认并传 confirm=true；place 需要 code/side/quantity/orderType，limit/auction 还需要 price，get/cancel 需要 orderId。",
 		"",
 		nil,
 		requiredEnum("action", "操作：place 下单、cancel 撤单、list 列表、get 详情。", "place", "cancel", "list", "get"),
@@ -33,25 +50,76 @@ func paperMCPTools() []mcpTool {
 		optionalString("code", "证券代码；place 时需要。"),
 		optionalEnum("side", "买卖方向。", "buy", "sell"),
 		optionalEnum("orderType", "委托类型。", "market", "limit", "auction"),
-		optionalNumber("price", "委托价格；limit/auction 必填。"),
-		optionalNumber("quantity", "委托数量；place 时需要，必须为 100 的整数倍。"),
+		optionalNumberSchema("price", "委托价格；limit/auction 必填。", map[string]any{"exclusiveMinimum": 0}),
+		optionalInteger("quantity", "委托数量；place 时需要，必须为 100 的整数倍。", map[string]any{"minimum": 100, "multipleOf": 100}),
 		optionalEnum("timeInForce", "有效期。", "day", "auction_only"),
 		optionalString("orderId", "委托 ID；get/cancel 时需要。"),
 		optionalString("name", "证券名称。"),
 		optionalEnum("assetType", "资产类型。", "stock", "etf"),
 		optionalString("reason", "交易理由；place 时可传，将写入 Agent 行为时间线。"),
+		optionalBool("confirm", "执行 place/cancel 等有副作用操作时必须由用户确认，并传 true。"),
 	)
+	order.InputSchema["allOf"] = []map[string]any{
+		{
+			"if": map[string]any{
+				"properties": map[string]any{
+					"action": map[string]any{"const": "place"},
+				},
+				"required": []string{"action"},
+			},
+			"then": map[string]any{
+				"required": []string{"code", "side", "quantity", "orderType"},
+			},
+		},
+		{
+			"if": map[string]any{
+				"properties": map[string]any{
+					"action":    map[string]any{"const": "place"},
+					"orderType": map[string]any{"enum": []string{"limit", "auction"}},
+				},
+				"required": []string{"action", "orderType"},
+			},
+			"then": map[string]any{
+				"required": []string{"price"},
+			},
+		},
+		{
+			"if": map[string]any{
+				"properties": map[string]any{
+					"action": map[string]any{"enum": []string{"get", "cancel"}},
+				},
+				"required": []string{"action"},
+			},
+			"then": map[string]any{
+				"required": []string{"orderId"},
+			},
+		},
+		{
+			"if": map[string]any{
+				"properties": map[string]any{
+					"action": map[string]any{"enum": []string{"place", "cancel"}},
+				},
+				"required": []string{"action"},
+			},
+			"then": map[string]any{
+				"properties": map[string]any{
+					"confirm": map[string]any{"const": true},
+				},
+				"required": []string{"confirm"},
+			},
+		},
+	}
 
 	portfolio := newMCPTool(
 		"tdx_paper_portfolio",
-		"纸上交易账户查询工具。按 view 查询 summary/cash/positions/trades/orders/performance/closed_positions/actions。",
+		"纸上交易账户查询工具。按 view 查询 summary/cash/positions/trades/orders/performance/closed_positions/actions；from/to 仅接受 YYYY-MM-DD 或 YYYYMMDD。",
 		"",
 		nil,
 		requiredString("accountId", "账户 ID。"),
 		requiredEnum("view", "查询视图。", "summary", "cash", "positions", "trades", "orders", "performance", "closed_positions", "actions"),
-		optionalString("from", "起始时间或日期，按字符串时间过滤。"),
-		optionalString("to", "结束时间或日期，按字符串时间过滤。"),
-		optionalNumber("limit", "最多返回条数，默认 50，最大 200。"),
+		optionalDateString("from", "起始日期，YYYY-MM-DD或YYYYMMDD，按字符串时间过滤。"),
+		optionalDateString("to", "结束日期，YYYY-MM-DD或YYYYMMDD，按字符串时间过滤。"),
+		optionalIntegerDefault("limit", "最多返回条数，默认 50，最大 200。", 50, 1, 200),
 		optionalString("code", "证券代码过滤。"),
 	)
 
@@ -96,16 +164,19 @@ func paperInitialPositionsSchema() map[string]any {
 					"enum":        []string{"stock", "etf"},
 				},
 				"quantity": map[string]any{
-					"type":        "number",
-					"description": "持仓数量，必须为正数。",
+					"type":        "integer",
+					"description": "持仓数量，必须为正整数。",
+					"minimum":     1,
 				},
 				"costPrice": map[string]any{
 					"type":        "number",
 					"description": "成本价，不能为负数。",
+					"minimum":     0,
 				},
 				"buyDate": map[string]any{
 					"type":        "string",
-					"description": "买入日期。",
+					"description": "买入日期，YYYY-MM-DD或YYYYMMDD。",
+					"pattern":     `^(\d{4}-\d{2}-\d{2}|\d{8})$`,
 				},
 			},
 			"required": []string{"code", "quantity"},
@@ -145,6 +216,9 @@ func callPaperAccountMCP(args map[string]any) (map[string]any, error) {
 	action := paperStringArg(args, "action")
 	switch action {
 	case "create":
+		if err := requirePaperConfirm(args); err != nil {
+			return nil, err
+		}
 		var req PaperCreateAccountRequest
 		if err := decodePaperMCPArgs(args, &req); err != nil {
 			return nil, err
@@ -190,6 +264,9 @@ func callPaperAccountMCP(args map[string]any) (map[string]any, error) {
 			"trades":    emptyPaperTrades(trades),
 		}), nil
 	case "close", "recreate":
+		if err := requirePaperConfirm(args); err != nil {
+			return nil, err
+		}
 		return nil, errors.New("not implemented in first version")
 	default:
 		return nil, fmt.Errorf("unsupported paper account action: %s", action)
@@ -208,6 +285,9 @@ func callPaperOrderMCP(args map[string]any) (map[string]any, error) {
 	}
 	switch action {
 	case "place":
+		if err := requirePaperConfirm(args); err != nil {
+			return nil, err
+		}
 		var req PaperPlaceOrderRequest
 		if err := decodePaperMCPArgs(args, &req); err != nil {
 			return nil, err
@@ -242,6 +322,9 @@ func callPaperOrderMCP(args map[string]any) (map[string]any, error) {
 		}
 		return paperMCPResult("委托详情已返回。", map[string]any{"order": order}), nil
 	case "cancel":
+		if err := requirePaperConfirm(args); err != nil {
+			return nil, err
+		}
 		orderID, err := requirePaperStringArg(args, "orderId")
 		if err != nil {
 			return nil, err
@@ -446,6 +529,14 @@ func requirePaperStringArg(args map[string]any, name string) (string, error) {
 		return "", fmt.Errorf("%s is required", name)
 	}
 	return value, nil
+}
+
+func requirePaperConfirm(args map[string]any) error {
+	value, ok := args["confirm"].(bool)
+	if !ok || !value {
+		return errors.New("confirm must be true for side-effect paper operations")
+	}
+	return nil
 }
 
 func paperStringArg(args map[string]any, name string) string {
