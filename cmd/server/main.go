@@ -27,25 +27,25 @@ func main() {
 	var err error
 
 	sorted := tdx.SortHosts()
-	log.Printf("馃寪 A鑲¤鎯呮湇鍔″櫒娴嬮€熷畬鎴愶紝鍙敤 %d 鍙帮紝棣栭€?%s", len(sorted), sorted[0])
+	log.Printf("A股行情服务器测速完成，可用 %d 台，首选 %s", len(sorted), sorted[0])
 
 	mainClient, err = tdx.DialDefault(tdx.WithDebug(false))
 	if err != nil {
-		log.Printf("鈿狅笍 A鑲¤繛鎺ュけ璐? %v", err)
+		log.Printf("A股连接失败: %v", err)
 	} else {
-		log.Println("鉁?A鑲¤鎯呭凡杩炴帴")
+		log.Println("A股行情已连接")
 	}
 
 	go func() {
 		var err error
 		gbbq, err = tdx.NewGbbq(tdx.WithGbbqClient(mainClient))
 		if err != nil {
-			log.Printf("鈿狅笍 澶嶆潈妯″潡鍒濆鍖栧け璐? %v", err)
+			log.Printf("复权模块初始化失败: %v", err)
 			return
 		}
 		log.Println("gbbq module ready")
 		if err := gbbq.Update(); err != nil {
-			log.Printf("鈿狅笍 澶嶆潈鏁版嵁鏇存柊澶辫触: %v", err)
+			log.Printf("复权数据更新失败: %v", err)
 		} else {
 			log.Println("gbbq data updated")
 		}
@@ -71,7 +71,7 @@ func main() {
 	mux.HandleFunc("/api/minute", handleMinute)
 	mux.HandleFunc("/api/trade", handleTrade)
 	mux.HandleFunc("/api/call-auction", handleCallAuction)
-	// 澶嶆潈绯荤粺
+	// 复权系统
 	mux.HandleFunc("/api/gbbq", handleGbbq)
 	mux.HandleFunc("/api/adjust-factors", handleFactors)
 	mux.HandleFunc("/api/gbbq/adjust", handleGbbqAdjust)
@@ -127,10 +127,10 @@ func main() {
 	mux.HandleFunc("/api/codes", handleCodes)
 	mux.HandleFunc("/api/codes/etf", handleCodesETF)
 	mux.HandleFunc("/api/codes/index", handleCodesIndex)
-	// 鎸囨暟
+	// 指数
 	mux.HandleFunc("/api/index/kline", handleIndexKline)
 	mux.HandleFunc("/api/index/all", handleIndexKlineAll)
-	// 宸ュ叿
+	// 工具
 	mux.HandleFunc("/api/search", handleSearch)
 	mux.HandleFunc("/api/history-trade", handleHistoryTrade)
 	mux.HandleFunc("/api/stocks/refresh", handleStocksRefresh)
@@ -143,15 +143,15 @@ func main() {
 		port = p
 	}
 	nEndpoints := 54
-	log.Printf("馃殌 TDX API Server v2.1 鍑嗗鐩戝惉 :%s (%d endpoints)", port, nEndpoints)
+	log.Printf("TDX API Server v2.1 准备监听 :%s (%d endpoints)", port, nEndpoints)
 
 	startBackgroundInitializers(
-		func() { log.Println("鉁?SQLite 鍚庡彴鍒濆鍖栦换鍔″凡瀹屾垚") },
+		func() { log.Println("SQLite 后台初始化任务已完成") },
 		func() { initStocksDB(mainClient) },
 		func() { initBlocksDB(mainClient) },
 	)
 
-	log.Printf("鉁?TDX API Server v2.1 宸插紑濮嬬洃鍚?:%s", port)
+	log.Printf("TDX API Server v2.1 已开始监听 :%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, mux))
 }
 
