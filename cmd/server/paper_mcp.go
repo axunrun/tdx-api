@@ -15,11 +15,11 @@ func paperMCPTools() []mcpTool {
 		"",
 		nil,
 		requiredEnum("action", "操作：create 创建、list 列表、get 详情、close 关闭、recreate 重建。", "create", "list", "get", "close", "recreate"),
-		optionalString("accountId", "账户 ID；get/close/recreate 时需要。"),
-		optionalString("name", "账户名称；create 时需要。"),
+		optionalString("accountId", "账户ID；get/close/recreate 时需要。"),
+		optionalString("name", "账户名称，create 时需要。"),
 		optionalNumberSchema("initialCash", "初始现金；create 可选，默认 0。", map[string]any{"minimum": 0}),
-		optionalString("note", "账户备注。"),
-		optionalBool("confirm", "执行 create/close/recreate 等有副作用操作时必须由用户确认，并传 true。"),
+		optionalString("note", "账户备注，可记录策略、来源或说明；不参与撮合计算。"),
+		optionalBool("confirm", "create/close/recreate 等有副作用操作必须为 true。"),
 	)
 	account.InputSchema["properties"].(map[string]any)["initialPositions"] =
 		paperInitialPositionsSchema()
@@ -46,18 +46,18 @@ func paperMCPTools() []mcpTool {
 		"",
 		nil,
 		requiredEnum("action", "操作：place 下单、cancel 撤单、list 列表、get 详情。", "place", "cancel", "list", "get"),
-		requiredString("accountId", "账户 ID。"),
+		requiredString("accountId", "账户ID，所有订单操作必填。"),
 		optionalString("code", "证券代码；place 时需要。"),
-		optionalEnum("side", "买卖方向。", "buy", "sell"),
-		optionalEnum("orderType", "委托类型。", "market", "limit", "auction"),
+		optionalEnum("side", "买卖方向；place 时必填。", "buy", "sell"),
+		optionalEnum("orderType", "委托类型；place 时必填；limit/auction 需要 price。", "market", "limit", "auction"),
 		optionalNumberSchema("price", "委托价格；limit/auction 必填。", map[string]any{"exclusiveMinimum": 0}),
-		optionalInteger("quantity", "委托数量；place 时需要，必须为 100 的整数倍。", map[string]any{"minimum": 100, "multipleOf": 100}),
-		optionalEnum("timeInForce", "有效期。", "day", "auction_only"),
+		optionalInteger("quantity", "委托数量；place 时必填，必须为100的整数倍。", map[string]any{"minimum": 100, "multipleOf": 100}),
+		optionalEnumDefault("timeInForce", "有效期；day 为当日有效，auction_only 为集合竞价有效。", "day", "day", "auction_only"),
 		optionalString("orderId", "委托 ID；get/cancel 时需要。"),
-		optionalString("name", "证券名称。"),
-		optionalEnum("assetType", "资产类型。", "stock", "etf"),
+		optionalString("name", "证券名称，可选；用于展示和记录。"),
+		optionalEnumDefault("assetType", "资产类型，默认 stock；当前支持 stock/etf。", "stock", "stock", "etf"),
 		optionalString("reason", "交易理由；place 时可传，将写入 Agent 行为时间线。"),
-		optionalBool("confirm", "执行 place/cancel 等有副作用操作时必须由用户确认，并传 true。"),
+		optionalBool("confirm", "place/cancel 等有副作用操作必须为 true。"),
 	)
 	order.InputSchema["allOf"] = []map[string]any{
 		{
@@ -115,12 +115,12 @@ func paperMCPTools() []mcpTool {
 		"纸上交易账户查询工具。按 view 查询 summary/cash/positions/trades/orders/performance/closed_positions/actions；from/to 仅接受 YYYY-MM-DD 或 YYYYMMDD。",
 		"",
 		nil,
-		requiredString("accountId", "账户 ID。"),
-		requiredEnum("view", "查询视图。", "summary", "cash", "positions", "trades", "orders", "performance", "closed_positions", "actions"),
-		optionalDateString("from", "起始日期，YYYY-MM-DD或YYYYMMDD，按字符串时间过滤。"),
-		optionalDateString("to", "结束日期，YYYY-MM-DD或YYYYMMDD，按字符串时间过滤。"),
+		requiredString("accountId", "账户ID，查询账户视图时必填。"),
+		requiredEnum("view", "查询视图：summary/cash/positions/trades/orders/performance/closed_positions/actions。", "summary", "cash", "positions", "trades", "orders", "performance", "closed_positions", "actions"),
+		optionalDateString("from", "起始日期，YYYY-MM-DD或YYYYMMDD；按字符串日期过滤。"),
+		optionalDateString("to", "结束日期，YYYY-MM-DD或YYYYMMDD；按字符串日期过滤。"),
 		optionalIntegerDefault("limit", "最多返回条数，默认 50，最大 200。", 50, 1, 200),
-		optionalString("code", "证券代码过滤。"),
+		optionalString("code", "可选证券代码过滤，仅返回该证券相关记录。"),
 	)
 
 	rules := newMCPTool(

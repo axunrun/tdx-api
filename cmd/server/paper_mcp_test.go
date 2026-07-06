@@ -38,6 +38,22 @@ func TestPaperOrderMCPSchemaDescribesEnums(t *testing.T) {
 		quantity["multipleOf"] != 100 {
 		t.Fatalf("quantity schema = %+v", quantity)
 	}
+	assetType := properties["assetType"].(map[string]any)
+	if assetType["default"] != "stock" ||
+		!strings.Contains(assetType["description"].(string), "默认 stock") {
+		t.Fatalf("assetType schema = %+v", assetType)
+	}
+	timeInForce := properties["timeInForce"].(map[string]any)
+	if timeInForce["default"] != "day" ||
+		!strings.Contains(timeInForce["description"].(string), "当日有效") {
+		t.Fatalf("timeInForce schema = %+v", timeInForce)
+	}
+	for _, name := range []string{"side", "orderType"} {
+		property := properties[name].(map[string]any)
+		if property["default"] != nil {
+			t.Fatalf("%s should not have default: %+v", name, property)
+		}
+	}
 
 	required := tool.InputSchema["required"].([]string)
 	if !hasString(required, "action") || !hasString(required, "accountId") {
@@ -55,8 +71,37 @@ func TestPaperAccountMCPSchemaRequiresConfirmForSideEffects(t *testing.T) {
 	if confirm["type"] != "boolean" {
 		t.Fatalf("confirm schema = %+v", confirm)
 	}
+	note := properties["note"].(map[string]any)
+	if !strings.Contains(note["description"].(string), "不参与撮合计算") {
+		t.Fatalf("note schema = %+v", note)
+	}
 	if len(tool.InputSchema["allOf"].([]map[string]any)) == 0 {
 		t.Fatal("paper account conditional schema missing")
+	}
+}
+
+func TestPaperPortfolioMCPSchemaDescriptions(t *testing.T) {
+	tool := findPaperMCPTool(t, "tdx_paper_portfolio")
+	properties := tool.InputSchema["properties"].(map[string]any)
+
+	accountID := properties["accountId"].(map[string]any)
+	if !strings.Contains(accountID["description"].(string), "查询账户视图时必填") {
+		t.Fatalf("accountId schema = %+v", accountID)
+	}
+	view := properties["view"].(map[string]any)
+	if !strings.Contains(view["description"].(string), "summary/cash/positions") {
+		t.Fatalf("view schema = %+v", view)
+	}
+	code := properties["code"].(map[string]any)
+	if !strings.Contains(code["description"].(string), "仅返回该证券相关记录") {
+		t.Fatalf("code schema = %+v", code)
+	}
+	for _, name := range []string{"from", "to"} {
+		property := properties[name].(map[string]any)
+		if property["pattern"] != `^(\d{4}-\d{2}-\d{2}|\d{8})$` ||
+			!strings.Contains(property["description"].(string), "按字符串日期过滤") {
+			t.Fatalf("%s schema = %+v", name, property)
+		}
 	}
 }
 

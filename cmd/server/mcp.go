@@ -116,7 +116,7 @@ func mcpTools() []mcpTool {
 		newMCPTool("tdx_kline_summary_text", "K线阶段走势摘要。用于中短线和长期走势判断；输出日线、周线、月线的趋势、涨跌、波动和风险提示。", "/api/agent/kline-summary-text", handleAgentKlineSummaryText,
 			requiredString("code", "股票代码，例如300499"),
 			optionalEnumDefault("level", "输出深度：brief为简版，normal为常规版，deep为深度版。默认normal。", "normal", "brief", "normal", "deep"),
-			optionalInteger("dayCount", "日线数量，最大500；不传则按level使用默认数量。", map[string]any{"minimum": 1, "maximum": 500}),
+			optionalInteger("dayCount", "日线数量，最大500；不传时按 level 使用默认数量：brief=60，normal=120，deep=250。", map[string]any{"minimum": 1, "maximum": 500}),
 		),
 		newMCPTool("tdx_trade_flow_estimate_text", "分档资金流估算。用于观察指定交易日超大单、大单、中单、小单的流入流出；阈值来自近200个交易日逐笔成交金额分位。", "/api/agent/trade-flow-estimate-text", handleAgentTradeFlowEstimateText,
 			requiredString("code", "股票代码，例如300499"),
@@ -178,14 +178,14 @@ func mcpTools() []mcpTool {
 			requiredString("code", "股票代码，例如300499"),
 			optionalMarket("mkt"),
 			optionalIntegerDefault("years", "估值期限，默认3年，范围1-10。", 3, 1, 10),
-			optionalNumber("currentPrice", "可选当前价格；不传则使用行情现价。"),
-			optionalNumber("eps", "可选EPS；不传则由当前价格/PE_TTM反推。"),
-			optionalNumber("bearGrowth", "悲观年增速，单位%。"),
-			optionalNumber("baseGrowth", "中性年增速，单位%。"),
-			optionalNumber("bullGrowth", "乐观年增速，单位%。"),
-			optionalNumberSchema("bearPE", "悲观目标PE。", positiveNumberSchema()),
-			optionalNumberSchema("basePE", "中性目标PE。", positiveNumberSchema()),
-			optionalNumberSchema("bullPE", "乐观目标PE。", positiveNumberSchema()),
+			optionalNumberSchema("currentPrice", "可选当前价格；必须为正数；不传则使用行情现价。", positiveNumberSchema()),
+			optionalNumber("eps", "可选EPS；可为负，但 EPS<=0 时 PE 情景估值会返回不适用说明。"),
+			optionalNumberSchema("bearGrowth", "悲观年增速，单位%；-100表示归零，1000为防呆上限。", growthPctSchema()),
+			optionalNumberSchema("baseGrowth", "中性年增速，单位%；-100表示归零，1000为防呆上限。", growthPctSchema()),
+			optionalNumberSchema("bullGrowth", "乐观年增速，单位%；-100表示归零，1000为防呆上限。", growthPctSchema()),
+			optionalNumberSchema("bearPE", "悲观情景目标PE，必须为正数。", positiveNumberSchema()),
+			optionalNumberSchema("basePE", "中性情景目标PE，必须为正数。", positiveNumberSchema()),
+			optionalNumberSchema("bullPE", "乐观情景目标PE，必须为正数。", positiveNumberSchema()),
 			optionalEnumDefault("assumptionMode", "假设来源说明，当前仅影响调用语义：conservative默认、analyst_forecast、manual。", "conservative", "conservative", "analyst_forecast", "manual"),
 			optionalEnumDefault("level", "输出深度：brief、normal、deep；当前保持同一计算口径。", "normal", "brief", "normal", "deep"),
 		),
@@ -193,9 +193,9 @@ func mcpTools() []mcpTool {
 			requiredString("code", "股票代码，例如300499"),
 			optionalMarket("mkt"),
 			optionalIntegerDefault("years", "估值期限，默认3年，范围1-10。", 3, 1, 10),
-			optionalNumber("currentPrice", "可选当前价格；不传则使用行情现价。"),
-			optionalNumber("eps", "可选EPS；不传则由当前价格/PE_TTM反推。"),
-			optionalNumberSchema("targetPE", "目标PE；不传则用当前PE_TTM的保守折扣或默认25。", positiveNumberSchema()),
+			optionalNumberSchema("currentPrice", "可选当前价格；必须为正数；不传则使用行情现价。", positiveNumberSchema()),
+			optionalNumber("eps", "可选EPS；可为负，但 EPS<=0 时隐含预期公式不适用。"),
+			optionalNumberSchema("targetPE", "目标PE，必须为正数；不传则用当前PE_TTM的保守折扣或默认25。", positiveNumberSchema()),
 			optionalEnumDefault("level", "输出深度：brief、normal、deep；当前保持同一计算口径。", "normal", "brief", "normal", "deep"),
 		),
 		newMCPTool("tdx_technical_score_text", "统一技术评分。复用现有TDX日/周/月K线指标，对MA、MACD、RSI、BOLL打分；缺失的KDJ、BIAS、量价和多空比按0分说明。", "/api/agent/technical-score-text", handleAgentTechnicalScoreText,
@@ -299,6 +299,10 @@ func optionalNumberDefault(name, description string, defaultValue any) mcpToolPa
 
 func positiveNumberSchema() map[string]any {
 	return map[string]any{"exclusiveMinimum": 0}
+}
+
+func growthPctSchema() map[string]any {
+	return map[string]any{"minimum": -100, "maximum": 1000}
 }
 
 func optionalIntegerDefault(

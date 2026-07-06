@@ -134,6 +134,12 @@ func TestMCPToolSchemasDescribeAgentReadableConstraints(t *testing.T) {
 	if dayCount["type"] != "integer" || dayCount["maximum"] != 500 {
 		t.Fatalf("dayCount schema = %+v", dayCount)
 	}
+	if dayCount["default"] != nil ||
+		!strings.Contains(dayCount["description"].(string), "brief=60") ||
+		!strings.Contains(dayCount["description"].(string), "normal=120") ||
+		!strings.Contains(dayCount["description"].(string), "deep=250") {
+		t.Fatalf("dayCount dynamic default description = %+v", dayCount)
+	}
 
 	sectorDetail := findMCPTool(t, "tdx_sector_detail_text")
 	if len(sectorDetail.InputSchema["anyOf"].([]map[string]any)) != 2 {
@@ -151,7 +157,19 @@ func TestMCPToolSchemasDescribeCalculationTools(t *testing.T) {
 	}
 	for _, name := range []string{"bearPE", "basePE", "bullPE"} {
 		property := scenarioProperties[name].(map[string]any)
-		if property["exclusiveMinimum"] != 0 {
+		if property["exclusiveMinimum"] != 0 ||
+			!strings.Contains(property["description"].(string), "必须为正数") {
+			t.Fatalf("%s schema = %+v", name, property)
+		}
+	}
+	currentPrice := scenarioProperties["currentPrice"].(map[string]any)
+	if currentPrice["exclusiveMinimum"] != 0 ||
+		!strings.Contains(currentPrice["description"].(string), "必须为正数") {
+		t.Fatalf("scenario currentPrice schema = %+v", currentPrice)
+	}
+	for _, name := range []string{"bearGrowth", "baseGrowth", "bullGrowth"} {
+		property := scenarioProperties[name].(map[string]any)
+		if property["minimum"] != -100 || property["maximum"] != 1000 {
 			t.Fatalf("%s schema = %+v", name, property)
 		}
 	}
@@ -171,8 +189,13 @@ func TestMCPToolSchemasDescribeCalculationTools(t *testing.T) {
 		}
 	}
 	targetPE := impliedProperties["targetPE"].(map[string]any)
-	if targetPE["exclusiveMinimum"] != 0 {
+	if targetPE["exclusiveMinimum"] != 0 ||
+		!strings.Contains(targetPE["description"].(string), "必须为正数") {
 		t.Fatalf("targetPE schema = %+v", targetPE)
+	}
+	impliedPrice := impliedProperties["currentPrice"].(map[string]any)
+	if impliedPrice["exclusiveMinimum"] != 0 {
+		t.Fatalf("implied currentPrice schema = %+v", impliedPrice)
 	}
 
 	technical := findMCPTool(t, "tdx_technical_score_text")
