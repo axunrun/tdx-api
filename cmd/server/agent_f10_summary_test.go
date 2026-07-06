@@ -3,6 +3,8 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"github.com/injoyai/tdx/protocol"
 )
 
 func TestAgentF10CategoryPlanAvoidsFinanceOverlap(t *testing.T) {
@@ -23,6 +25,21 @@ func TestAgentF10CategoryPlanAvoidsFinanceOverlap(t *testing.T) {
 	}
 	if !shouldIncludeAgentF10Category("经营分析") || !shouldIncludeAgentF10Category("股东研究") {
 		t.Fatal("f10-summary should keep deep company analysis categories")
+	}
+}
+
+func TestShouldFallbackBJCompanyInfoOnlyForEmptyBJCategories(t *testing.T) {
+	if !shouldFallbackBJCompanyInfo(protocol.ExchangeBJ, nil) {
+		t.Fatal("empty BJ F10 categories should fall back to SZ source")
+	}
+	if shouldFallbackBJCompanyInfo(protocol.ExchangeSZ, nil) {
+		t.Fatal("SZ F10 categories should not fall back")
+	}
+	if shouldFallbackBJCompanyInfo(protocol.ExchangeSH, nil) {
+		t.Fatal("SH F10 categories should not fall back")
+	}
+	if shouldFallbackBJCompanyInfo(protocol.ExchangeBJ, []protocol.CompanyCategory{{Name: "最新提示"}}) {
+		t.Fatal("non-empty BJ F10 categories should use BJ source")
 	}
 }
 

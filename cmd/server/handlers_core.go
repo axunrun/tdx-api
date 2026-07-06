@@ -238,7 +238,7 @@ func handleF10(w http.ResponseWriter, r *http.Request) {
 	if s := r.URL.Query().Get("cat"); s != "" { catIdx, _ = strconv.Atoi(s) }
 	c := cli()
 	if c == nil { jsonErr(w, "未连接"); return }
-	cats, err := c.GetCompanyCategory(mkt, code)
+	mkt, cats, err := getF10Categories(c, mkt, code)
 	if err != nil { jsonErr(w, err.Error()); return }
 	type CatItem struct {
 		Index    int    `json:"index"`

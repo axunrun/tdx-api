@@ -87,7 +87,7 @@ func handleAgentF10SummaryText(w http.ResponseWriter, r *http.Request) {
 
 func buildAgentF10Summary(c *tdx.Client, code, rawMarket string) (AgentF10Summary, error) {
 	exchange := exchangeForCode(code, rawMarket)
-	categories, err := c.GetCompanyCategory(exchange, code)
+	exchange, categories, err := getF10Categories(c, exchange, code)
 	if err != nil {
 		return AgentF10Summary{}, err
 	}

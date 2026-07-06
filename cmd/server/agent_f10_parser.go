@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/injoyai/tdx"
+	"github.com/injoyai/tdx/protocol"
 )
 
 type AgentBriefLatestReport struct {
@@ -27,7 +28,7 @@ type AgentBriefLatestReport struct {
 
 func buildAgentBriefLatestReport(c *tdx.Client, code, rawMarket string) (*AgentBriefLatestReport, error) {
 	exchange := exchangeForCode(code, rawMarket)
-	categories, err := c.GetCompanyCategory(exchange, code)
+	exchange, categories, err := getF10Categories(c, exchange, code)
 	if err != nil {
 		return nil, err
 	}
@@ -51,6 +52,28 @@ func buildAgentBriefLatestReport(c *tdx.Client, code, rawMarket string) (*AgentB
 		return nil, fmt.Errorf("F10最新提示为空")
 	}
 	return parseAgentBriefLatestReport(content)
+}
+
+func getF10Categories(
+	c *tdx.Client,
+	exchange protocol.Exchange,
+	code string,
+) (protocol.Exchange, []protocol.CompanyCategory, error) {
+	categories, err := c.GetCompanyCategory(exchange, code)
+	if err != nil || !shouldFallbackBJCompanyInfo(exchange, categories) {
+		return exchange, categories, err
+	}
+
+	fallback := protocol.ExchangeSZ
+	categories, err = c.GetCompanyCategory(fallback, code)
+	return fallback, categories, err
+}
+
+func shouldFallbackBJCompanyInfo(
+	exchange protocol.Exchange,
+	categories []protocol.CompanyCategory,
+) bool {
+	return exchange == protocol.ExchangeBJ && len(categories) == 0
 }
 
 func parseAgentBriefLatestReport(content string) (*AgentBriefLatestReport, error) {
