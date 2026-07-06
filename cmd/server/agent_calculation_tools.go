@@ -70,6 +70,11 @@ func handleAgentTechnicalScoreText(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, "缺少code")
 		return
 	}
+	adjust, err := normalizeTechnicalAdjust(r.URL.Query().Get("adjust"))
+	if err != nil {
+		jsonErr(w, err.Error())
+		return
+	}
 	c := cli()
 	if c == nil {
 		jsonErr(w, "TDX客户端未连接")
@@ -77,7 +82,7 @@ func handleAgentTechnicalScoreText(w http.ResponseWriter, r *http.Request) {
 	}
 	dayCount := queryInt(r, "dayCount", 250, 60, 500)
 	includeWeeklyMonthly := queryBool(r, "includeWeeklyMonthly", true)
-	summary, err := buildTechnicalScoreSummary(c, code, dayCount, includeWeeklyMonthly)
+	summary, err := buildTechnicalScoreSummary(c, code, dayCount, includeWeeklyMonthly, adjust)
 	if err != nil {
 		jsonErr(w, err.Error())
 		return
@@ -232,13 +237,14 @@ func buildTechnicalScoreSummary(
 	code string,
 	dayCount int,
 	includeWeeklyMonthly bool,
+	adjust string,
 ) (string, error) {
 	specs := []agentTechnicalSpec{{
 		period: "day",
 		name:   "日线",
 		count:  uint16(dayCount),
 		fetch: func(code string, count uint16) (*protocol.KlineResp, error) {
-			return fetchDayKlines(c, code, count)
+			return fetchTechnicalDayKlines(c, code, count, adjust)
 		},
 	}}
 	if includeWeeklyMonthly {
@@ -304,7 +310,7 @@ func buildTechnicalScoreSummary(
 	}
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("股票代码：%s\n", code))
-	b.WriteString(fmt.Sprintf("K线口径：日线样本 %d，周/月线 %t；价格指标使用现有 TDX K线口径。\n", dayCount, includeWeeklyMonthly))
+	b.WriteString(technicalScoreKlineHeader(adjust, dayCount, includeWeeklyMonthly))
 	b.WriteString(fmt.Sprintf("技术总分：%d（日线，范围约 -12 到 +12）。\n", total))
 	b.WriteString(fmt.Sprintf("趋势结论：%s。\n", technicalScoreLevel(total)))
 	b.WriteString("评分明细：\n")
@@ -319,6 +325,58 @@ func buildTechnicalScoreSummary(
 	}
 	b.WriteString("数据口径与限制：KDJ/BIAS/量价由K线公式计算；多空比由TDX逐笔成交估算，仅日线计分，不等同官方资金流。\n")
 	return strings.TrimSpace(b.String()), nil
+}
+
+func normalizeTechnicalAdjust(raw string) (string, error) {
+	adjust := strings.TrimSpace(raw)
+	if adjust == "" {
+		return "qfq", nil
+	}
+	if adjust != "qfq" && adjust != "none" {
+		return "", fmt.Errorf("adjust 必须为 qfq 或 none")
+	}
+	return adjust, nil
+}
+
+func fetchTechnicalDayKlines(
+	c *tdx.Client,
+	code string,
+	count uint16,
+	adjust string,
+) (*protocol.KlineResp, error) {
+	if adjust == "none" {
+		return fetchDayKlines(c, code, count)
+	}
+	gb := getGbbq()
+	if gb == nil {
+		return nil, fmt.Errorf("前复权模块未就绪")
+	}
+	ks, err := gb.QFQKlineDay(code)
+	if err != nil {
+		return nil, err
+	}
+	if len(ks) == 0 {
+		return nil, fmt.Errorf("前复权K线无数据")
+	}
+	if int(count) > 0 && len(ks) > int(count) {
+		ks = ks[len(ks)-int(count):]
+	}
+	return &protocol.KlineResp{List: ks}, nil
+}
+
+func technicalScoreKlineHeader(adjust string, dayCount int, includeWeeklyMonthly bool) string {
+	if adjust == "none" {
+		return fmt.Sprintf(
+			"K线口径：日线样本 %d，周/月线 %t；日线价格指标使用未复权TDX日K线；成交量使用未复权成交量；周/月线使用现有TDX周/月K线口径。\n",
+			dayCount,
+			includeWeeklyMonthly,
+		)
+	}
+	return fmt.Sprintf(
+		"K线口径：日线样本 %d，周/月线 %t；日线价格指标使用 Gbbq 前复权日K线；成交量沿用K线原始volume；周/月线使用现有TDX周/月K线口径。\n",
+		dayCount,
+		includeWeeklyMonthly,
+	)
 }
 
 type technicalScorePeriod struct {

@@ -1,10 +1,14 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 
+	"github.com/injoyai/tdx"
 	"github.com/injoyai/tdx/protocol"
 )
 
@@ -162,6 +166,82 @@ func TestTechnicalScoreLevel(t *testing.T) {
 	for score, want := range cases {
 		if got := technicalScoreLevel(score); got != want {
 			t.Fatalf("technicalScoreLevel(%d) = %s, want %s", score, got, want)
+		}
+	}
+}
+
+func TestNormalizeTechnicalAdjust(t *testing.T) {
+	cases := map[string]string{
+		"":     "qfq",
+		" qfq": "qfq",
+		"none": "none",
+	}
+	for input, want := range cases {
+		got, err := normalizeTechnicalAdjust(input)
+		if err != nil {
+			t.Fatalf("normalizeTechnicalAdjust(%q) error = %v", input, err)
+		}
+		if got != want {
+			t.Fatalf("normalizeTechnicalAdjust(%q) = %s, want %s", input, got, want)
+		}
+	}
+	if _, err := normalizeTechnicalAdjust("bad"); err == nil {
+		t.Fatal("normalizeTechnicalAdjust(bad) expected error")
+	}
+}
+
+func TestHandleAgentTechnicalScoreTextRejectsBadAdjust(t *testing.T) {
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/agent/technical-score-text?code=603063&adjust=bad",
+		nil,
+	)
+	rec := httptest.NewRecorder()
+
+	handleAgentTechnicalScoreText(rec, req)
+
+	var resp APIResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Code != -1 || !strings.Contains(resp.Message, "adjust 必须为 qfq 或 none") {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+}
+
+func TestBuildTechnicalScoreSummaryQFQRequiresGbbq(t *testing.T) {
+	oldGbbq := gbbq
+	gbbq = nil
+	t.Cleanup(func() {
+		gbbq = oldGbbq
+	})
+
+	_, err := buildTechnicalScoreSummary(&tdx.Client{}, "603063", 60, false, "qfq")
+	if err == nil || !strings.Contains(err.Error(), "前复权模块未就绪") {
+		t.Fatalf("expected qfq readiness error, got %v", err)
+	}
+}
+
+func TestTechnicalScoreKlineHeaderDescribesAdjust(t *testing.T) {
+	qfq := technicalScoreKlineHeader("qfq", 250, true)
+	for _, want := range []string{
+		"日线价格指标使用 Gbbq 前复权日K线",
+		"成交量沿用K线原始volume",
+		"周/月线使用现有TDX周/月K线口径",
+	} {
+		if !strings.Contains(qfq, want) {
+			t.Fatalf("qfq header missing %q: %s", want, qfq)
+		}
+	}
+
+	none := technicalScoreKlineHeader("none", 250, true)
+	for _, want := range []string{
+		"日线价格指标使用未复权TDX日K线",
+		"成交量使用未复权成交量",
+		"周/月线使用现有TDX周/月K线口径",
+	} {
+		if !strings.Contains(none, want) {
+			t.Fatalf("none header missing %q: %s", want, none)
 		}
 	}
 }
