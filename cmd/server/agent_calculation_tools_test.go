@@ -4,6 +4,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/injoyai/tdx/protocol"
 )
 
 func TestBuildScenarioValuationTextUsesDefaultsAndAvoidsAdvice(t *testing.T) {
@@ -162,4 +164,42 @@ func TestTechnicalScoreLevel(t *testing.T) {
 			t.Fatalf("technicalScoreLevel(%d) = %s, want %s", score, got, want)
 		}
 	}
+}
+
+func TestScoreTechnicalPeriodCalculatesFormerMissingRows(t *testing.T) {
+	klines := testTechnicalScoreKlines()
+	rows := scoreTechnicalPeriod(AgentTechnicalPeriod{Name: "日线", Period: "day"}, klines)
+
+	seen := map[string]technicalScoreRow{}
+	for _, row := range rows {
+		seen[row.Item] = row
+	}
+	for _, item := range []string{"KDJ", "BIAS", "量价"} {
+		row, ok := seen[item]
+		if !ok {
+			t.Fatalf("%s row missing: %+v", item, rows)
+		}
+		if row.Value == "-" || strings.Contains(row.Signal, "当前接口未提供") {
+			t.Fatalf("%s row not calculated: %+v", item, row)
+		}
+	}
+}
+
+func testTechnicalScoreKlines() protocol.Klines {
+	out := make(protocol.Klines, 0, 10)
+	last := protocol.Yuan(10)
+	for i := 0; i < 10; i++ {
+		close := protocol.Yuan(float64(10 + i))
+		out = append(out, &protocol.Kline{
+			Last:   last,
+			Open:   protocol.Yuan(float64(10 + i)),
+			High:   protocol.Yuan(float64(11 + i)),
+			Low:    protocol.Yuan(float64(9 + i)),
+			Close:  close,
+			Volume: int64(100 + i*10),
+		})
+		last = close
+	}
+	out[len(out)-1].Volume = 500
+	return out
 }

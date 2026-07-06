@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/injoyai/tdx"
 	"github.com/injoyai/tdx/protocol"
@@ -250,17 +251,52 @@ func buildTechnicalScoreSummary(
 			}},
 		)
 	}
-	periods, warnings, err := buildAgentTechnicalSummaryFromSpecs(code, specs)
-	if err != nil {
-		return "", err
+	periods := make([]technicalScorePeriod, 0, len(specs))
+	warnings := make([]string, 0)
+	for _, spec := range specs {
+		resp, err := spec.fetch(code, spec.count)
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("%sK线失败: %v", spec.name, err))
+			continue
+		}
+		if resp == nil || len(resp.List) == 0 {
+			warnings = append(warnings, fmt.Sprintf("%sK线无数据", spec.name))
+			continue
+		}
+		klines := protocol.Klines(resp.List)
+		periods = append(periods, technicalScorePeriod{
+			Summary: buildAgentTechnicalPeriod(spec.period, spec.name, klines),
+			Klines:  klines,
+		})
+	}
+	if len(periods) == 0 {
+		if len(warnings) > 0 {
+			return "", fmt.Errorf(strings.Join(warnings, "; "))
+		}
+		return "", fmt.Errorf("无K线数据")
+	}
+	bullBearRow, bullBearWarning := scoreBullBearFromTrades(c, code)
+	if bullBearWarning != "" {
+		warnings = append(warnings, bullBearWarning)
 	}
 
 	rows := make([]technicalScoreRow, 0)
 	total := 0
 	for _, period := range periods {
-		periodRows := scoreTechnicalPeriod(period)
+		periodRows := scoreTechnicalPeriod(period.Summary, period.Klines)
+		if period.Summary.Period == "day" {
+			periodRows = append(periodRows, bullBearRow)
+		} else {
+			periodRows = append(periodRows, technicalScoreRow{
+				Period: period.Summary.Name,
+				Item:   "多空比",
+				Value:  "-",
+				Signal: "仅日线使用逐笔成交估算",
+				Score:  0,
+			})
+		}
 		for _, row := range periodRows {
-			if period.Period == "day" {
+			if period.Summary.Period == "day" {
 				total += row.Score
 			}
 			rows = append(rows, row)
@@ -269,7 +305,7 @@ func buildTechnicalScoreSummary(
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("股票代码：%s\n", code))
 	b.WriteString(fmt.Sprintf("K线口径：日线样本 %d，周/月线 %t；价格指标使用现有 TDX K线口径。\n", dayCount, includeWeeklyMonthly))
-	b.WriteString(fmt.Sprintf("技术总分：%d（日线，范围约 -9 到 +9）。\n", total))
+	b.WriteString(fmt.Sprintf("技术总分：%d（日线，范围约 -12 到 +12）。\n", total))
 	b.WriteString(fmt.Sprintf("趋势结论：%s。\n", technicalScoreLevel(total)))
 	b.WriteString("评分明细：\n")
 	b.WriteString("周期 | 指标 | 当前值 | 信号 | 分数\n")
@@ -281,20 +317,24 @@ func buildTechnicalScoreSummary(
 		b.WriteString(strings.Join(warnings, "；"))
 		b.WriteString("。\n")
 	}
-	b.WriteString("数据口径与限制：未单独计算 KDJ、BIAS 和主动买卖，缺失项按 0 分处理。\n")
+	b.WriteString("数据口径与限制：KDJ/BIAS/量价由K线公式计算；多空比由TDX逐笔成交估算，仅日线计分，不等同官方资金流。\n")
 	return strings.TrimSpace(b.String()), nil
 }
 
-func scoreTechnicalPeriod(period AgentTechnicalPeriod) []technicalScoreRow {
+type technicalScorePeriod struct {
+	Summary AgentTechnicalPeriod
+	Klines  protocol.Klines
+}
+
+func scoreTechnicalPeriod(period AgentTechnicalPeriod, klines protocol.Klines) []technicalScoreRow {
 	rows := []technicalScoreRow{
 		scoreMA(period),
 		scoreMACD(period),
 		scoreRSI(period),
 		scoreBOLL(period),
-		{Period: period.Name, Item: "KDJ", Value: "-", Signal: "当前接口未提供", Score: 0},
-		{Period: period.Name, Item: "BIAS", Value: "-", Signal: "当前接口未提供", Score: 0},
-		{Period: period.Name, Item: "量价", Value: "-", Signal: "当前接口未提供", Score: 0},
-		{Period: period.Name, Item: "多空比", Value: "-", Signal: "当前接口未提供", Score: 0},
+		scoreKDJ(period.Name, klines),
+		scoreBIAS(period.Name, klines),
+		scoreVolumePrice(period.Name, klines),
 	}
 	return rows
 }
@@ -369,6 +409,138 @@ func scoreBOLL(period AgentTechnicalPeriod) technicalScoreRow {
 		score = -1
 	}
 	return technicalScoreRow{Period: period.Name, Item: "BOLL", Value: period.BOLL.Position, Signal: period.BOLL.Position, Score: score}
+}
+
+func scoreKDJ(periodName string, klines protocol.Klines) technicalScoreRow {
+	if len(klines) < 9 {
+		return technicalScoreRow{Period: periodName, Item: "KDJ", Value: "-", Signal: "K线不足9根", Score: 0}
+	}
+	items := klines[len(klines)-9:]
+	high := items[0].High.Float64()
+	low := items[0].Low.Float64()
+	for _, item := range items[1:] {
+		if h := item.High.Float64(); h > high {
+			high = h
+		}
+		if l := item.Low.Float64(); l < low {
+			low = l
+		}
+	}
+	rsv := 50.0
+	if high != low {
+		rsv = (klines[len(klines)-1].Close.Float64() - low) / (high - low) * 100
+	}
+	k := 2.0/3.0*50 + 1.0/3.0*rsv
+	d := 2.0/3.0*50 + 1.0/3.0*k
+	j := 3*k - 2*d
+	score := -1
+	signal := "K下穿D"
+	if k > d {
+		score = 1
+		signal = "K上穿D"
+	}
+	return technicalScoreRow{
+		Period: periodName,
+		Item:   "KDJ",
+		Value:  fmt.Sprintf("K=%.2f D=%.2f J=%.2f", k, d, j),
+		Signal: signal,
+		Score:  score,
+	}
+}
+
+func scoreBIAS(periodName string, klines protocol.Klines) technicalScoreRow {
+	if len(klines) < 10 {
+		return technicalScoreRow{Period: periodName, Item: "BIAS", Value: "-", Signal: "K线不足10根", Score: 0}
+	}
+	close := klines[len(klines)-1].Close.Float64()
+	ma5 := klines.MA(5).Float64()
+	ma10 := klines.MA(10).Float64()
+	if ma5 == 0 || ma10 == 0 {
+		return technicalScoreRow{Period: periodName, Item: "BIAS", Value: "-", Signal: "均线不足", Score: 0}
+	}
+	bias5 := (close/ma5 - 1) * 100
+	bias10 := (close/ma10 - 1) * 100
+	score := 0
+	signal := "正常"
+	if bias5 < -5 && bias10 < -8 {
+		score = 1
+		signal = "负乖离过大"
+	} else if bias5 > 5 && bias10 > 8 {
+		score = -1
+		signal = "正乖离过大"
+	}
+	return technicalScoreRow{
+		Period: periodName,
+		Item:   "BIAS",
+		Value:  fmt.Sprintf("BIAS5=%.2f%% BIAS10=%.2f%%", bias5, bias10),
+		Signal: signal,
+		Score:  score,
+	}
+}
+
+func scoreVolumePrice(periodName string, klines protocol.Klines) technicalScoreRow {
+	if len(klines) < 5 {
+		return technicalScoreRow{Period: periodName, Item: "量价", Value: "-", Signal: "K线不足5根", Score: 0}
+	}
+	latest := klines[len(klines)-1]
+	avg5 := averageKlineVolume(klines, 5)
+	if avg5 <= 0 {
+		return technicalScoreRow{Period: periodName, Item: "量价", Value: "-", Signal: "量能不足", Score: 0}
+	}
+	ratio := float64(latest.Volume) / avg5
+	changePct := latest.RiseRate()
+	score := 0
+	signal := "平量"
+	if ratio > 1.5 && changePct > 0 {
+		score = 1
+		signal = "放量上涨"
+	} else if ratio > 1.5 && changePct < 0 {
+		score = -1
+		signal = "放量下跌"
+	} else if ratio < 0.7 {
+		signal = "缩量"
+	}
+	return technicalScoreRow{
+		Period: periodName,
+		Item:   "量价",
+		Value:  fmt.Sprintf("量比 %.2f 涨跌幅 %s", ratio, formatPercentText(changePct)),
+		Signal: signal,
+		Score:  score,
+	}
+}
+
+func scoreBullBearFromTrades(c *tdx.Client, code string) (technicalScoreRow, string) {
+	date := time.Now().Format("2006-01-02")
+	row := technicalScoreRow{Period: "日线", Item: "多空比", Value: "-", Signal: "逐笔成交不可得", Score: 0}
+	trades, err := fetchTradeFlowTrades(c, code, date)
+	if err != nil {
+		return row, fmt.Sprintf("多空比逐笔成交获取失败: %v", err)
+	}
+	estimate := buildTradeFlowEstimate(code, date, trades)
+	buy := estimate.Summary.TotalBuyAmount
+	sell := estimate.Summary.TotalSellAmount
+	if buy == 0 && sell == 0 {
+		row.Signal = "无主动买卖估算数据"
+		return row, ""
+	}
+	if sell == 0 {
+		row.Value = "买/卖 -"
+		row.Signal = "主动买入估算占优"
+		row.Score = 1
+		return row, ""
+	}
+	ratio := buy / sell
+	row.Value = fmt.Sprintf("买/卖 %.2f", ratio)
+	row.Signal = "主动买卖均衡"
+	switch {
+	case ratio > 1.2:
+		row.Signal = "主动买入估算占优"
+		row.Score = 1
+	case ratio < 0.8:
+		row.Signal = "主动卖出估算占优"
+		row.Score = -1
+	}
+	return row, ""
 }
 
 func buildScenarioRow(name string, price, eps float64, years int, growthPct, pe float64) scenarioRow {

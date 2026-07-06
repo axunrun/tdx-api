@@ -198,7 +198,7 @@ func mcpTools() []mcpTool {
 			optionalNumberSchema("targetPE", "目标PE，必须为正数；不传则用当前PE_TTM的保守折扣或默认25。", positiveNumberSchema()),
 			optionalEnumDefault("level", "输出深度：brief、normal、deep；当前保持同一计算口径。", "normal", "brief", "normal", "deep"),
 		),
-		newMCPTool("tdx_technical_score_text", "统一技术评分。复用现有TDX日/周/月K线指标，对MA、MACD、RSI、BOLL打分；缺失的KDJ、BIAS、量价和多空比按0分说明。", "/api/agent/technical-score-text", handleAgentTechnicalScoreText,
+		newMCPTool("tdx_technical_score_text", "统一技术评分。复用现有TDX日/周/月K线和逐笔成交数据；对MA、MACD、RSI、BOLL、KDJ、BIAS、量价和日线多空比打分，多空比为估算口径。", "/api/agent/technical-score-text", handleAgentTechnicalScoreText,
 			requiredString("code", "股票代码，例如300499"),
 			optionalIntegerDefault("dayCount", "日线数量，默认250，范围60-500。", 250, 60, 500),
 			optionalEnumDefault("adjust", "兼容参数：qfq或none；当前使用现有TDX K线口径。", "qfq", "qfq", "none"),
