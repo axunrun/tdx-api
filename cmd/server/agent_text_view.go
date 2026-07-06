@@ -25,6 +25,7 @@ func buildAgentStockBriefText(brief AgentStockBrief) string {
 	appendLatestReportText(&b, brief.LatestReport)
 	appendBlocksText(&b, brief.Blocks)
 	appendStatText(&b, brief.Stat, brief.Moneyflow)
+	appendValuationDisciplineText(&b, brief.Quote, brief.Finance, brief.Stat, brief.LatestReport)
 	appendTechnicalText(&b, brief.Technical)
 	appendWarningsText(&b, brief.Warnings)
 
@@ -174,6 +175,111 @@ func appendStatText(b *strings.Builder, stat *AgentBriefStat, moneyflow *AgentBr
 	b.WriteString("\n")
 }
 
+func appendValuationDisciplineText(
+	b *strings.Builder,
+	quote *AgentBriefQuote,
+	finance *AgentBriefFinance,
+	stat *AgentBriefStat,
+	report *AgentBriefLatestReport,
+) {
+	consistency := marketCapConsistencyText(quote, finance)
+	signals := valuationQualitySignals(finance, stat, report)
+	if consistency == "" && len(signals) == 0 {
+		return
+	}
+	if consistency != "" {
+		b.WriteString("估值与数据一致性：\n")
+		b.WriteString("- ")
+		b.WriteString(consistency)
+		b.WriteString("\n")
+	}
+	b.WriteString("估值与质量提示：\n")
+	if len(signals) == 0 {
+		b.WriteString("- 未发现显著估值/利润质量异常。\n\n")
+		return
+	}
+	for _, signal := range signals {
+		b.WriteString("- ")
+		b.WriteString(signal)
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+}
+
+func marketCapConsistencyText(quote *AgentBriefQuote, finance *AgentBriefFinance) string {
+	if quote == nil || finance == nil ||
+		quote.Price <= 0 || finance.TotalShares <= 0 || finance.TotalMarketValue <= 0 {
+		return ""
+	}
+	calculated := quote.Price * finance.TotalShares
+	deviation := absPct(calculated, finance.TotalMarketValue)
+	level := "口径一致"
+	switch {
+	case deviation > 5:
+		level = "明显偏差，需检查价格、股本或单位"
+	case deviation > 1:
+		level = "小幅偏差，可能存在交易日或股本变动时点差异"
+	}
+	return fmt.Sprintf(
+		"市值一致性：当前价 × 总股本 = %s，与接口总市值 %s偏差 %.2f%%，%s。",
+		formatCNYText(calculated),
+		valueOrDash(finance.TotalMarketValueText),
+		deviation,
+		level,
+	)
+}
+
+func valuationQualitySignals(
+	finance *AgentBriefFinance,
+	stat *AgentBriefStat,
+	report *AgentBriefLatestReport,
+) []string {
+	signals := make([]string, 0, 4)
+	add := func(signal string) {
+		if len(signals) < 4 {
+			signals = append(signals, signal)
+		}
+	}
+	netProfit := 0.0
+	operatingCashflow := 0.0
+	if finance != nil {
+		netProfit = finance.NetProfit
+		operatingCashflow = finance.OperatingCashflow
+	}
+	netProfitYoY := 0.0
+	revenueYoY := 0.0
+	roe := 0.0
+	if report != nil {
+		netProfitYoY = report.NetProfitYoY
+		revenueYoY = report.RevenueYoY
+		roe = report.WeightedROE
+	}
+	if stat != nil {
+		if stat.PETTM > 40 && netProfitYoY < 0 {
+			add("高估值叠加利润下滑，估值压力偏大。")
+		}
+		if stat.PETTM < 0 || netProfit < 0 {
+			add("盈利为负，PE 指标可能失真。")
+		}
+		if stat.PB > 5 && roe > 0 && roe < 8 {
+			add("PB 偏高但 ROE 不足，估值质量不匹配。")
+		}
+		if stat.PB > 0 && stat.PB < 2 && roe > 15 {
+			add("ROE/PB 组合较优，但需验证可持续性。")
+		}
+	}
+	if netProfit > 0 && operatingCashflow < 0 {
+		add("盈利为正但经营现金流为负，利润质量需关注。")
+	}
+	if netProfit > 0 && operatingCashflow/netProfit < 0.5 {
+		add("经营现金流覆盖净利润不足。")
+	}
+	if report != nil && revenueYoY-netProfitYoY > 20 {
+		add("净利润同比显著弱于营收同比，需关注毛利率、费用或减值。")
+	}
+	return signals
+}
+
 func appendTechnicalText(b *strings.Builder, summary *AgentTechnicalSummary) {
 	if summary == nil || len(summary.Periods) == 0 {
 		return
@@ -278,4 +384,15 @@ func valueOrDash(value string) string {
 		return "-"
 	}
 	return value
+}
+
+func absPct(calculated, reported float64) float64 {
+	if reported == 0 {
+		return 0
+	}
+	deviation := (calculated - reported) / reported * 100
+	if deviation < 0 {
+		return -deviation
+	}
+	return deviation
 }

@@ -55,8 +55,16 @@ func TestMCPInitializeAndToolsList(t *testing.T) {
 		}
 		seen[tool.Name] = true
 	}
-	if !seen["tdx_stock_brief_text"] || !seen["tdx_global_market_brief_text"] {
-		t.Fatalf("expected core tools missing: %+v", seen)
+	for _, name := range []string{
+		"tdx_stock_brief_text",
+		"tdx_global_market_brief_text",
+		"tdx_scenario_valuation_text",
+		"tdx_implied_expectation_text",
+		"tdx_technical_score_text",
+	} {
+		if !seen[name] {
+			t.Fatalf("expected tool %s missing: %+v", name, seen)
+		}
 	}
 }
 
@@ -111,6 +119,10 @@ func TestMCPToolSchemasDescribeAgentReadableConstraints(t *testing.T) {
 	if brief.OutputSchema["type"] != "object" {
 		t.Fatalf("output schema = %+v", brief.OutputSchema)
 	}
+	if !strings.Contains(brief.Description, "不等于深度买卖建议") ||
+		!strings.Contains(brief.Description, "数据一致性") {
+		t.Fatalf("brief description missing calculation boundary: %s", brief.Description)
+	}
 
 	kline := findMCPTool(t, "tdx_kline_summary_text")
 	klineProperties := kline.InputSchema["properties"].(map[string]any)
@@ -126,6 +138,34 @@ func TestMCPToolSchemasDescribeAgentReadableConstraints(t *testing.T) {
 	sectorDetail := findMCPTool(t, "tdx_sector_detail_text")
 	if len(sectorDetail.InputSchema["anyOf"].([]map[string]any)) != 2 {
 		t.Fatalf("sector detail anyOf = %+v", sectorDetail.InputSchema["anyOf"])
+	}
+}
+
+func TestMCPToolSchemasDescribeCalculationTools(t *testing.T) {
+	scenario := findMCPTool(t, "tdx_scenario_valuation_text")
+	scenarioProperties := scenario.InputSchema["properties"].(map[string]any)
+	for _, name := range []string{"years", "eps", "bearGrowth", "basePE", "assumptionMode"} {
+		if scenarioProperties[name] == nil {
+			t.Fatalf("scenario schema missing %s", name)
+		}
+	}
+	if !strings.Contains(scenario.Description, "不输出买卖建议") {
+		t.Fatalf("scenario description missing boundary: %s", scenario.Description)
+	}
+
+	implied := findMCPTool(t, "tdx_implied_expectation_text")
+	impliedProperties := implied.InputSchema["properties"].(map[string]any)
+	for _, name := range []string{"years", "eps", "targetPE"} {
+		if impliedProperties[name] == nil {
+			t.Fatalf("implied schema missing %s", name)
+		}
+	}
+
+	technical := findMCPTool(t, "tdx_technical_score_text")
+	technicalProperties := technical.InputSchema["properties"].(map[string]any)
+	dayCount := technicalProperties["dayCount"].(map[string]any)
+	if dayCount["minimum"] != 60 || dayCount["maximum"] != 500 {
+		t.Fatalf("technical dayCount schema = %+v", dayCount)
 	}
 }
 

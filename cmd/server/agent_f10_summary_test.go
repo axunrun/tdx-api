@@ -39,7 +39,7 @@ func TestBuildAgentF10SummaryTextUsesSectionsAndSeparators(t *testing.T) {
 			{
 				Name:    "股东研究",
 				Usage:   "股东结构、户数和筹码集中度",
-				Excerpt: "股东户数 | 66784",
+				Excerpt: "股东户数 | 66784\n控股股东部分股份质押",
 			},
 		},
 		Excluded: []AgentF10Excluded{
@@ -52,7 +52,7 @@ func TestBuildAgentF10SummaryTextUsesSectionsAndSeparators(t *testing.T) {
 	if strings.Contains(text, `"code"`) || strings.Contains(text, "{") {
 		t.Fatalf("text should be plain summary: %s", text)
 	}
-	for _, want := range []string{"F10深度资料：", "经营分析：", "产品 | 收入 | 毛利率", "已排除："} {
+	for _, want := range []string{"F10深度资料：", "经营分析：", "产品 | 收入 | 毛利率", "F10风险线索：", "股权质押线索", "已排除："} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("text missing %q: %s", want, text)
 		}

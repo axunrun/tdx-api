@@ -220,6 +220,7 @@ func buildAgentF10SummaryText(summary AgentF10Summary) string {
 		b.WriteString(section.Excerpt)
 		b.WriteString("\n\n")
 	}
+	appendF10RiskCluesText(&b, summary)
 	if len(summary.Excluded) > 0 {
 		b.WriteString("已排除：\n")
 		for _, item := range summary.Excluded {
@@ -228,6 +229,56 @@ func buildAgentF10SummaryText(summary AgentF10Summary) string {
 	}
 	appendWarningsText(&b, summary.Warnings)
 	return strings.TrimSpace(b.String())
+}
+
+func appendF10RiskCluesText(b *strings.Builder, summary AgentF10Summary) {
+	clues := f10RiskClues(summary)
+	b.WriteString("F10风险线索：\n")
+	if len(clues) == 0 {
+		b.WriteString("- 未在保留F10片段中识别到减持、质押、担保、问询、处罚等高优先级风险词。\n\n")
+		return
+	}
+	for _, clue := range clues {
+		b.WriteString("- ")
+		b.WriteString(clue)
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+}
+
+func f10RiskClues(summary AgentF10Summary) []string {
+	type riskRule struct {
+		keyword string
+		label   string
+	}
+	rules := []riskRule{
+		{"减持", "减持线索"},
+		{"质押", "股权质押线索"},
+		{"担保", "担保线索"},
+		{"问询", "监管问询线索"},
+		{"处罚", "处罚线索"},
+		{"立案", "立案调查线索"},
+		{"诉讼", "诉讼线索"},
+		{"仲裁", "仲裁线索"},
+		{"解禁", "限售解禁线索"},
+		{"评级下调", "研报评级下调线索"},
+	}
+	clues := make([]string, 0, 5)
+	seen := map[string]bool{}
+	for _, section := range summary.Sections {
+		text := section.Name + "\n" + section.Excerpt
+		for _, rule := range rules {
+			if !strings.Contains(text, rule.keyword) || seen[rule.label] {
+				continue
+			}
+			clues = append(clues, fmt.Sprintf("%s：%s出现“%s”。", rule.label, section.Name, rule.keyword))
+			seen[rule.label] = true
+			if len(clues) >= 5 {
+				return clues
+			}
+		}
+	}
+	return clues
 }
 
 func cleanAgentF10Excerpt(categoryName, content string, limit int) string {
