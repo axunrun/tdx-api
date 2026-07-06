@@ -35,6 +35,68 @@ func TestBuildScenarioValuationTextUsesDefaultsAndAvoidsAdvice(t *testing.T) {
 	}
 }
 
+func TestBuildScenarioValuationTextDescribesManualInputs(t *testing.T) {
+	brief := AgentStockBrief{Code: "603063"}
+	query := url.Values{
+		"years":        []string{"2"},
+		"currentPrice": []string{"100"},
+		"eps":          []string{"10"},
+		"bearGrowth":   []string{"10"},
+		"baseGrowth":   []string{"10"},
+		"bullGrowth":   []string{"10"},
+		"bearPE":       []string{"15"},
+		"basePE":       []string{"15"},
+		"bullPE":       []string{"15"},
+	}
+
+	text := buildScenarioValuationText(brief, query)
+
+	for _, want := range []string{
+		"EPS 10.0000（用户输入）",
+		"悲观 | 10.00% | 15.00 | 12.1000 | 181.50元 | +81.50% | +34.72%",
+		"关键假设：使用用户输入的增长率和目标PE。",
+		"价格/EPS/增长率/目标PE含用户输入项",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("text missing %q:\n%s", want, text)
+		}
+	}
+	for _, banned := range []string{"EPS 默认由价格和 PE_TTM 反推", "未传入 growth/PE"} {
+		if strings.Contains(text, banned) {
+			t.Fatalf("text should not contain %q:\n%s", banned, text)
+		}
+	}
+}
+
+func TestBuildScenarioValuationTextRejectsNonPositivePE(t *testing.T) {
+	text := buildScenarioValuationText(AgentStockBrief{Code: "603063"}, url.Values{
+		"currentPrice": []string{"100"},
+		"eps":          []string{"10"},
+		"bearPE":       []string{"0"},
+		"basePE":       []string{"0"},
+		"bullPE":       []string{"0"},
+	})
+
+	for _, want := range []string{"三情景估值：无法计算", "目标PE必须为正数"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("text missing %q:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "目标价 0") || strings.Contains(text, "-100.00%") {
+		t.Fatalf("text should not continue calculation:\n%s", text)
+	}
+}
+
+func TestBuildScenarioValuationTextRejectsOutOfRangeYears(t *testing.T) {
+	text := buildScenarioValuationText(AgentStockBrief{Code: "603063"}, url.Values{"years": []string{"0"}})
+
+	for _, want := range []string{"三情景估值：无法计算", "years 必须在 1-10 之间"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("text missing %q:\n%s", want, text)
+		}
+	}
+}
+
 func TestBuildImpliedExpectationTextCalculatesPressure(t *testing.T) {
 	brief := AgentStockBrief{
 		Code: "603063",
@@ -53,6 +115,34 @@ func TestBuildImpliedExpectationTextCalculatesPressure(t *testing.T) {
 	text := buildImpliedExpectationText(brief, query)
 
 	for _, want := range []string{"当前价格隐含未来 EPS", "隐含 EPS 年复合增速", "估值预期压力"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("text missing %q:\n%s", want, text)
+		}
+	}
+}
+
+func TestBuildImpliedExpectationTextCalculatesManualInputs(t *testing.T) {
+	text := buildImpliedExpectationText(AgentStockBrief{Code: "603063"}, url.Values{
+		"years":        []string{"2"},
+		"currentPrice": []string{"100"},
+		"eps":          []string{"10"},
+		"targetPE":     []string{"20"},
+	})
+
+	for _, want := range []string{
+		"当前价格隐含未来 EPS：5.0000",
+		"隐含 EPS 年复合增速：-29.29%",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("text missing %q:\n%s", want, text)
+		}
+	}
+}
+
+func TestBuildImpliedExpectationTextRejectsOutOfRangeYears(t *testing.T) {
+	text := buildImpliedExpectationText(AgentStockBrief{Code: "603063"}, url.Values{"years": []string{"0"}})
+
+	for _, want := range []string{"当前价格隐含预期：无法计算", "years 必须在 1-10 之间"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("text missing %q:\n%s", want, text)
 		}

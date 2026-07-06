@@ -106,16 +106,27 @@ func buildScenarioValuationText(brief AgentStockBrief, query queryValues) string
 		price = brief.Quote.Price
 	}
 	eps, epsOK := queryFloat(query, "eps")
+	epsInput := epsOK
 	epsSource := "用户输入"
 	if !epsOK {
 		eps, epsOK = epsFromBrief(brief)
 		epsSource = "由当前价格 / PE_TTM 反推"
 	}
-	years := queryIntFromValues(query, "years", 3, 1, 10)
+	years, yearsOK := queryYears(query)
+	if !yearsOK {
+		return calculationHeader(brief) +
+			"三情景估值：无法计算。\n" +
+			"原因：years 必须在 1-10 之间。\n"
+	}
 	if price <= 0 || !epsOK || eps <= 0 {
 		return calculationHeader(brief) +
 			"情景估值：无法计算。\n" +
 			"原因：需要有效当前价格、正 EPS 和有效 PE_TTM；服务端不强行解析研报预测 EPS。\n"
+	}
+	if hasNonPositiveInput(query, "bearPE", "basePE", "bullPE") {
+		return calculationHeader(brief) +
+			"三情景估值：无法计算。\n" +
+			"原因：目标PE必须为正数；收到 bearPE/basePE/bullPE 中存在 <= 0 的值。\n"
 	}
 
 	netProfitYoY := 0.0
@@ -124,6 +135,10 @@ func buildScenarioValuationText(brief AgentStockBrief, query queryValues) string
 	}
 	bearGrowth, baseGrowth, bullGrowth := defaultGrowths(netProfitYoY)
 	bearPE, basePE, bullPE := defaultPEs(brief.Stat)
+	inputAssumptions := countFloatInputs(query,
+		"bearGrowth", "baseGrowth", "bullGrowth",
+		"bearPE", "basePE", "bullPE",
+	)
 	bearGrowth = queryFloatDefault(query, "bearGrowth", bearGrowth)
 	baseGrowth = queryFloatDefault(query, "baseGrowth", baseGrowth)
 	bullGrowth = queryFloatDefault(query, "bullGrowth", bullGrowth)
@@ -155,8 +170,12 @@ func buildScenarioValuationText(brief AgentStockBrief, query queryValues) string
 		))
 	}
 	b.WriteString("安全边际提示：目标价和收益率只反映输入假设，不代表买卖建议。\n")
-	b.WriteString("关键假设：未传入 growth/PE 时使用系统保守默认假设，不代表预测。\n")
-	b.WriteString("数据口径与限制：价格、PE 和财务同比来自 TDX 单源；EPS 默认由价格和 PE_TTM 反推。\n")
+	b.WriteString("关键假设：")
+	b.WriteString(scenarioAssumptionText(inputAssumptions))
+	b.WriteString("\n")
+	b.WriteString("数据口径与限制：")
+	b.WriteString(scenarioDataLimitText(queryFloatInput(query, "currentPrice"), epsInput, inputAssumptions))
+	b.WriteString("\n")
 	return strings.TrimSpace(b.String())
 }
 
@@ -171,7 +190,12 @@ func buildImpliedExpectationText(brief AgentStockBrief, query queryValues) strin
 		eps, epsOK = epsFromBrief(brief)
 		epsSource = "由当前价格 / PE_TTM 反推"
 	}
-	years := queryIntFromValues(query, "years", 3, 1, 10)
+	years, yearsOK := queryYears(query)
+	if !yearsOK {
+		return calculationHeader(brief) +
+			"当前价格隐含预期：无法计算。\n" +
+			"原因：years 必须在 1-10 之间。\n"
+	}
 	targetPE := queryFloatDefault(query, "targetPE", defaultTargetPE(brief.Stat))
 	if price <= 0 || targetPE <= 0 || !epsOK || eps <= 0 {
 		return calculationHeader(brief) +
@@ -430,6 +454,64 @@ func queryFloatDefault(query queryValues, name string, fallback float64) float64
 		return value
 	}
 	return fallback
+}
+
+func queryFloatInput(query queryValues, name string) bool {
+	_, ok := queryFloat(query, name)
+	return ok
+}
+
+func countFloatInputs(query queryValues, names ...string) int {
+	count := 0
+	for _, name := range names {
+		if queryFloatInput(query, name) {
+			count++
+		}
+	}
+	return count
+}
+
+func hasNonPositiveInput(query queryValues, names ...string) bool {
+	for _, name := range names {
+		value, ok := queryFloat(query, name)
+		if ok && value <= 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func scenarioAssumptionText(inputCount int) string {
+	switch inputCount {
+	case 0:
+		return "系统保守默认假设，不代表预测。"
+	case 6:
+		return "使用用户输入的增长率和目标PE。"
+	default:
+		return "用户输入 + 系统默认补齐。"
+	}
+}
+
+func scenarioDataLimitText(priceInput, epsInput bool, inputAssumptions int) string {
+	if priceInput || epsInput || inputAssumptions > 0 {
+		return "价格/EPS/增长率/目标PE含用户输入项；本工具只做公式计算，不输出买卖建议。"
+	}
+	return "价格、PE 和财务同比来自 TDX 单源；EPS 由当前价格和 PE_TTM 反推；本工具只做公式计算，不输出买卖建议。"
+}
+
+func queryYears(query queryValues) (int, bool) {
+	value := 3
+	if raw := strings.TrimSpace(query.Get("years")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil {
+			return 0, false
+		}
+		value = parsed
+	}
+	if value < 1 || value > 10 {
+		return 0, false
+	}
+	return value, true
 }
 
 func queryInt(r *http.Request, name string, fallback, min, max int) int {

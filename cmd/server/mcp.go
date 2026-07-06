@@ -183,9 +183,9 @@ func mcpTools() []mcpTool {
 			optionalNumber("bearGrowth", "悲观年增速，单位%。"),
 			optionalNumber("baseGrowth", "中性年增速，单位%。"),
 			optionalNumber("bullGrowth", "乐观年增速，单位%。"),
-			optionalNumber("bearPE", "悲观目标PE。"),
-			optionalNumber("basePE", "中性目标PE。"),
-			optionalNumber("bullPE", "乐观目标PE。"),
+			optionalNumberSchema("bearPE", "悲观目标PE。", positiveNumberSchema()),
+			optionalNumberSchema("basePE", "中性目标PE。", positiveNumberSchema()),
+			optionalNumberSchema("bullPE", "乐观目标PE。", positiveNumberSchema()),
 			optionalEnumDefault("assumptionMode", "假设来源说明，当前仅影响调用语义：conservative默认、analyst_forecast、manual。", "conservative", "conservative", "analyst_forecast", "manual"),
 			optionalEnumDefault("level", "输出深度：brief、normal、deep；当前保持同一计算口径。", "normal", "brief", "normal", "deep"),
 		),
@@ -195,7 +195,7 @@ func mcpTools() []mcpTool {
 			optionalIntegerDefault("years", "估值期限，默认3年，范围1-10。", 3, 1, 10),
 			optionalNumber("currentPrice", "可选当前价格；不传则使用行情现价。"),
 			optionalNumber("eps", "可选EPS；不传则由当前价格/PE_TTM反推。"),
-			optionalNumber("targetPE", "目标PE；不传则用当前PE_TTM的保守折扣或默认25。"),
+			optionalNumberSchema("targetPE", "目标PE；不传则用当前PE_TTM的保守折扣或默认25。", positiveNumberSchema()),
 			optionalEnumDefault("level", "输出深度：brief、normal、deep；当前保持同一计算口径。", "normal", "brief", "normal", "deep"),
 		),
 		newMCPTool("tdx_technical_score_text", "统一技术评分。复用现有TDX日/周/月K线指标，对MA、MACD、RSI、BOLL打分；缺失的KDJ、BIAS、量价和多空比按0分说明。", "/api/agent/technical-score-text", handleAgentTechnicalScoreText,
@@ -295,6 +295,10 @@ func optionalNumberSchema(name, description string, schema map[string]any) mcpTo
 
 func optionalNumberDefault(name, description string, defaultValue any) mcpToolParam {
 	return mcpToolParam{Name: name, Type: "number", Description: description, Default: defaultValue}
+}
+
+func positiveNumberSchema() map[string]any {
+	return map[string]any{"exclusiveMinimum": 0}
 }
 
 func optionalIntegerDefault(

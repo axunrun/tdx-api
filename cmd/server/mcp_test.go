@@ -149,6 +149,16 @@ func TestMCPToolSchemasDescribeCalculationTools(t *testing.T) {
 			t.Fatalf("scenario schema missing %s", name)
 		}
 	}
+	for _, name := range []string{"bearPE", "basePE", "bullPE"} {
+		property := scenarioProperties[name].(map[string]any)
+		if property["exclusiveMinimum"] != 0 {
+			t.Fatalf("%s schema = %+v", name, property)
+		}
+	}
+	years := scenarioProperties["years"].(map[string]any)
+	if years["minimum"] != 1 || years["maximum"] != 10 {
+		t.Fatalf("scenario years schema = %+v", years)
+	}
 	if !strings.Contains(scenario.Description, "不输出买卖建议") {
 		t.Fatalf("scenario description missing boundary: %s", scenario.Description)
 	}
@@ -159,6 +169,10 @@ func TestMCPToolSchemasDescribeCalculationTools(t *testing.T) {
 		if impliedProperties[name] == nil {
 			t.Fatalf("implied schema missing %s", name)
 		}
+	}
+	targetPE := impliedProperties["targetPE"].(map[string]any)
+	if targetPE["exclusiveMinimum"] != 0 {
+		t.Fatalf("targetPE schema = %+v", targetPE)
 	}
 
 	technical := findMCPTool(t, "tdx_technical_score_text")
