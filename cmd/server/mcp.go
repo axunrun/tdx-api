@@ -215,6 +215,7 @@ func mcpTools() []mcpTool {
 			break
 		}
 	}
+	tools = append(tools, candidatePoolMCPTools()...)
 	return append(tools, paperMCPTools()...)
 }
 
@@ -394,6 +395,9 @@ func callMCPTool(raw json.RawMessage) (map[string]any, error) {
 	var params mcpToolCallParams
 	if err := json.Unmarshal(raw, &params); err != nil {
 		return nil, fmt.Errorf("工具参数解析失败: %w", err)
+	}
+	if result, ok, err := callCandidatePoolMCPTool(params.Name, params.Arguments); ok {
+		return result, err
 	}
 	if result, ok, err := callPaperMCPTool(params.Name, params.Arguments); ok {
 		return result, err
