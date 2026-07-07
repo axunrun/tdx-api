@@ -21,7 +21,13 @@ func candidatePoolMCPTools() []mcpTool {
 		optionalIntegerDefault("limit", "list 返回条数，默认 50，最大 200。", 50, 1, 200),
 		optionalBool("confirm", "add/remove 等写入候选池的操作必须为 true。"),
 	)
-	tool.InputSchema["properties"].(map[string]any)["code"].(map[string]any)["pattern"] = `^\d{6}$`
+	properties := tool.InputSchema["properties"].(map[string]any)
+	properties["code"].(map[string]any)["pattern"] = `^\d{6}$`
+	properties["validUntil"] = map[string]any{
+		"type":        "string",
+		"description": "有效时间，YYYY-MM-DD 或 YYYYMMDD；表示该候选股记录有效到哪一天，不传表示未设置到期日。",
+		"pattern":     `^(\d{4}-\d{2}-\d{2}|\d{8})$`,
+	}
 	tool.OutputSchema = candidatePoolOutputSchema()
 	tool.InputSchema["allOf"] = []map[string]any{
 		{
@@ -86,6 +92,10 @@ func candidatePoolOutputSchema() map[string]any {
 				"description": "最近更新时间，RFC3339 字符串。",
 			},
 		},
+	}
+	item["properties"].(map[string]any)["validUntil"] = map[string]any{
+		"type":        "string",
+		"description": "有效时间，服务端统一返回 YYYY-MM-DD；空字符串表示未设置到期日。",
 	}
 	return map[string]any{
 		"type":        "object",

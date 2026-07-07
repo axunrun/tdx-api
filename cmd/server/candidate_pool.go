@@ -11,21 +11,23 @@ import (
 )
 
 type CandidatePoolItem struct {
-	Code      string `json:"code"`
-	Name      string `json:"name"`
-	AddedDate string `json:"addedDate"`
-	Reason    string `json:"reason"`
-	Themes    string `json:"themes"`
-	CreatedAt string `json:"createdAt"`
-	UpdatedAt string `json:"updatedAt"`
+	Code       string `json:"code"`
+	Name       string `json:"name"`
+	AddedDate  string `json:"addedDate"`
+	ValidUntil string `json:"validUntil"`
+	Reason     string `json:"reason"`
+	Themes     string `json:"themes"`
+	CreatedAt  string `json:"createdAt"`
+	UpdatedAt  string `json:"updatedAt"`
 }
 
 type CandidatePoolUpsertRequest struct {
-	Code      string `json:"code"`
-	Name      string `json:"name"`
-	AddedDate string `json:"addedDate"`
-	Reason    string `json:"reason"`
-	Themes    string `json:"themes"`
+	Code       string `json:"code"`
+	Name       string `json:"name"`
+	AddedDate  string `json:"addedDate"`
+	ValidUntil string `json:"validUntil"`
+	Reason     string `json:"reason"`
+	Themes     string `json:"themes"`
 }
 
 func candidatePoolDBPath() string {
@@ -56,6 +58,7 @@ func ensureCandidatePoolSchema(db *sql.DB) error {
 			code TEXT PRIMARY KEY,
 			name TEXT NOT NULL DEFAULT '',
 			added_date TEXT NOT NULL,
+			valid_until TEXT NOT NULL DEFAULT '',
 			reason TEXT NOT NULL,
 			themes TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL,
@@ -64,6 +67,41 @@ func ensureCandidatePoolSchema(db *sql.DB) error {
 		CREATE INDEX IF NOT EXISTS idx_candidate_pool_added_date
 			ON candidate_pool(added_date);
 	`)
+	if err != nil {
+		return err
+	}
+	return ensureCandidatePoolColumn(db, "valid_until", "TEXT NOT NULL DEFAULT ''")
+}
+
+func ensureCandidatePoolColumn(db *sql.DB, name string, definition string) error {
+	rows, err := db.Query(`PRAGMA table_info(candidate_pool)`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var columnName string
+		var columnType string
+		var notNull int
+		var defaultValue any
+		var pk int
+		if err := rows.Scan(&cid, &columnName, &columnType, &notNull, &defaultValue, &pk); err != nil {
+			return err
+		}
+		if columnName == name {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_, err = db.Exec(fmt.Sprintf(
+		`ALTER TABLE candidate_pool ADD COLUMN %s %s`,
+		name,
+		definition,
+	))
 	return err
 }
 
@@ -76,6 +114,10 @@ func upsertCandidatePoolItem(req CandidatePoolUpsertRequest) (CandidatePoolItem,
 		return CandidatePoolItem{}, fmt.Errorf("reason is required")
 	}
 	addedDate, err := normalizeCandidatePoolDate(req.AddedDate)
+	if err != nil {
+		return CandidatePoolItem{}, err
+	}
+	validUntil, err := normalizeCandidatePoolOptionalDate(req.ValidUntil, "validUntil")
 	if err != nil {
 		return CandidatePoolItem{}, err
 	}
@@ -95,15 +137,16 @@ func upsertCandidatePoolItem(req CandidatePoolUpsertRequest) (CandidatePoolItem,
 	defer agentDBWriteMu.Unlock()
 	_, err = db.Exec(`
 		INSERT INTO candidate_pool (
-			code, name, added_date, reason, themes, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?)
+			code, name, added_date, valid_until, reason, themes, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(code) DO UPDATE SET
 			name = excluded.name,
 			added_date = excluded.added_date,
+			valid_until = excluded.valid_until,
 			reason = excluded.reason,
 			themes = excluded.themes,
 			updated_at = excluded.updated_at
-	`, code, name, addedDate, req.Reason, req.Themes, now, now)
+	`, code, name, addedDate, validUntil, req.Reason, req.Themes, now, now)
 	if err != nil {
 		return CandidatePoolItem{}, err
 	}
@@ -126,13 +169,14 @@ func getCandidatePoolItem(code string) (CandidatePoolItem, error) {
 func getCandidatePoolItemWithDB(db *sql.DB, code string) (CandidatePoolItem, error) {
 	var item CandidatePoolItem
 	err := db.QueryRow(`
-		SELECT code, name, added_date, reason, themes, created_at, updated_at
+		SELECT code, name, added_date, valid_until, reason, themes, created_at, updated_at
 		FROM candidate_pool
 		WHERE code = ?
 	`, code).Scan(
 		&item.Code,
 		&item.Name,
 		&item.AddedDate,
+		&item.ValidUntil,
 		&item.Reason,
 		&item.Themes,
 		&item.CreatedAt,
@@ -158,7 +202,7 @@ func listCandidatePoolItems(limit int) ([]CandidatePoolItem, error) {
 	defer db.Close()
 
 	rows, err := db.Query(`
-		SELECT code, name, added_date, reason, themes, created_at, updated_at
+		SELECT code, name, added_date, valid_until, reason, themes, created_at, updated_at
 		FROM candidate_pool
 		ORDER BY updated_at DESC
 		LIMIT ?
@@ -175,6 +219,7 @@ func listCandidatePoolItems(limit int) ([]CandidatePoolItem, error) {
 			&item.Code,
 			&item.Name,
 			&item.AddedDate,
+			&item.ValidUntil,
 			&item.Reason,
 			&item.Themes,
 			&item.CreatedAt,
@@ -218,11 +263,18 @@ func normalizeCandidatePoolDate(value string) (string, error) {
 	if value == "" {
 		return time.Now().Format("2006-01-02"), nil
 	}
+	return normalizeCandidatePoolOptionalDate(value, "addedDate")
+}
+
+func normalizeCandidatePoolOptionalDate(value string, name string) (string, error) {
+	if value == "" {
+		return "", nil
+	}
 	if len(value) == 8 {
 		value = value[:4] + "-" + value[4:6] + "-" + value[6:]
 	}
 	if _, err := time.Parse("2006-01-02", value); err != nil {
-		return "", fmt.Errorf("addedDate must be YYYY-MM-DD or YYYYMMDD")
+		return "", fmt.Errorf("%s must be YYYY-MM-DD or YYYYMMDD", name)
 	}
 	return value, nil
 }

@@ -17,7 +17,11 @@ func TestCandidatePoolMCPToolSchema(t *testing.T) {
 	if code["pattern"] != `^\d{6}$` {
 		t.Fatalf("code schema = %+v", code)
 	}
-	for _, name := range []string{"code", "reason", "themes", "confirm"} {
+	validUntil := properties["validUntil"].(map[string]any)
+	if validUntil["pattern"] != `^(\d{4}-\d{2}-\d{2}|\d{8})$` {
+		t.Fatalf("validUntil schema = %+v", validUntil)
+	}
+	for _, name := range []string{"code", "validUntil", "reason", "themes", "confirm"} {
 		property := properties[name].(map[string]any)
 		if property["description"] == "" {
 			t.Fatalf("%s description is empty", name)
@@ -41,19 +45,21 @@ func TestCandidatePoolMCPAddListGetRemove(t *testing.T) {
 	withCandidatePoolDB(t)
 
 	addResult, err := callMCPTool(mustMCPParams(t, "tdx_candidate_pool", map[string]any{
-		"action":    "add",
-		"code":      "603063",
-		"name":      "禾望电气",
-		"addedDate": "20260707",
-		"reason":    "储能逆变器候选",
-		"themes":    "储能, 风电, 电力设备",
-		"confirm":   true,
+		"action":     "add",
+		"code":       "603063",
+		"name":       "禾望电气",
+		"addedDate":  "20260707",
+		"validUntil": "2026-08-07",
+		"reason":     "储能逆变器候选",
+		"themes":     "储能, 风电, 电力设备",
+		"confirm":    true,
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	item := addResult["structuredContent"].(map[string]any)["item"].(CandidatePoolItem)
 	if item.Code != "603063" || item.AddedDate != "2026-07-07" ||
+		item.ValidUntil != "2026-08-07" ||
 		!strings.Contains(item.Themes, "储能") {
 		t.Fatalf("item = %+v", item)
 	}
@@ -78,6 +84,10 @@ func TestCandidatePoolMCPAddListGetRemove(t *testing.T) {
 	}
 	got := getResult["structuredContent"].(map[string]any)["item"].(CandidatePoolItem)
 	if got.Reason != "储能逆变器候选" {
+		t.Fatalf("got = %+v", got)
+	}
+
+	if got.ValidUntil != "2026-08-07" {
 		t.Fatalf("got = %+v", got)
 	}
 
@@ -106,6 +116,41 @@ func TestCandidatePoolMCPRequiresConfirmForWrites(t *testing.T) {
 		"reason": "test",
 	})); err == nil {
 		t.Fatal("add without confirm error = nil, want error")
+	}
+}
+
+func TestCandidatePoolSchemaMigratesValidUntil(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "candidate.sqlite")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`
+		CREATE TABLE candidate_pool (
+			code TEXT PRIMARY KEY,
+			name TEXT NOT NULL DEFAULT '',
+			added_date TEXT NOT NULL,
+			reason TEXT NOT NULL,
+			themes TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		)
+	`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+
+	opened, err := openCandidatePoolDB(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	if _, err := opened.Exec(`
+		INSERT INTO candidate_pool (
+			code, name, added_date, valid_until, reason, themes, created_at, updated_at
+		) VALUES ('603063', '', '2026-07-07', '2026-08-07', 'reason', '', 'now', 'now')
+	`); err != nil {
+		t.Fatal(err)
 	}
 }
 
