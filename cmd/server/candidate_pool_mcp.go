@@ -28,6 +28,15 @@ func candidatePoolMCPTools() []mcpTool {
 		"description": "有效时间，YYYY-MM-DD 或 YYYYMMDD；表示该候选股记录有效到哪一天，不传表示未设置到期日。",
 		"pattern":     `^(\d{4}-\d{2}-\d{2}|\d{8})$`,
 	}
+	tool.Description = "SQLite 选股候选池工具。list/get 是只读操作，不需要 confirm；add 是按 code 加入或更新，已存在时覆盖 name/addedDate/validUntil/reason/themes 并刷新 updatedAt，不追加历史；list 默认按 updatedAt desc 返回；remove 是硬删除，会永久移除当前记录且不保留归档。"
+	properties["action"].(map[string]any)["description"] = "操作：add 加入或更新；list 只读列出候选池；get 只读查看单只候选股；remove 硬删除当前记录。"
+	properties["code"].(map[string]any)["description"] = "6 位股票代码；add/get/remove 时必填；同 code 只保留一条当前候选池记录。"
+	properties["name"].(map[string]any)["description"] = "股票名称；add 时可选，不传则尽量从股票名称库自动补全；同 code 已存在时会被本次值覆盖。"
+	properties["addedDate"].(map[string]any)["description"] = "添加日期，YYYY-MM-DD 或 YYYYMMDD；add 时可选，不传默认今天；同 code 已存在时会被本次值覆盖。"
+	properties["reason"].(map[string]any)["description"] = "添加理由；add 时必填；同 code 已存在时覆盖旧 reason，不追加历史。"
+	properties["themes"].(map[string]any)["description"] = "板块、概念、题材字段；可填写逗号分隔文本；同 code 已存在时覆盖旧 themes，不追加历史。"
+	properties["limit"].(map[string]any)["description"] = "list 返回条数，默认 50，最大 200；list 默认按 updatedAt desc 返回最近更新记录。"
+	properties["confirm"].(map[string]any)["description"] = "仅 add/remove 等写入操作必须为 true；list/get 是只读操作，不需要 confirm。"
 	tool.OutputSchema = candidatePoolOutputSchema()
 	tool.InputSchema["allOf"] = []map[string]any{
 		{
@@ -97,7 +106,7 @@ func candidatePoolOutputSchema() map[string]any {
 		"type":        "string",
 		"description": "有效时间，服务端统一返回 YYYY-MM-DD；空字符串表示未设置到期日。",
 	}
-	return map[string]any{
+	schema := map[string]any{
 		"type":        "object",
 		"description": "MCP 工具调用结果。content[0].text 是给 Agent 阅读的简短文本；structuredContent 是机器可读数据。",
 		"properties": map[string]any{
@@ -123,6 +132,9 @@ func candidatePoolOutputSchema() map[string]any {
 			},
 		},
 	}
+	schema["properties"].(map[string]any)["structuredContent"].(map[string]any)["description"] =
+		"add/get 返回 item；list 按 updatedAt desc 返回 items/count；remove 硬删除当前记录后返回 code，不保留归档。"
+	return schema
 }
 
 func callCandidatePoolMCPTool(

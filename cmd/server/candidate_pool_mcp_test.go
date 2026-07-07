@@ -12,6 +12,16 @@ func TestCandidatePoolMCPToolSchema(t *testing.T) {
 	tool := findPaperMCPTool(t, "tdx_candidate_pool")
 	properties := tool.InputSchema["properties"].(map[string]any)
 
+	for _, want := range []string{
+		"list/get 是只读操作",
+		"按 code 加入或更新",
+		"updatedAt desc",
+		"remove 是硬删除",
+	} {
+		if !strings.Contains(tool.Description, want) {
+			t.Fatalf("tool description = %s, missing %s", tool.Description, want)
+		}
+	}
 	assertMCPEnum(t, properties, "action", "add", "list", "get", "remove")
 	code := properties["code"].(map[string]any)
 	if code["pattern"] != `^\d{6}$` {
@@ -20,6 +30,18 @@ func TestCandidatePoolMCPToolSchema(t *testing.T) {
 	validUntil := properties["validUntil"].(map[string]any)
 	if validUntil["pattern"] != `^(\d{4}-\d{2}-\d{2}|\d{8})$` {
 		t.Fatalf("validUntil schema = %+v", validUntil)
+	}
+	confirm := properties["confirm"].(map[string]any)
+	if !strings.Contains(confirm["description"].(string), "list/get 是只读操作") {
+		t.Fatalf("confirm schema = %+v", confirm)
+	}
+	reason := properties["reason"].(map[string]any)
+	if !strings.Contains(reason["description"].(string), "覆盖旧 reason") {
+		t.Fatalf("reason schema = %+v", reason)
+	}
+	limit := properties["limit"].(map[string]any)
+	if !strings.Contains(limit["description"].(string), "updatedAt desc") {
+		t.Fatalf("limit schema = %+v", limit)
 	}
 	for _, name := range []string{"code", "validUntil", "reason", "themes", "confirm"} {
 		property := properties[name].(map[string]any)
@@ -38,6 +60,11 @@ func TestCandidatePoolMCPToolSchema(t *testing.T) {
 	output := tool.OutputSchema
 	if !strings.Contains(output["description"].(string), "structuredContent") {
 		t.Fatalf("output schema = %+v", output)
+	}
+	outputProperties := output["properties"].(map[string]any)
+	structured := outputProperties["structuredContent"].(map[string]any)
+	if !strings.Contains(structured["description"].(string), "硬删除") {
+		t.Fatalf("structuredContent schema = %+v", structured)
 	}
 }
 
