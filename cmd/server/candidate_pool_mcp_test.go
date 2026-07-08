@@ -13,6 +13,9 @@ func TestCandidatePoolMCPToolSchema(t *testing.T) {
 	properties := tool.InputSchema["properties"].(map[string]any)
 
 	for _, want := range []string{
+		"上下文协议",
+		"reason 只写为什么入池",
+		"buySignalTier 写能不能买",
 		"list/get 是只读操作",
 		"按 code 加入或更新",
 		"updatedAt desc",
@@ -31,19 +34,45 @@ func TestCandidatePoolMCPToolSchema(t *testing.T) {
 	if validUntil["pattern"] != `^(\d{4}-\d{2}-\d{2}|\d{8})$` {
 		t.Fatalf("validUntil schema = %+v", validUntil)
 	}
+	assertMCPEnum(t, properties, "buySignalTier", "observe_only", "setup_ready", "trade_eligible")
+	buySignalTier := properties["buySignalTier"].(map[string]any)
+	if buySignalTier["default"] != "observe_only" ||
+		!strings.Contains(buySignalTier["description"].(string), "不传默认 observe_only") ||
+		!strings.Contains(buySignalTier["description"].(string), "未触发不能买") {
+		t.Fatalf("buySignalTier schema = %+v", buySignalTier)
+	}
 	confirm := properties["confirm"].(map[string]any)
 	if !strings.Contains(confirm["description"].(string), "list/get 是只读操作") {
 		t.Fatalf("confirm schema = %+v", confirm)
 	}
 	reason := properties["reason"].(map[string]any)
-	if !strings.Contains(reason["description"].(string), "覆盖旧 reason") {
+	if !strings.Contains(reason["description"].(string), "不要混写能不能买") {
 		t.Fatalf("reason schema = %+v", reason)
+	}
+	triggerCondition := properties["triggerCondition"].(map[string]any)
+	if !strings.Contains(triggerCondition["description"].(string), "何时触发") ||
+		!strings.Contains(triggerCondition["description"].(string), "不表示已经可以买") {
+		t.Fatalf("triggerCondition schema = %+v", triggerCondition)
+	}
+	invalidationCondition := properties["invalidationCondition"].(map[string]any)
+	if !strings.Contains(invalidationCondition["description"].(string), "何时失效") ||
+		!strings.Contains(invalidationCondition["description"].(string), "移出观察") {
+		t.Fatalf("invalidationCondition schema = %+v", invalidationCondition)
 	}
 	limit := properties["limit"].(map[string]any)
 	if !strings.Contains(limit["description"].(string), "updatedAt desc") {
 		t.Fatalf("limit schema = %+v", limit)
 	}
-	for _, name := range []string{"code", "validUntil", "reason", "themes", "confirm"} {
+	for _, name := range []string{
+		"code",
+		"validUntil",
+		"buySignalTier",
+		"triggerCondition",
+		"invalidationCondition",
+		"reason",
+		"themes",
+		"confirm",
+	} {
 		property := properties[name].(map[string]any)
 		if property["description"] == "" {
 			t.Fatalf("%s description is empty", name)
@@ -66,20 +95,33 @@ func TestCandidatePoolMCPToolSchema(t *testing.T) {
 	if !strings.Contains(structured["description"].(string), "硬删除") {
 		t.Fatalf("structuredContent schema = %+v", structured)
 	}
+	item := structured["properties"].(map[string]any)["item"].(map[string]any)
+	if !strings.Contains(item["description"].(string), "字段协议") {
+		t.Fatalf("item schema = %+v", item)
+	}
+	itemProperties := item["properties"].(map[string]any)
+	assertMCPEnum(t, itemProperties, "buySignalTier", "observe_only", "setup_ready", "trade_eligible")
+	itemReason := itemProperties["reason"].(map[string]any)
+	if !strings.Contains(itemReason["description"].(string), "不承载买入许可") {
+		t.Fatalf("item reason schema = %+v", itemReason)
+	}
 }
 
 func TestCandidatePoolMCPAddListGetRemove(t *testing.T) {
 	withCandidatePoolDB(t)
 
 	addResult, err := callMCPTool(mustMCPParams(t, "tdx_candidate_pool", map[string]any{
-		"action":     "add",
-		"code":       "603063",
-		"name":       "禾望电气",
-		"addedDate":  "20260707",
-		"validUntil": "2026-08-07",
-		"reason":     "储能逆变器候选",
-		"themes":     "储能, 风电, 电力设备",
-		"confirm":    true,
+		"action":                "add",
+		"code":                  "603063",
+		"name":                  "禾望电气",
+		"addedDate":             "20260707",
+		"validUntil":            "2026-08-07",
+		"buySignalTier":         "setup_ready",
+		"triggerCondition":      "缩量企稳后放量突破",
+		"invalidationCondition": "跌破20日线",
+		"reason":                "储能逆变器候选",
+		"themes":                "储能, 风电, 电力设备",
+		"confirm":               true,
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -87,6 +129,9 @@ func TestCandidatePoolMCPAddListGetRemove(t *testing.T) {
 	item := addResult["structuredContent"].(map[string]any)["item"].(CandidatePoolItem)
 	if item.Code != "603063" || item.AddedDate != "2026-07-07" ||
 		item.ValidUntil != "2026-08-07" ||
+		item.BuySignalTier != "setup_ready" ||
+		item.TriggerCondition != "缩量企稳后放量突破" ||
+		item.InvalidationCondition != "跌破20日线" ||
 		!strings.Contains(item.Themes, "储能") {
 		t.Fatalf("item = %+v", item)
 	}
@@ -114,7 +159,7 @@ func TestCandidatePoolMCPAddListGetRemove(t *testing.T) {
 		t.Fatalf("got = %+v", got)
 	}
 
-	if got.ValidUntil != "2026-08-07" {
+	if got.ValidUntil != "2026-08-07" || got.BuySignalTier != "setup_ready" {
 		t.Fatalf("got = %+v", got)
 	}
 
@@ -146,7 +191,7 @@ func TestCandidatePoolMCPRequiresConfirmForWrites(t *testing.T) {
 	}
 }
 
-func TestCandidatePoolSchemaMigratesValidUntil(t *testing.T) {
+func TestCandidatePoolSchemaMigratesStatusColumns(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "candidate.sqlite")
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -174,8 +219,12 @@ func TestCandidatePoolSchemaMigratesValidUntil(t *testing.T) {
 	defer opened.Close()
 	if _, err := opened.Exec(`
 		INSERT INTO candidate_pool (
-			code, name, added_date, valid_until, reason, themes, created_at, updated_at
-		) VALUES ('603063', '', '2026-07-07', '2026-08-07', 'reason', '', 'now', 'now')
+			code, name, added_date, valid_until, buy_signal_tier, trigger_condition,
+			invalidation_condition, reason, themes, created_at, updated_at
+		) VALUES (
+			'603063', '', '2026-07-07', '2026-08-07', 'observe_only',
+			'trigger', 'invalid', 'reason', '', 'now', 'now'
+		)
 	`); err != nil {
 		t.Fatal(err)
 	}
