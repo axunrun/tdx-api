@@ -42,6 +42,36 @@ func TestBuildAgentTechnicalSummaryFromSpecsKeepsSuccessfulPeriods(t *testing.T)
 	}
 }
 
+func TestBuildOBVUsesCloseDirectionAndWindowVolume(t *testing.T) {
+	resp := testKlineResp(22)
+	ks := protocol.Klines(resp.List)
+	for i, item := range ks {
+		item.Close = protocol.Price(1000)
+		item.Volume = int64(100 + i)
+	}
+	ks[1].Close = 1010
+	ks[2].Close = 990
+	ks[3].Close = 990
+	for i := 4; i < len(ks); i++ {
+		ks[i].Close = protocol.Price(990 + i)
+	}
+
+	obv := buildOBV(ks)
+
+	if !obv.Available {
+		t.Fatalf("OBV unavailable: %s", obv.Reason)
+	}
+	if obv.Latest != 2024 {
+		t.Fatalf("latest OBV = %d, want 2024", obv.Latest)
+	}
+	if obv.Trend != "up" {
+		t.Fatalf("trend = %q, want up", obv.Trend)
+	}
+	if obv.Signal == "" {
+		t.Fatalf("signal is empty")
+	}
+}
+
 func testKlineResp(count int) *protocol.KlineResp {
 	resp := &protocol.KlineResp{List: make([]*protocol.Kline, 0, count)}
 	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.Local)

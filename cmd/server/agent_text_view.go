@@ -310,6 +310,9 @@ func appendTechnicalText(b *strings.Builder, summary *AgentTechnicalSummary) {
 		if period.ATR.Available && period.ATR.ATR14 != nil {
 			parts = append(parts, fmt.Sprintf("ATR14=%.2f", *period.ATR.ATR14))
 		}
+		if period.OBV.Available && period.OBV.Signal != "" {
+			parts = append(parts, period.OBV.Signal)
+		}
 		b.WriteString(strings.Join(parts, "；"))
 		b.WriteString("。\n")
 	}

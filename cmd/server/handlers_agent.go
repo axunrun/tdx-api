@@ -30,6 +30,7 @@ type AgentTechnicalPeriod struct {
 	RSI        map[string]Metric `json:"rsi"`
 	BOLL       AgentBOLL         `json:"boll"`
 	ATR        AgentATR          `json:"atr"`
+	OBV        AgentOBV          `json:"obv"`
 	Signals    []string          `json:"signals"`
 }
 
@@ -63,6 +64,17 @@ type AgentATR struct {
 	ATR14     *float64 `json:"atr14,omitempty"`
 	Usage     string   `json:"usage,omitempty"`
 	Reason    string   `json:"reason,omitempty"`
+}
+
+type AgentOBV struct {
+	Available   bool    `json:"available"`
+	Latest      int64   `json:"latest,omitempty"`
+	Change5Pct  float64 `json:"change5Pct,omitempty"`
+	Change20Pct float64 `json:"change20Pct,omitempty"`
+	Trend       string  `json:"trend,omitempty"`
+	Divergence  string  `json:"divergence,omitempty"`
+	Signal      string  `json:"signal,omitempty"`
+	Reason      string  `json:"reason,omitempty"`
 }
 
 type agentTechnicalSpec struct {
@@ -739,6 +751,7 @@ func buildAgentTechnicalPeriod(period, name string, ks protocol.Klines) AgentTec
 	macd := buildMACD(ks)
 	boll := buildBOLL(ks, latest.Close)
 	atr := buildATR(ks)
+	obv := buildOBV(ks)
 
 	return AgentTechnicalPeriod{
 		Period:     period,
@@ -755,7 +768,8 @@ func buildAgentTechnicalPeriod(period, name string, ks protocol.Klines) AgentTec
 		},
 		BOLL:    boll,
 		ATR:     atr,
-		Signals: technicalSignals(latest.Close, ma, macd, boll),
+		OBV:     obv,
+		Signals: technicalSignals(latest.Close, ma, macd, boll, obv),
 	}
 }
 
@@ -825,6 +839,133 @@ func buildATR(ks protocol.Klines) AgentATR {
 	}
 }
 
+func buildOBV(ks protocol.Klines) AgentOBV {
+	if len(ks) < 21 {
+		return AgentOBV{Available: false, Reason: "K线数量不足21根"}
+	}
+	values := make([]int64, len(ks))
+	for i := 1; i < len(ks); i++ {
+		values[i] = values[i-1]
+		switch {
+		case ks[i].Close > ks[i-1].Close:
+			values[i] += ks[i].Volume
+		case ks[i].Close < ks[i-1].Close:
+			values[i] -= ks[i].Volume
+		}
+	}
+	latest := values[len(values)-1]
+	change5 := obvWindowChangePct(values, ks, 5)
+	change20 := obvWindowChangePct(values, ks, 20)
+	trend := obvTrend(change20)
+	divergence := obvDivergence(values, ks, 20)
+	return AgentOBV{
+		Available:   true,
+		Latest:      latest,
+		Change5Pct:  change5,
+		Change20Pct: change20,
+		Trend:       trend,
+		Divergence:  divergence,
+		Signal:      obvSignal(trend, divergence, change20, change5),
+	}
+}
+
+func obvWindowChangePct(values []int64, ks protocol.Klines, days int) float64 {
+	if len(values) <= days || days <= 0 {
+		return 0
+	}
+	start := len(values) - 1 - days
+	delta := float64(values[len(values)-1] - values[start])
+	volume := int64(0)
+	for _, item := range ks[start+1:] {
+		volume += item.Volume
+	}
+	if volume == 0 {
+		return 0
+	}
+	return delta / float64(volume) * 100
+}
+
+func obvTrend(change20 float64) string {
+	switch {
+	case change20 >= 10:
+		return "up"
+	case change20 <= -10:
+		return "down"
+	default:
+		return "flat"
+	}
+}
+
+func obvDivergence(values []int64, ks protocol.Klines, days int) string {
+	if len(values) <= days || len(ks) <= days {
+		return "none"
+	}
+	start := len(values) - 1 - days
+	latestClose := ks[len(ks)-1].Close
+	latestOBV := values[len(values)-1]
+	priorHighClose, priorLowClose := ks[start].Close, ks[start].Close
+	priorHighOBV, priorLowOBV := values[start], values[start]
+	for i := start; i < len(values)-1; i++ {
+		if ks[i].Close > priorHighClose {
+			priorHighClose = ks[i].Close
+		}
+		if ks[i].Close < priorLowClose {
+			priorLowClose = ks[i].Close
+		}
+		if values[i] > priorHighOBV {
+			priorHighOBV = values[i]
+		}
+		if values[i] < priorLowOBV {
+			priorLowOBV = values[i]
+		}
+	}
+	switch {
+	case latestClose >= priorHighClose && latestOBV < priorHighOBV:
+		return "bearish"
+	case latestClose <= priorLowClose && latestOBV > priorLowOBV:
+		return "bullish"
+	default:
+		return "none"
+	}
+}
+
+func obvSignal(trend, divergence string, change20, change5 float64) string {
+	switch divergence {
+	case "bearish":
+		return fmt.Sprintf(
+			"OBV：股价近20日创新高但OBV未同步创新高，存在顶背离迹象。（OBV20变化占比%s，OBV5变化占比%s）",
+			formatPercentText(change20),
+			formatPercentText(change5),
+		)
+	case "bullish":
+		return fmt.Sprintf(
+			"OBV：股价近20日创新低但OBV未同步创新低，存在底背离迹象。（OBV20变化占比%s，OBV5变化占比%s）",
+			formatPercentText(change20),
+			formatPercentText(change5),
+		)
+	}
+	switch trend {
+	case "up":
+		return fmt.Sprintf(
+			"OBV：近20日上行，量价配合；未见明显顶背离。（OBV20变化占比%s，OBV5变化占比%s）",
+			formatPercentText(change20),
+			formatPercentText(change5),
+		)
+	case "down":
+		return fmt.Sprintf(
+			"OBV：近20日下行，资金承接偏弱；未见明显底背离。（OBV20变化占比%s，OBV5变化占比%s）",
+			formatPercentText(change20),
+			formatPercentText(change5),
+		)
+	default:
+		return fmt.Sprintf(
+			"OBV：近20日震荡，量能方向不明确；未见明显背离。（OBV20变化占比%s，OBV5变化占比%s）",
+			formatPercentText(change20),
+			formatPercentText(change5),
+		)
+	}
+}
+
 func macdSignal(hist protocol.Price) string {
 	switch {
 	case hist > 0:
@@ -854,8 +995,9 @@ func technicalSignals(
 	ma map[string]Metric,
 	macd AgentMACD,
 	boll AgentBOLL,
+	obv AgentOBV,
 ) []string {
-	signals := make([]string, 0, 4)
+	signals := make([]string, 0, 5)
 	closeValue := close.Float64()
 
 	if ma20, ok := metricValue(ma["ma20"]); ok {
@@ -877,6 +1019,9 @@ func technicalSignals(
 	}
 	if boll.Available && boll.Position != "" {
 		signals = append(signals, boll.Position)
+	}
+	if obv.Available && obv.Signal != "" {
+		signals = append(signals, obv.Signal)
 	}
 	return signals
 }

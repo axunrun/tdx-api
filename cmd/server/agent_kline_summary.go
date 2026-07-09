@@ -84,6 +84,7 @@ type AgentKlinePeriodSummary struct {
 	MA60           *float64
 	StageReturns   map[string]float64
 	Volume         AgentKlineVolumeSummary
+	OBV            AgentOBV
 	KeyLevels      AgentKlineKeyLevels
 	MovingAverages AgentKlineMASummary
 	Candle         AgentKlineCandleSummary
@@ -393,6 +394,7 @@ func buildAgentKlinePeriodSummary(
 		MA60:           ma60,
 		StageReturns:   klineStageReturns(used),
 		Volume:         klineVolumeSummary(used),
+		OBV:            buildOBV(used),
 		KeyLevels:      klineKeyLevels(used, close),
 		MovingAverages: buildKlineMASummary(used, close),
 		Candle:         klineCandleSummary(last),
@@ -922,6 +924,13 @@ func klineNarrativeSummary(summary AgentKlinePeriodSummary) string {
 	)
 }
 
+func klineOBVText(obv AgentOBV) string {
+	if !obv.Available || obv.Signal == "" {
+		return "OBV：样本不足"
+	}
+	return obv.Signal
+}
+
 func buildAgentKlineSummaryText(summary AgentKlineSummary) string {
 	var b strings.Builder
 	if summary.Name != "" {
@@ -951,7 +960,7 @@ func buildAgentKlineSummaryText(summary AgentKlineSummary) string {
 			b.WriteString("；信号：" + strings.Join(period.Signals, "、"))
 		}
 		b.WriteString(fmt.Sprintf(
-			"；阶段：%s；风险：%s；近5/20/60涨跌：%s/%s/%s；量能：%s，量比 %.2f；均线：%s，收盘相对MA20 %s；形态：%s，上影线 %s，ATR %s；连续：%s%d日，区间涨跌 %s；距20日高点 %s，距20日低点 %s；摘要：%s。\n",
+			"；阶段：%s；风险：%s；近5/20/60涨跌：%s/%s/%s；量能：%s，量比 %.2f；%s；均线：%s，收盘相对MA20 %s；形态：%s，上影线 %s，ATR %s；连续：%s%d日，区间涨跌 %s；距20日高点 %s，距20日低点 %s；摘要：%s。\n",
 			period.TrendStage,
 			period.RiskLevel,
 			formatPercentText(period.StageReturns["ret5"]),
@@ -959,6 +968,7 @@ func buildAgentKlineSummaryText(summary AgentKlineSummary) string {
 			formatPercentText(period.StageReturns["ret60"]),
 			period.Volume.Signal,
 			period.Volume.VolumeRatio,
+			klineOBVText(period.OBV),
 			period.MovingAverages.Alignment,
 			formatPercentText(period.MovingAverages.PriceVsMA20Pct),
 			klineCandleShapeText(period.Candle.Shape),
