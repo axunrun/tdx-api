@@ -14,10 +14,11 @@ const (
 	paperOrderLimit   = "limit"
 	paperOrderAuction = "auction"
 
-	paperOrderPending   = "pending"
-	paperOrderFilled    = "filled"
-	paperOrderCancelled = "cancelled"
-	paperOrderRejected  = "rejected"
+	paperOrderPending       = "pending"
+	paperOrderFilled        = "filled"
+	paperOrderCancelled     = "cancelled"
+	paperOrderExpiredStatus = "expired"
+	paperOrderRejected      = "rejected"
 
 	paperTimeInForceDay         = "day"
 	paperTimeInForceAuctionOnly = "auction_only"

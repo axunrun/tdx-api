@@ -51,6 +51,16 @@ func (s *PaperStore) matchOpenOrdersAt(
 		return err
 	}
 	for _, order := range orders {
+		expired, err := paperOrderExpired(order, now)
+		if err != nil {
+			return err
+		}
+		if expired {
+			if err := s.ExpireOrder(order.ID, now); err != nil {
+				return err
+			}
+			continue
+		}
 		if !paperOrderCanMatch(order, now) {
 			continue
 		}
@@ -66,6 +76,25 @@ func (s *PaperStore) matchOpenOrdersAt(
 }
 
 var paperShanghaiLocation = time.FixedZone("Asia/Shanghai", 8*60*60)
+
+func paperOrderExpired(order PaperOrder, now time.Time) (bool, error) {
+	createdAt, err := time.Parse(time.RFC3339Nano, order.CreatedAt)
+	if err != nil {
+		return false, fmt.Errorf("parse order created_at: %w", err)
+	}
+	createdAt = createdAt.In(paperShanghaiLocation)
+	now = now.In(paperShanghaiLocation)
+	createdDay := createdAt.Format("2006-01-02")
+	currentDay := now.Format("2006-01-02")
+	if createdDay != currentDay {
+		return createdDay < currentDay, nil
+	}
+	second := now.Hour()*3600 + now.Minute()*60 + now.Second()
+	if order.TimeInForce == paperTimeInForceAuctionOnly {
+		return second > 9*3600+25*60, nil
+	}
+	return second > 15*3600, nil
+}
 
 func paperOrderCanMatch(order PaperOrder, now time.Time) bool {
 	now = now.In(paperShanghaiLocation)

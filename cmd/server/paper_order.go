@@ -132,7 +132,7 @@ func (s *PaperStore) CancelOrder(accountID, orderID string) (PaperOrder, error) 
 		return PaperOrder{}, errors.New("only pending orders can be cancelled")
 	}
 
-	if err := releasePaperCancelledOrder(tx, order, now); err != nil {
+	if err := releasePaperOrderResources(tx, order, now); err != nil {
 		return PaperOrder{}, err
 	}
 	if err := markPaperOrderCancelled(tx, order.ID, now); err != nil {
@@ -149,6 +149,33 @@ func (s *PaperStore) CancelOrder(accountID, orderID string) (PaperOrder, error) 
 	order.CancelledAt = now
 	order.UpdatedAt = now
 	return order, nil
+}
+
+func (s *PaperStore) ExpireOrder(orderID string, now time.Time) error {
+	tx, err := s.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	order, err := getPaperOrderForUpdate(tx, orderID)
+	if err != nil {
+		return err
+	}
+	if order.Status != paperOrderPending {
+		return nil
+	}
+	timestamp := now.In(paperShanghaiLocation).Format(time.RFC3339Nano)
+	if err := releasePaperOrderResources(tx, order, timestamp); err != nil {
+		return err
+	}
+	if err := markPaperOrderExpired(tx, order.ID, timestamp); err != nil {
+		return err
+	}
+	if err := insertPaperExpireAction(tx, order, timestamp); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *PaperStore) ListOrders(accountID string) ([]PaperOrder, error) {
@@ -256,7 +283,7 @@ func ensurePaperAccountActive(tx *sql.Tx, accountID string) error {
 	return nil
 }
 
-func releasePaperCancelledOrder(tx *sql.Tx, order PaperOrder, now string) error {
+func releasePaperOrderResources(tx *sql.Tx, order PaperOrder, now string) error {
 	if order.Side == paperSideBuy && order.OrderType != paperOrderMarket {
 		amount := order.Price * float64(order.Quantity)
 		fee := calculatePaperFee(PaperFeeInput{
@@ -293,6 +320,39 @@ func releasePaperCancelledOrder(tx *sql.Tx, order PaperOrder, now string) error 
 		return requireRowsAffected(result, "insufficient frozen position")
 	}
 	return nil
+}
+
+func markPaperOrderExpired(tx *sql.Tx, orderID, now string) error {
+	result, err := tx.Exec(`
+		UPDATE paper_orders
+		SET status = ?,
+			reject_reason = ?,
+			updated_at = ?
+		WHERE id = ? AND status = ?
+	`, paperOrderExpiredStatus, "time_in_force_expired", now, orderID,
+		paperOrderPending)
+	if err != nil {
+		return err
+	}
+	return requireRowsAffected(result, "only pending orders can expire")
+}
+
+func insertPaperExpireAction(tx *sql.Tx, order PaperOrder, now string) error {
+	requestJSON, _ := json.Marshal(map[string]string{
+		"accountId": order.AccountID,
+		"orderId":   order.ID,
+	})
+	responseJSON, _ := json.Marshal(map[string]string{
+		"status": paperOrderExpiredStatus,
+		"reason": "time_in_force_expired",
+	})
+	_, err := tx.Exec(`
+		INSERT INTO paper_agent_actions (
+			id, account_id, action_type, request, response, created_at
+		) VALUES (?, ?, ?, ?, ?, ?)
+	`, newPaperID("act"), order.AccountID, "expire_order", string(requestJSON),
+		string(responseJSON), now)
+	return err
 }
 
 func markPaperOrderCancelled(tx *sql.Tx, orderID string, now string) error {

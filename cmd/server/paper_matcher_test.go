@@ -79,6 +79,173 @@ func TestMatchOpenOrdersSkipsOutsideTradingSession(t *testing.T) {
 	}
 }
 
+func TestPaperOrderExpiredAtSessionDeadline(t *testing.T) {
+	day := PaperOrder{
+		TimeInForce: paperTimeInForceDay,
+		CreatedAt:   paperTestTime(9, 0, 0).Format(time.RFC3339Nano),
+	}
+	auction := PaperOrder{
+		TimeInForce: paperTimeInForceAuctionOnly,
+		CreatedAt:   paperTestTime(9, 0, 0).Format(time.RFC3339Nano),
+	}
+	tests := []struct {
+		name  string
+		order PaperOrder
+		at    time.Time
+		want  bool
+	}{
+		{"day boundary", day, paperTestTime(15, 0, 0), false},
+		{"day expired", day, paperTestTime(15, 0, 1), true},
+		{"auction boundary", auction, paperTestTime(9, 25, 0), false},
+		{"auction expired", auction, paperTestTime(9, 25, 1), true},
+		{"prior day", day, paperTestTime(9, 0, 0).AddDate(0, 0, 1), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := paperOrderExpired(tt.order, tt.at)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.want {
+				t.Fatalf("paperOrderExpired() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+	day.CreatedAt = "invalid"
+	if _, err := paperOrderExpired(day, paperTestTime(15, 0, 1)); err == nil {
+		t.Fatal("paperOrderExpired() error = nil, want parse error")
+	}
+}
+
+func TestExpirePaperBuyReleasesFrozenCash(t *testing.T) {
+	store := newTestPaperStore(t)
+	account, err := store.CreateAccount(PaperCreateAccountRequest{
+		Name:        "buyer",
+		InitialCash: 20000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	order, err := store.PlaceOrder(PaperPlaceOrderRequest{
+		AccountID: account.ID,
+		Code:      "600000",
+		Side:      paperSideBuy,
+		OrderType: paperOrderLimit,
+		Price:     10,
+		Quantity:  100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ExpireOrder(order.ID, paperTestTime(15, 0, 1)); err != nil {
+		t.Fatal(err)
+	}
+	expired, err := store.GetOrder(order.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expired.Status != paperOrderExpiredStatus {
+		t.Fatalf("status = %q, want expired", expired.Status)
+	}
+	got, err := store.GetAccount(account.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFloatEqual(t, got.FrozenCash, 0)
+	assertFloatEqual(t, got.AvailableCash, account.InitialCash)
+}
+
+func TestExpirePaperSellReleasesFrozenPositionAndLogsAction(t *testing.T) {
+	store := newTestPaperStore(t)
+	account, err := store.CreateAccount(PaperCreateAccountRequest{
+		Name: "seller",
+		InitialPositions: []PaperInitialPosition{
+			{Code: "600000", Quantity: 200, CostPrice: 10},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	order, err := store.PlaceOrder(PaperPlaceOrderRequest{
+		AccountID: account.ID,
+		Code:      "600000",
+		Side:      paperSideSell,
+		OrderType: paperOrderLimit,
+		Price:     11,
+		Quantity:  100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ExpireOrder(order.ID, paperTestTime(15, 0, 1)); err != nil {
+		t.Fatal(err)
+	}
+	positions, err := store.ListPositions(account.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if positions[0].SellableQuantity != 200 || positions[0].FrozenQuantity != 0 {
+		t.Fatalf("position = %+v", positions[0])
+	}
+	var count int
+	err = store.db.QueryRow(`
+		SELECT COUNT(*) FROM paper_agent_actions
+		WHERE account_id = ? AND action_type = 'expire_order'
+	`, account.ID).Scan(&count)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("expire action count = %d, want 1", count)
+	}
+}
+
+func TestMatchOpenOrdersExpiresBeforeRequestingQuote(t *testing.T) {
+	store := newTestPaperStore(t)
+	account, err := store.CreateAccount(PaperCreateAccountRequest{
+		Name:        "buyer",
+		InitialCash: 20000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	order, err := store.PlaceOrder(PaperPlaceOrderRequest{
+		AccountID: account.ID,
+		Code:      "600000",
+		Side:      paperSideBuy,
+		OrderType: paperOrderLimit,
+		Price:     10,
+		Quantity:  100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	createdAt := paperTestTime(9, 0, 0).Format(time.RFC3339Nano)
+	if _, err := store.db.Exec(`
+		UPDATE paper_orders SET created_at = ? WHERE id = ?
+	`, createdAt, order.ID); err != nil {
+		t.Fatal(err)
+	}
+	quoteCalls := 0
+	err = store.matchOpenOrdersAt(func(code string) (PaperQuote, error) {
+		quoteCalls++
+		return PaperQuote{Code: code, Price: 9.8}, nil
+	}, paperTestTime(15, 0, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if quoteCalls != 0 {
+		t.Fatalf("quote calls = %d, want 0", quoteCalls)
+	}
+	expired, err := store.GetOrder(order.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expired.Status != paperOrderExpiredStatus {
+		t.Fatalf("status = %q, want expired", expired.Status)
+	}
+}
+
 func TestMatchPaperLimitBuyFillsWhenPriceIsBelowLimit(t *testing.T) {
 	store := newTestPaperStore(t)
 	account, err := store.CreateAccount(PaperCreateAccountRequest{
