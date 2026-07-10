@@ -38,7 +38,8 @@ func TestCandidatePoolMCPToolSchema(t *testing.T) {
 	buySignalTier := properties["buySignalTier"].(map[string]any)
 	if buySignalTier["default"] != "observe_only" ||
 		!strings.Contains(buySignalTier["description"].(string), "不传默认 observe_only") ||
-		!strings.Contains(buySignalTier["description"].(string), "未触发不能买") {
+		!strings.Contains(buySignalTier["description"].(string), "可购买池") ||
+		!strings.Contains(buySignalTier["description"].(string), "交易窗口内独立判断买入") {
 		t.Fatalf("buySignalTier schema = %+v", buySignalTier)
 	}
 	confirm := properties["confirm"].(map[string]any)
@@ -50,14 +51,19 @@ func TestCandidatePoolMCPToolSchema(t *testing.T) {
 		t.Fatalf("reason schema = %+v", reason)
 	}
 	triggerCondition := properties["triggerCondition"].(map[string]any)
-	if !strings.Contains(triggerCondition["description"].(string), "何时触发") ||
-		!strings.Contains(triggerCondition["description"].(string), "不表示已经可以买") {
+	if !strings.Contains(triggerCondition["description"].(string), "升级到 setup_ready") ||
+		!strings.Contains(triggerCondition["description"].(string), "setup_ready 或 trade_eligible") ||
+		!strings.Contains(triggerCondition["description"].(string), "可下单买入前必须满足") {
 		t.Fatalf("triggerCondition schema = %+v", triggerCondition)
 	}
 	invalidationCondition := properties["invalidationCondition"].(map[string]any)
-	if !strings.Contains(invalidationCondition["description"].(string), "何时失效") ||
-		!strings.Contains(invalidationCondition["description"].(string), "移出观察") {
+	if !strings.Contains(invalidationCondition["description"].(string), "失效/降档/移除条件") ||
+		!strings.Contains(invalidationCondition["description"].(string), "覆盖旧 invalidationCondition") {
 		t.Fatalf("invalidationCondition schema = %+v", invalidationCondition)
+	}
+	if !strings.Contains(validUntil["description"].(string), "next_review_date / deep_report_valid_until") ||
+		!strings.Contains(validUntil["description"].(string), "重新分析刷新") {
+		t.Fatalf("validUntil schema = %+v", validUntil)
 	}
 	limit := properties["limit"].(map[string]any)
 	if !strings.Contains(limit["description"].(string), "updatedAt desc") {
@@ -104,6 +110,25 @@ func TestCandidatePoolMCPToolSchema(t *testing.T) {
 	itemReason := itemProperties["reason"].(map[string]any)
 	if !strings.Contains(itemReason["description"].(string), "不承载买入许可") {
 		t.Fatalf("item reason schema = %+v", itemReason)
+	}
+	itemBuySignalTier := itemProperties["buySignalTier"].(map[string]any)
+	if !strings.Contains(itemBuySignalTier["description"].(string), "可购买池但需等待 triggerCondition") ||
+		!strings.Contains(itemBuySignalTier["description"].(string), "交易员在窗口内独立判断买入") {
+		t.Fatalf("item buySignalTier schema = %+v", itemBuySignalTier)
+	}
+	itemTriggerCondition := itemProperties["triggerCondition"].(map[string]any)
+	if !strings.Contains(itemTriggerCondition["description"].(string), "升级到 setup_ready") ||
+		!strings.Contains(itemTriggerCondition["description"].(string), "可下单买入前必须满足") {
+		t.Fatalf("item triggerCondition schema = %+v", itemTriggerCondition)
+	}
+	itemInvalidationCondition := itemProperties["invalidationCondition"].(map[string]any)
+	if !strings.Contains(itemInvalidationCondition["description"].(string), "失效/降档/移除条件") {
+		t.Fatalf("item invalidationCondition schema = %+v", itemInvalidationCondition)
+	}
+	itemValidUntil := itemProperties["validUntil"].(map[string]any)
+	if !strings.Contains(itemValidUntil["description"].(string), "深度分析报告刷新日期") ||
+		!strings.Contains(itemValidUntil["description"].(string), "重新分析刷新") {
+		t.Fatalf("item validUntil schema = %+v", itemValidUntil)
 	}
 }
 

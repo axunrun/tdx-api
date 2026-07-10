@@ -27,14 +27,14 @@ func candidatePoolMCPTools() []mcpTool {
 	properties["code"].(map[string]any)["pattern"] = `^\d{6}$`
 	properties["validUntil"] = map[string]any{
 		"type":        "string",
-		"description": "有效时间，YYYY-MM-DD 或 YYYYMMDD；表示该候选股记录有效到哪一天，不传表示未设置到期日。",
+		"description": "候选池记录有效时间，YYYY-MM-DD 或 YYYYMMDD；通常应与最近深度分析报告的 next_review_date / deep_report_valid_until 对齐；到期后需要重新分析刷新。",
 		"pattern":     `^(\d{4}-\d{2}-\d{2}|\d{8})$`,
 	}
 	properties["buySignalTier"] = map[string]any{
 		"type":        "string",
 		"enum":        []string{"observe_only", "setup_ready", "trade_eligible"},
 		"default":     "observe_only",
-		"description": "股票买入状态，对应数据库 buy_signal_tier；不传默认 observe_only。observe_only=只观察，不能买；setup_ready=有买入设定但等触发，未触发不能买，通常需要 triggerCondition 和 invalidationCondition；trade_eligible=允许交易员在窗口内独立判断买入。",
+		"description": "股票买入状态，对应数据库 buy_signal_tier；不传默认 observe_only。observe_only=观察池，不能买；setup_ready=可购买池，有买入设定但等待 triggerCondition 触发，未触发不能买；trade_eligible=报告有效且买入条件已满足或接近满足，允许交易员在交易窗口内独立判断买入。",
 	}
 	tool.Description = "SQLite 选股候选池工具。上下文协议：reason 只写为什么入池；themes 写板块/概念/题材；buySignalTier 写能不能买；triggerCondition 写什么时候触发；invalidationCondition 写什么时候失效。list/get 是只读操作，不需要 confirm；add 是按 code 加入或更新，已存在时覆盖 name/addedDate/validUntil/buySignalTier/triggerCondition/invalidationCondition/reason/themes 并刷新 updatedAt，不追加历史；list 默认按 updatedAt desc 返回；remove 是硬删除，会永久移除当前记录且不保留归档。"
 	properties["action"].(map[string]any)["description"] = "操作：add 加入或更新；list 只读列出候选池；get 只读查看单只候选股；remove 硬删除当前记录。"
@@ -43,8 +43,8 @@ func candidatePoolMCPTools() []mcpTool {
 	properties["addedDate"].(map[string]any)["description"] = "添加日期，YYYY-MM-DD 或 YYYYMMDD；add 时可选，不传默认今天；同 code 已存在时会被本次值覆盖。"
 	properties["reason"].(map[string]any)["description"] = "入池理由；add 时必填；只写为什么入池，不要混写能不能买；同 code 已存在时覆盖旧 reason，不追加历史。"
 	properties["themes"].(map[string]any)["description"] = "板块、概念、题材字段；可填写逗号分隔文本，只放主题标签，不放买入状态；同 code 已存在时覆盖旧 themes，不追加历史。"
-	properties["triggerCondition"].(map[string]any)["description"] = "触发条件；可选，说明 setup_ready 何时触发；不表示已经可以买；同 code 已存在时覆盖旧 triggerCondition，不追加历史。"
-	properties["invalidationCondition"].(map[string]any)["description"] = "失效条件；可选，说明候选股何时失效或移出观察；同 code 已存在时覆盖旧 invalidationCondition，不追加历史。"
+	properties["triggerCondition"].(map[string]any)["description"] = "下一阶段触发条件；同 code 已存在时覆盖旧 triggerCondition，不追加历史。当 buySignalTier=observe_only 时，表示从观察池升级到 setup_ready 的条件；当 buySignalTier=setup_ready 或 trade_eligible 时，表示可下单买入前必须满足的价格/技术/消息催化条件。"
+	properties["invalidationCondition"].(map[string]any)["description"] = "失效/降档/移除条件；说明候选股何时失效、降级或移出观察；同 code 已存在时覆盖旧 invalidationCondition，不追加历史。"
 	properties["limit"].(map[string]any)["description"] = "list 返回条数，默认 50，最大 200；list 默认按 updatedAt desc 返回最近更新记录。"
 	properties["confirm"].(map[string]any)["description"] = "仅 add/remove 等写入操作必须为 true；list/get 是只读操作，不需要 confirm。"
 	tool.OutputSchema = candidatePoolOutputSchema()
@@ -114,20 +114,20 @@ func candidatePoolOutputSchema() map[string]any {
 	}
 	item["properties"].(map[string]any)["validUntil"] = map[string]any{
 		"type":        "string",
-		"description": "有效时间，服务端统一返回 YYYY-MM-DD；空字符串表示未设置到期日。",
+		"description": "候选池记录有效时间；通常与最近深度分析报告刷新日期对齐，到期后需要重新分析刷新。服务端统一返回 YYYY-MM-DD；空字符串表示未设置到期日。",
 	}
 	item["properties"].(map[string]any)["buySignalTier"] = map[string]any{
 		"type":        "string",
 		"enum":        []string{"observe_only", "setup_ready", "trade_eligible"},
-		"description": "股票买入状态：observe_only 不能买；setup_ready 触发后才可考虑，未触发不能买；trade_eligible 可独立判断买入。",
+		"description": "股票买入状态：observe_only=不能买；setup_ready=可购买池但需等待 triggerCondition；trade_eligible=允许交易员在窗口内独立判断买入。",
 	}
 	item["properties"].(map[string]any)["triggerCondition"] = map[string]any{
 		"type":        "string",
-		"description": "触发条件；用于说明 setup_ready 何时触发，空字符串表示未设置。",
+		"description": "下一阶段触发条件。observe_only 表示升级到 setup_ready 的条件；setup_ready/trade_eligible 表示可下单买入前必须满足的条件。空字符串表示未设置。",
 	}
 	item["properties"].(map[string]any)["invalidationCondition"] = map[string]any{
 		"type":        "string",
-		"description": "失效条件；用于说明候选股何时失效或移出观察，空字符串表示未设置。",
+		"description": "失效/降档/移除条件。空字符串表示未设置。",
 	}
 	schema := map[string]any{
 		"type":        "object",
