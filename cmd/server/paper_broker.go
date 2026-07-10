@@ -158,6 +158,25 @@ func (s *PaperStore) ListPositions(accountID string) ([]PaperPosition, error) {
 	return positions, rows.Err()
 }
 
+func (s *PaperStore) RefreshSellablePositions(now time.Time) error {
+	tradingDay := now.In(paperShanghaiLocation).Format("2006-01-02")
+	_, err := s.db.Exec(`
+		UPDATE paper_positions
+		SET sellable_quantity = MAX(
+			0,
+			quantity - frozen_quantity - COALESCE((
+				SELECT SUM(ledger.quantity_delta)
+				FROM paper_position_ledger AS ledger
+				WHERE ledger.account_id = paper_positions.account_id
+					AND ledger.code = paper_positions.code
+					AND ledger.reason = 'buy_fill'
+					AND SUBSTR(ledger.created_at, 1, 10) = ?
+			), 0)
+		)
+	`, tradingDay)
+	return err
+}
+
 func insertInitialPosition(
 	tx *sql.Tx,
 	accountID string,

@@ -38,6 +38,27 @@ func TestPaperOrderCanMatchOnlyInItsSession(t *testing.T) {
 	}
 }
 
+func TestLegacyAuctionOrderStillUsesAuctionSession(t *testing.T) {
+	order := PaperOrder{
+		OrderType:   paperOrderAuction,
+		TimeInForce: paperTimeInForceDay,
+		CreatedAt:   paperTestTime(9, 0, 0).Format(time.RFC3339Nano),
+	}
+	if !paperOrderCanMatch(order, paperTestTime(9, 22, 0)) {
+		t.Fatal("legacy auction order should match during auction session")
+	}
+	if paperOrderCanMatch(order, paperTestTime(10, 0, 0)) {
+		t.Fatal("legacy auction order should not match during continuous trading")
+	}
+	expired, err := paperOrderExpired(order, paperTestTime(9, 25, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !expired {
+		t.Fatal("legacy auction order should expire after auction session")
+	}
+}
+
 func TestMatchOpenOrdersSkipsOutsideTradingSession(t *testing.T) {
 	store := newTestPaperStore(t)
 	account, err := store.CreateAccount(PaperCreateAccountRequest{

@@ -90,7 +90,7 @@ func paperOrderExpired(order PaperOrder, now time.Time) (bool, error) {
 		return createdDay < currentDay, nil
 	}
 	second := now.Hour()*3600 + now.Minute()*60 + now.Second()
-	if order.TimeInForce == paperTimeInForceAuctionOnly {
+	if paperOrderUsesAuctionSession(order) {
 		return second > 9*3600+25*60, nil
 	}
 	return second > 15*3600, nil
@@ -102,11 +102,16 @@ func paperOrderCanMatch(order PaperOrder, now time.Time) bool {
 		return false
 	}
 	second := now.Hour()*3600 + now.Minute()*60 + now.Second()
-	if order.TimeInForce == paperTimeInForceAuctionOnly {
+	if paperOrderUsesAuctionSession(order) {
 		return second >= 9*3600+20*60 && second <= 9*3600+25*60
 	}
 	return (second >= 9*3600+30*60 && second <= 11*3600+30*60) ||
 		(second >= 13*3600 && second <= 15*3600)
+}
+
+func paperOrderUsesAuctionSession(order PaperOrder) bool {
+	return order.OrderType == paperOrderAuction ||
+		order.TimeInForce == paperTimeInForceAuctionOnly
 }
 
 func (s *PaperStore) FillOrder(orderID string, quote PaperQuote) error {
@@ -282,6 +287,13 @@ func startPaperBackgroundTasks(store *PaperStore, quote PaperQuoteProvider) {
 	if store == nil || quote == nil {
 		return
 	}
+	lastSellableDay := ""
+	now := time.Now()
+	if err := store.RefreshSellablePositions(now); err != nil {
+		log.Printf("paper refresh sellable positions failed: %v", err)
+	} else {
+		lastSellableDay = now.In(paperShanghaiLocation).Format("2006-01-02")
+	}
 	go func() {
 		matchTicker := time.NewTicker(30 * time.Second)
 		snapshotTicker := time.NewTicker(5 * time.Minute)
@@ -292,6 +304,15 @@ func startPaperBackgroundTasks(store *PaperStore, quote PaperQuoteProvider) {
 		for {
 			select {
 			case <-matchTicker.C:
+				now := time.Now()
+				tradingDay := now.In(paperShanghaiLocation).Format("2006-01-02")
+				if tradingDay != lastSellableDay {
+					if err := store.RefreshSellablePositions(now); err != nil {
+						log.Printf("paper refresh sellable positions failed: %v", err)
+					} else {
+						lastSellableDay = tradingDay
+					}
+				}
 				if err := store.MatchOpenOrders(quote); err != nil {
 					log.Printf("paper match open orders failed: %v", err)
 				}

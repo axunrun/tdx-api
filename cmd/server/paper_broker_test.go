@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func newTestPaperStore(t *testing.T) *PaperStore {
@@ -149,6 +150,52 @@ func TestListPaperPositionsOmitsClosedRows(t *testing.T) {
 	}
 	if len(positions) != 0 {
 		t.Fatalf("positions = %+v, want none", positions)
+	}
+}
+
+func TestRefreshPaperSellablePositionsAppliesTPlusOne(t *testing.T) {
+	store := newTestPaperStore(t)
+	account, err := store.CreateAccount(PaperCreateAccountRequest{
+		Name:        "buyer",
+		InitialCash: 20000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	order, err := store.PlaceOrder(PaperPlaceOrderRequest{
+		AccountID:   account.ID,
+		Code:        "600000",
+		Side:        paperSideBuy,
+		OrderType:   paperOrderMarket,
+		TimeInForce: paperTimeInForceDay,
+		Quantity:    100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.FillOrder(order.ID, PaperQuote{Code: "600000", Price: 10}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().In(paperShanghaiLocation)
+	if err := store.RefreshSellablePositions(now); err != nil {
+		t.Fatal(err)
+	}
+	positions, err := store.ListPositions(account.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if positions[0].SellableQuantity != 0 {
+		t.Fatalf("same-day sellable = %d, want 0", positions[0].SellableQuantity)
+	}
+	if err := store.RefreshSellablePositions(now.AddDate(0, 0, 1)); err != nil {
+		t.Fatal(err)
+	}
+	positions, err = store.ListPositions(account.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if positions[0].SellableQuantity != 100 {
+		t.Fatalf("next-day sellable = %d, want 100", positions[0].SellableQuantity)
 	}
 }
 
