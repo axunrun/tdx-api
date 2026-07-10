@@ -939,6 +939,7 @@ func buildAgentKlineSummaryText(summary AgentKlineSummary) string {
 		b.WriteString(fmt.Sprintf("股票代码：%s\n\n", summary.Code))
 	}
 	b.WriteString("K线摘要：\n")
+	b.WriteString("说明：RSI反映价格动量，OBV反映量价确认；二者不一致时表示价格动量与成交量确认存在背离，不是数据冲突。\n")
 	for _, period := range summary.analysisPeriods {
 		b.WriteString(fmt.Sprintf(
 			"%s：样本 %d/%d，区间 %s 至 %s，收盘 %.2f，涨跌幅 %s，最高 %.2f，最低 %.2f，最大回撤 %s，波动区间 %s，趋势 %s，位置 %s",

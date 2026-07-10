@@ -265,7 +265,7 @@ func buildAgentStockBrief(c *tdx.Client, code, rawMarket string) (AgentStockBrie
 			"technicalWeek":  156,
 			"technicalMonth": 120,
 		},
-		Note: "面向Agent的单股概览聚合接口；板块返回该股完整所属板块摘要；技术指标只返回各周期最新有效值。",
+		Note: "面向Agent的单股概览聚合接口；板块返回该股完整所属板块摘要；技术指标只返回各周期最新有效值。RSI反映价格动量，OBV反映量价确认，二者不一致时表示价格动量与成交量确认存在背离，不是数据冲突。",
 	}
 
 	if quote, err := buildAgentBriefQuote(c, code); err != nil {
@@ -336,7 +336,7 @@ func buildAgentTechnicalSummary(c *tdx.Client, code string) (AgentTechnicalSumma
 			"week":  156,
 			"month": 120,
 		},
-		Note:     "技术指标由tdx K线在本地计算，仅返回日线、周线、月线最后一个有效指标值；available=false表示该周期K线数量不足。",
+		Note:     "技术指标由tdx K线在本地计算，仅返回日线、周线、月线最后一个有效指标值；available=false表示该周期K线数量不足。RSI反映价格动量，OBV反映量价确认，二者不一致时表示价格动量与成交量确认存在背离，不是数据冲突。",
 		Warnings: warnings,
 	}, nil
 }
@@ -933,13 +933,13 @@ func obvSignal(trend, divergence string, change20, change5 float64) string {
 	switch divergence {
 	case "bearish":
 		return fmt.Sprintf(
-			"OBV：股价近20日创新高但OBV未同步创新高，存在顶背离迹象。（OBV20变化占比%s，OBV5变化占比%s）",
+			"OBV：近20根K线价格创新高但OBV未同步创新高，存在顶背离迹象。（OBV20净变化占窗口成交量%s，OBV5为%s）",
 			formatPercentText(change20),
 			formatPercentText(change5),
 		)
 	case "bullish":
 		return fmt.Sprintf(
-			"OBV：股价近20日创新低但OBV未同步创新低，存在底背离迹象。（OBV20变化占比%s，OBV5变化占比%s）",
+			"OBV：近20根K线价格创新低但OBV未同步创新低，存在底背离迹象。（OBV20净变化占窗口成交量%s，OBV5为%s）",
 			formatPercentText(change20),
 			formatPercentText(change5),
 		)
@@ -947,19 +947,19 @@ func obvSignal(trend, divergence string, change20, change5 float64) string {
 	switch trend {
 	case "up":
 		return fmt.Sprintf(
-			"OBV：近20日上行，量价配合；未见明显顶背离。（OBV20变化占比%s，OBV5变化占比%s）",
+			"OBV：近20根K线净变化为正，量能方向偏强；未见明显顶背离。（OBV20净变化占窗口成交量%s，OBV5为%s）",
 			formatPercentText(change20),
 			formatPercentText(change5),
 		)
 	case "down":
 		return fmt.Sprintf(
-			"OBV：近20日下行，资金承接偏弱；未见明显底背离。（OBV20变化占比%s，OBV5变化占比%s）",
+			"OBV：近20根K线净变化为负，量能方向偏弱；未见明显底背离。（OBV20净变化占窗口成交量%s，OBV5为%s）",
 			formatPercentText(change20),
 			formatPercentText(change5),
 		)
 	default:
 		return fmt.Sprintf(
-			"OBV：近20日震荡，量能方向不明确；未见明显背离。（OBV20变化占比%s，OBV5变化占比%s）",
+			"OBV：近20根K线净变化不明显，量能方向偏震荡；未见明显背离。（OBV20净变化占窗口成交量%s，OBV5为%s）",
 			formatPercentText(change20),
 			formatPercentText(change5),
 		)
