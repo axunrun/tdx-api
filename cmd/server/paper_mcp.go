@@ -42,7 +42,7 @@ func paperMCPTools() []mcpTool {
 
 	order := newMCPTool(
 		"tdx_paper_order",
-		"纸上交易委托工具。place/cancel 是副作用操作，必须由用户明确确认并传 confirm=true；place 需要 code/side/quantity/orderType，limit/auction 还需要 price，get/cancel 需要 orderId。",
+		"纸上交易委托工具。place/cancel 必须由用户明确确认并传 confirm=true；place 需要 code/side/quantity/orderType/timeInForce，auction 必须配合 auction_only，limit/auction 还需要 price。",
 		"",
 		nil,
 		requiredEnum("action", "操作：place 下单、cancel 撤单、list 列表、get 详情。", "place", "cancel", "list", "get"),
@@ -52,7 +52,7 @@ func paperMCPTools() []mcpTool {
 		optionalEnum("orderType", "委托类型；place 时必填；limit/auction 需要 price。", "market", "limit", "auction"),
 		optionalNumberSchema("price", "委托价格；limit/auction 必填。", map[string]any{"exclusiveMinimum": 0}),
 		optionalInteger("quantity", "委托数量；place 时必填，必须为100的整数倍。", map[string]any{"minimum": 100, "multipleOf": 100}),
-		optionalEnumDefault("timeInForce", "有效期；day 为当日有效，auction_only 为集合竞价有效。", "day", "day", "auction_only"),
+		optionalEnum("timeInForce", "有效期；market/limit 必须使用 day，auction 必须使用 auction_only。", "day", "auction_only"),
 		optionalString("orderId", "委托 ID；get/cancel 时需要。"),
 		optionalString("name", "证券名称，可选；用于展示和记录。"),
 		optionalEnumDefault("assetType", "资产类型，默认 stock；当前支持 stock/etf。", "stock", "stock", "etf"),
@@ -68,7 +68,35 @@ func paperMCPTools() []mcpTool {
 				"required": []string{"action"},
 			},
 			"then": map[string]any{
-				"required": []string{"code", "side", "quantity", "orderType"},
+				"required": []string{"code", "side", "quantity", "orderType", "timeInForce"},
+			},
+		},
+		{
+			"if": map[string]any{
+				"properties": map[string]any{
+					"action":    map[string]any{"const": "place"},
+					"orderType": map[string]any{"const": "auction"},
+				},
+				"required": []string{"action", "orderType"},
+			},
+			"then": map[string]any{
+				"properties": map[string]any{
+					"timeInForce": map[string]any{"const": "auction_only"},
+				},
+			},
+		},
+		{
+			"if": map[string]any{
+				"properties": map[string]any{
+					"action":    map[string]any{"const": "place"},
+					"orderType": map[string]any{"enum": []string{"market", "limit"}},
+				},
+				"required": []string{"action", "orderType"},
+			},
+			"then": map[string]any{
+				"properties": map[string]any{
+					"timeInForce": map[string]any{"const": "day"},
+				},
 			},
 		},
 		{
@@ -112,7 +140,7 @@ func paperMCPTools() []mcpTool {
 
 	portfolio := newMCPTool(
 		"tdx_paper_portfolio",
-		"纸上交易账户查询工具。按 view 查询 summary/cash/positions/trades/orders/performance/closed_positions/actions；from/to 仅接受 YYYY-MM-DD 或 YYYYMMDD。",
+		"纸上交易账户查询工具。交易决策前必须使用固定 accountId 查询 positions 和 orders；positions 返回当前持仓、可卖数量和冻结数量。支持 summary/cash/positions/trades/orders/performance/closed_positions/actions。",
 		"",
 		nil,
 		requiredString("accountId", "账户ID，查询账户视图时必填。"),
@@ -481,9 +509,13 @@ func paperRulesMCPResult() map[string]any {
 			"transferFee":    "仅股票收取。",
 		},
 		"matching": []string{
+			"服务端每 30 秒扫描一次有效 pending 委托，交易时段外不撮合。",
+			"day 委托仅在普通交易时段撮合，收盘后未成交会自动失效并释放冻结资源。",
+			"auction 必须配合 auction_only，仅在 09:20:00-09:25:00 撮合，超时自动失效。",
 			"首版不做部分成交；一笔委托要么整笔成交，要么保持 pending。",
 			"买入限价在行情价小于等于委托价时成交；卖出限价在行情价大于等于委托价时成交。",
 			"买入成交后增加总持仓，但当天不增加可卖持仓，按 A股 T+1 口径处理。",
+			"Agent 交易决策前必须用固定 accountId 查询 positions 和 orders；服务端以 SQLite 状态为准。",
 		},
 	}
 	text := strings.Join([]string{
@@ -493,7 +525,9 @@ func paperRulesMCPResult() map[string]any {
 		"3. 数量必须为正数且是 100 的整数倍；limit/auction 必须有正价格。",
 		"4. 费用包含佣金、股票过户费，股票卖出另收印花税。",
 		"5. 买入成交后当天不可卖，服务端按 A股 T+1 可卖口径约束。",
-		"6. 首版不支持部分成交；close/recreate 暂未实现。",
+		"6. 服务端每 30 秒扫描有效挂单；交易时段外不撮合，超时委托自动失效。",
+		"7. Agent 交易决策前先查询 positions 和 orders，服务端以 SQLite 状态为准。",
+		"8. 首版不支持部分成交；close/recreate 暂未实现。",
 	}, "\n")
 	return paperMCPResult(text, map[string]any{"rules": rules})
 }

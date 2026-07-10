@@ -137,7 +137,7 @@ func (s *PaperStore) ListPositions(accountID string) ([]PaperPosition, error) {
 		SELECT account_id, code, COALESCE(name, ''), asset_type, quantity,
 			sellable_quantity, frozen_quantity, avg_cost, updated_at
 		FROM paper_positions
-		WHERE account_id = ?
+		WHERE account_id = ? AND quantity > 0
 		ORDER BY code, id
 	`, accountID)
 	if err != nil {

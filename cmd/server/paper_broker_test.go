@@ -126,6 +126,32 @@ func TestListPaperAccounts(t *testing.T) {
 	}
 }
 
+func TestListPaperPositionsOmitsClosedRows(t *testing.T) {
+	store := newTestPaperStore(t)
+	account, err := store.CreateAccount(PaperCreateAccountRequest{
+		Name: "holder",
+		InitialPositions: []PaperInitialPosition{
+			{Code: "600000", Quantity: 100, CostPrice: 10},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`
+		UPDATE paper_positions SET quantity = 0, sellable_quantity = 0
+		WHERE account_id = ? AND code = ?
+	`, account.ID, "600000"); err != nil {
+		t.Fatal(err)
+	}
+	positions, err := store.ListPositions(account.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(positions) != 0 {
+		t.Fatalf("positions = %+v, want none", positions)
+	}
+}
+
 func assertPaperRowCount(t *testing.T, db *sql.DB, table string, want int) {
 	t.Helper()
 

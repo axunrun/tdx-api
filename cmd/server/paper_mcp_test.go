@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -44,8 +45,8 @@ func TestPaperOrderMCPSchemaDescribesEnums(t *testing.T) {
 		t.Fatalf("assetType schema = %+v", assetType)
 	}
 	timeInForce := properties["timeInForce"].(map[string]any)
-	if timeInForce["default"] != "day" ||
-		!strings.Contains(timeInForce["description"].(string), "当日有效") {
+	if timeInForce["default"] != nil ||
+		!strings.Contains(timeInForce["description"].(string), "auction_only") {
 		t.Fatalf("timeInForce schema = %+v", timeInForce)
 	}
 	for _, name := range []string{"side", "orderType"} {
@@ -59,8 +60,27 @@ func TestPaperOrderMCPSchemaDescribesEnums(t *testing.T) {
 	if !hasString(required, "action") || !hasString(required, "accountId") {
 		t.Fatalf("required = %+v, want action and accountId", required)
 	}
-	if len(tool.InputSchema["allOf"].([]map[string]any)) == 0 {
+	conditions := tool.InputSchema["allOf"].([]map[string]any)
+	if len(conditions) == 0 {
 		t.Fatal("paper order conditional schema missing")
+	}
+	placeRequired := conditions[0]["then"].(map[string]any)["required"].([]string)
+	if !hasString(placeRequired, "timeInForce") {
+		t.Fatalf("place required = %+v, want timeInForce", placeRequired)
+	}
+	conditionJSON, err := json.Marshal(conditions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conditionText := string(conditionJSON)
+	for _, want := range []string{
+		`"const":"auction"`,
+		`"const":"auction_only"`,
+		`"const":"day"`,
+	} {
+		if !strings.Contains(conditionText, want) {
+			t.Fatalf("conditional schema missing %s: %s", want, conditionText)
+		}
 	}
 }
 
@@ -83,6 +103,11 @@ func TestPaperAccountMCPSchemaRequiresConfirmForSideEffects(t *testing.T) {
 func TestPaperPortfolioMCPSchemaDescriptions(t *testing.T) {
 	tool := findPaperMCPTool(t, "tdx_paper_portfolio")
 	properties := tool.InputSchema["properties"].(map[string]any)
+	if !strings.Contains(tool.Description, "交易决策前") ||
+		!strings.Contains(tool.Description, "positions") ||
+		!strings.Contains(tool.Description, "orders") {
+		t.Fatalf("portfolio description = %q", tool.Description)
+	}
 
 	accountID := properties["accountId"].(map[string]any)
 	if !strings.Contains(accountID["description"].(string), "查询账户视图时必填") {
@@ -102,6 +127,26 @@ func TestPaperPortfolioMCPSchemaDescriptions(t *testing.T) {
 			!strings.Contains(property["description"].(string), "按字符串日期过滤") {
 			t.Fatalf("%s schema = %+v", name, property)
 		}
+	}
+}
+
+func TestPaperRulesDescribeAutomaticMatching(t *testing.T) {
+	result, err := callMCPTool(mustMCPParams(t, "tdx_paper_rules", map[string]any{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := result["content"].([]map[string]string)
+	if len(content) != 1 || !strings.Contains(content[0]["text"], "30 秒") ||
+		!strings.Contains(content[0]["text"], "自动失效") {
+		t.Fatalf("content = %+v", content)
+	}
+	structured := result["structuredContent"].(map[string]any)
+	rules := structured["rules"].(map[string]any)
+	matching := fmt.Sprint(rules["matching"])
+	if !strings.Contains(matching, "09:20:00-09:25:00") ||
+		!strings.Contains(matching, "positions") ||
+		!strings.Contains(matching, "orders") {
+		t.Fatalf("matching rules = %s", matching)
 	}
 }
 
