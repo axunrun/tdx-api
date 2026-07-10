@@ -1,6 +1,83 @@
 package main
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
+
+func paperTestTime(hour, minute, second int) time.Time {
+	return time.Date(2026, 7, 10, hour, minute, second, 0, paperShanghaiLocation)
+}
+
+func TestPaperOrderCanMatchOnlyInItsSession(t *testing.T) {
+	day := PaperOrder{TimeInForce: paperTimeInForceDay}
+	auction := PaperOrder{TimeInForce: paperTimeInForceAuctionOnly}
+	tests := []struct {
+		name  string
+		order PaperOrder
+		at    time.Time
+		want  bool
+	}{
+		{"day before open", day, paperTestTime(9, 29, 59), false},
+		{"day morning", day, paperTestTime(9, 30, 0), true},
+		{"day lunch break", day, paperTestTime(12, 0, 0), false},
+		{"day afternoon", day, paperTestTime(13, 0, 0), true},
+		{"day close boundary", day, paperTestTime(15, 0, 0), true},
+		{"day after close", day, paperTestTime(15, 0, 1), false},
+		{"auction start", auction, paperTestTime(9, 20, 0), true},
+		{"auction end", auction, paperTestTime(9, 25, 0), true},
+		{"auction late", auction, paperTestTime(9, 25, 1), false},
+		{"weekend", day, time.Date(2026, 7, 11, 10, 0, 0, 0, paperShanghaiLocation), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := paperOrderCanMatch(tt.order, tt.at); got != tt.want {
+				t.Fatalf("paperOrderCanMatch() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMatchOpenOrdersSkipsOutsideTradingSession(t *testing.T) {
+	store := newTestPaperStore(t)
+	account, err := store.CreateAccount(PaperCreateAccountRequest{
+		Name:        "buyer",
+		InitialCash: 20000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	order, err := store.PlaceOrder(PaperPlaceOrderRequest{
+		AccountID: account.ID,
+		Code:      "600000",
+		Side:      paperSideBuy,
+		OrderType: paperOrderLimit,
+		Price:     10,
+		Quantity:  100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	quoteCalls := 0
+	err = store.matchOpenOrdersAt(func(code string) (PaperQuote, error) {
+		quoteCalls++
+		return PaperQuote{Code: code, Price: 9.8}, nil
+	}, paperTestTime(12, 0, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if quoteCalls != 0 {
+		t.Fatalf("quote calls = %d, want 0", quoteCalls)
+	}
+	pending, err := store.GetOrder(order.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pending.Status != paperOrderPending {
+		t.Fatalf("status = %q, want pending", pending.Status)
+	}
+}
 
 func TestMatchPaperLimitBuyFillsWhenPriceIsBelowLimit(t *testing.T) {
 	store := newTestPaperStore(t)
@@ -23,7 +100,7 @@ func TestMatchPaperLimitBuyFillsWhenPriceIsBelowLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = store.MatchOpenOrders(fixedPaperQuote(9.8))
+	err = store.matchOpenOrdersAt(fixedPaperQuote(9.8), paperTestTime(10, 0, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +151,7 @@ func TestMatchPaperLimitSellFillsWhenPriceIsAboveLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := store.MatchOpenOrders(fixedPaperQuote(11.2)); err != nil {
+	if err := store.matchOpenOrdersAt(fixedPaperQuote(11.2), paperTestTime(10, 0, 0)); err != nil {
 		t.Fatal(err)
 	}
 

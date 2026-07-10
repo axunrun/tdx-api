@@ -208,11 +208,21 @@ func normalizePaperOrderRequest(req *PaperPlaceOrderRequest) error {
 		return fmt.Errorf("unsupported order type: %s", req.OrderType)
 	}
 	if req.TimeInForce == "" {
-		req.TimeInForce = paperTimeInForceDay
+		if req.OrderType == paperOrderAuction {
+			req.TimeInForce = paperTimeInForceAuctionOnly
+		} else {
+			req.TimeInForce = paperTimeInForceDay
+		}
 	}
 	if req.TimeInForce != paperTimeInForceDay &&
 		req.TimeInForce != paperTimeInForceAuctionOnly {
 		return fmt.Errorf("unsupported time in force: %s", req.TimeInForce)
+	}
+	if (req.OrderType == paperOrderAuction) !=
+		(req.TimeInForce == paperTimeInForceAuctionOnly) {
+		return errors.New(
+			"auction order type and auction_only time in force must be used together",
+		)
 	}
 	if req.Quantity <= 0 {
 		return errors.New("quantity must be positive")

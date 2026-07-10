@@ -14,6 +14,13 @@ import (
 type PaperQuoteProvider func(code string) (PaperQuote, error)
 
 func (s *PaperStore) MatchOpenOrders(quote PaperQuoteProvider) error {
+	return s.matchOpenOrdersAt(quote, time.Now())
+}
+
+func (s *PaperStore) matchOpenOrdersAt(
+	quote PaperQuoteProvider,
+	now time.Time,
+) error {
 	if quote == nil {
 		return errors.New("quote provider is required")
 	}
@@ -44,6 +51,9 @@ func (s *PaperStore) MatchOpenOrders(quote PaperQuoteProvider) error {
 		return err
 	}
 	for _, order := range orders {
+		if !paperOrderCanMatch(order, now) {
+			continue
+		}
 		q, err := quote(order.Code)
 		if err != nil {
 			continue
@@ -53,6 +63,21 @@ func (s *PaperStore) MatchOpenOrders(quote PaperQuoteProvider) error {
 		}
 	}
 	return nil
+}
+
+var paperShanghaiLocation = time.FixedZone("Asia/Shanghai", 8*60*60)
+
+func paperOrderCanMatch(order PaperOrder, now time.Time) bool {
+	now = now.In(paperShanghaiLocation)
+	if now.Weekday() == time.Saturday || now.Weekday() == time.Sunday {
+		return false
+	}
+	second := now.Hour()*3600 + now.Minute()*60 + now.Second()
+	if order.TimeInForce == paperTimeInForceAuctionOnly {
+		return second >= 9*3600+20*60 && second <= 9*3600+25*60
+	}
+	return (second >= 9*3600+30*60 && second <= 11*3600+30*60) ||
+		(second >= 13*3600 && second <= 15*3600)
 }
 
 func (s *PaperStore) FillOrder(orderID string, quote PaperQuote) error {

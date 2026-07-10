@@ -135,6 +135,38 @@ func TestPlacePaperOrderRejectsInvalidQuantity(t *testing.T) {
 	assertPaperRowCount(t, store.db, "paper_orders", 0)
 }
 
+func TestNormalizePaperAuctionOrderUsesAuctionOnly(t *testing.T) {
+	req := PaperPlaceOrderRequest{
+		AccountID: "acct",
+		Code:      "600000",
+		Side:      paperSideBuy,
+		OrderType: paperOrderAuction,
+		Price:     10,
+		Quantity:  100,
+	}
+	if err := normalizePaperOrderRequest(&req); err != nil {
+		t.Fatal(err)
+	}
+	if req.TimeInForce != paperTimeInForceAuctionOnly {
+		t.Fatalf("timeInForce = %q, want auction_only", req.TimeInForce)
+	}
+}
+
+func TestNormalizePaperOrderRejectsAuctionOnlyLimitOrder(t *testing.T) {
+	req := PaperPlaceOrderRequest{
+		AccountID:   "acct",
+		Code:        "600000",
+		Side:        paperSideBuy,
+		OrderType:   paperOrderLimit,
+		TimeInForce: paperTimeInForceAuctionOnly,
+		Price:       10,
+		Quantity:    100,
+	}
+	if err := normalizePaperOrderRequest(&req); err == nil {
+		t.Fatal("normalizePaperOrderRequest() error = nil, want error")
+	}
+}
+
 func TestPlacePaperOrderRejectsInsufficientPosition(t *testing.T) {
 	store := newTestPaperStore(t)
 	account, err := store.CreateAccount(PaperCreateAccountRequest{
