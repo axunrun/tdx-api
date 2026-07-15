@@ -24,13 +24,13 @@ func TestBuildTradeFlowEstimateSplitsLevelsAndMainNet(t *testing.T) {
 		t.Fatalf("unexpected counts: %+v", got.Summary)
 	}
 	assertFloat(t, got.Summary.TotalAmount, 1721000)
-	assertFloat(t, got.Summary.MainNetInflow, 600000)
-	assertFloat(t, got.Summary.NetInflow, 680000)
-	assertFloat(t, got.Levels[0].NetAmount, 1100000)
-	assertFloat(t, got.Levels[1].NetAmount, -500000)
-	assertFloat(t, got.Levels[2].NetAmount, 100000)
-	assertFloat(t, got.Levels[3].NetAmount, -20000)
-	if got.Direction.Status0 != "outflow" || got.Direction.Status1 != "inflow" {
+	assertFloat(t, got.Summary.MainNetInflow, -600000)
+	assertFloat(t, got.Summary.NetInflow, -680000)
+	assertFloat(t, got.Levels[0].NetAmount, -1100000)
+	assertFloat(t, got.Levels[1].NetAmount, 500000)
+	assertFloat(t, got.Levels[2].NetAmount, -100000)
+	assertFloat(t, got.Levels[3].NetAmount, 20000)
+	if got.Direction.Status0 != "inflow" || got.Direction.Status1 != "outflow" {
 		t.Fatalf("unexpected direction mapping: %+v", got.Direction)
 	}
 }
@@ -71,6 +71,9 @@ func TestBuildTradeFlowEstimateTextIsPlainChineseSummary(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Fatalf("text missing range %q: %s", want, text)
 		}
+	}
+	if !strings.Contains(text, "Status=0计为流入，Status=1计为流出") {
+		t.Fatalf("text has unexpected direction mapping: %s", text)
 	}
 }
 

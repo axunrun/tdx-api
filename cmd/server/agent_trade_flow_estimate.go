@@ -230,15 +230,15 @@ func buildTradeFlowEstimate(code, date string, trades protocol.Trades) TradeFlow
 		Method:     "按逐笔成交金额或成交量阈值估算",
 		IsIntraday: date == time.Now().Format("2006-01-02"),
 		Direction: TradeFlowDirection{
-			Status0: "outflow",
-			Status1: "inflow",
+			Status0: "inflow",
+			Status1: "outflow",
 			Status2: "neutral",
 		},
 		Thresholds:      thresholds,
 		ThresholdSource: source,
 		Levels:          levels,
 		Warnings: append([]string{
-			"该结果为TDX逐笔成交估算，不等同于东方财富/同花顺官方资金流；方向按平台对照修正为Status=1流入、Status=0流出。",
+			"该结果为TDX逐笔成交估算，不等同于东方财富/同花顺官方资金流；方向采用TDX原生定义：Status=0流入、Status=1流出。",
 		}, warnings...),
 	}
 	if len(trades) == 0 {
@@ -257,11 +257,11 @@ func buildTradeFlowEstimate(code, date string, trades protocol.Trades) TradeFlow
 		out.Summary.TradeCount++
 		out.Levels[level].TradeCount++
 		switch trade.Status {
-		case 1:
+		case 0:
 			out.Summary.TotalBuyAmount += amount
 			out.Summary.BuyCount++
 			out.Levels[level].BuyAmount += amount
-		case 0:
+		case 1:
 			out.Summary.TotalSellAmount += amount
 			out.Summary.SellCount++
 			out.Levels[level].SellAmount += amount
@@ -346,7 +346,7 @@ func buildTradeFlowEstimateText(e TradeFlowEstimate) string {
 
 	b.WriteString("统计口径：\n")
 	b.WriteString(fmt.Sprintf(
-		"阈值来源为%s，基于最近%d个交易日逐笔成交金额从大到小排序，并按累计成交额占比分档：0%%~10%%为超大单，10%%~30%%为大单，30%%~55%%为中单，55%%~100%%为小单。当前阈值为超大单>=%s，大单>=%s，中单>=%s，低于中单阈值为小单。TDX Status=1计为流入，Status=0计为流出，Status=2计为中性。该结果为TDX逐笔成交估算，不等同于外部APP官方资金流。",
+		"阈值来源为%s，基于最近%d个交易日逐笔成交金额从大到小排序，并按累计成交额占比分档：0%%~10%%为超大单，10%%~30%%为大单，30%%~55%%为中单，55%%~100%%为小单。当前阈值为超大单>=%s，大单>=%s，中单>=%s，低于中单阈值为小单。TDX Status=0计为流入，Status=1计为流出，Status=2计为中性。该结果为TDX逐笔成交估算，不等同于外部APP官方资金流。",
 		e.ThresholdSource,
 		tradeFlowLookbackDays,
 		formatCNYText(e.Thresholds.SuperLarge.Amount),
