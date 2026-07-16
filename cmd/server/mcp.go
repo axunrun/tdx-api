@@ -118,7 +118,7 @@ func mcpTools() []mcpTool {
 			optionalEnumDefault("level", "输出深度：brief为简版，normal为常规版，deep为深度版。默认normal。", "normal", "brief", "normal", "deep"),
 			optionalInteger("dayCount", "日线数量，最大500；不传时按 level 使用默认数量：brief=60，normal=120，deep=250。", map[string]any{"minimum": 1, "maximum": 500}),
 		),
-		newMCPTool("tdx_trade_flow_estimate_text", "分档资金流估算。用于观察指定交易日超大单、大单、中单、小单的流入流出；阈值来自近200个交易日逐笔成交金额分位。", "/api/agent/trade-flow-estimate-text", handleAgentTradeFlowEstimateText,
+		newMCPTool("tdx_trade_flow_estimate_text", "分档资金流估算。用于观察指定交易日超大单、大单、中单、小单的流入流出；优先使用近60个交易日逐笔成交金额计算的自适应阈值，缓存缺失或口径不匹配时明确回退固定金额阈值。", "/api/agent/trade-flow-estimate-text", handleAgentTradeFlowEstimateText,
 			requiredString("code", "股票代码，例如300499"),
 			optionalDateString("date", "交易日期，YYYY-MM-DD或YYYYMMDD；不传默认今天"),
 		),

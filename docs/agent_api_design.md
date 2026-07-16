@@ -68,7 +68,7 @@ JSON 调试和人工核查仍使用原 `/api/agent/*` HTTP 接口，避免 MCP �
 | SQLite 板块索引库 | 个股所属板块查询 | 已完成 | 容器启动时刷新，更新而非追加 |
 | `/api/agent/kline-summary` | K 线聚合 JSON | 已完成 | 日线按 level/dayCount 限量返回原始 K 线聚合数据；周线、月线全量返回 |
 | `/api/agent/kline-summary-text` | K 线形态与阶段走势文本 | 已完成 | 面向 Agent 的中文低噪音输出，包含趋势阶段和风险摘要 |
-| `/api/agent/trade-flow-estimate` | 单日逐笔资金流估算 JSON | 已完成 | 支持 `date=YYYY-MM-DD`，优先按 200 日逐笔成交额自适应阈值估算分档资金流 |
+| `/api/agent/trade-flow-estimate` | 单日逐笔资金流估算 JSON | 已完成 | 支持 `date=YYYY-MM-DD`，优先按60个交易日逐笔成交额自适应阈值估算分档资金流；旧周期缓存自动失效 |
 | `/api/agent/trade-flow-estimate-text` | 单日逐笔资金流估算文本 | 已完成 | 面向 Agent 的中文低噪音输出，明确非外部 APP 官方口径 |
 | `/api/agent/f10-summary` | F10 深度资料 JSON | 已完成 | 覆盖股本、股东、机构、分红、资金、资本、题材、公告、经营、行业、研报等低频资料 |
 | `/api/agent/f10-summary-text` | F10 深度资料文本 | 已完成 | 面向 Agent 的深度基本面补充输出 |

@@ -16,7 +16,7 @@ import (
 
 const (
 	tradeFlowSource       = "tdx_tick_estimate"
-	tradeFlowLookbackDays = 200
+	tradeFlowLookbackDays = 60
 	tradeFlowRefreshDelay = 3 * time.Second
 )
 
@@ -345,10 +345,19 @@ func buildTradeFlowEstimateText(e TradeFlowEstimate) string {
 	b.WriteString("\n")
 
 	b.WriteString("统计口径：\n")
+	if e.ThresholdSource == "adaptive" {
+		b.WriteString(fmt.Sprintf(
+			"阈值来源为adaptive，基于最近%d个交易日逐笔成交金额从大到小排序，并按累计成交额占比分档：0%%~10%%为超大单，10%%~30%%为大单，30%%~55%%为中单，55%%~100%%为小单。",
+			tradeFlowLookbackDays,
+		))
+	} else {
+		b.WriteString(fmt.Sprintf(
+			"阈值来源为fixed，未找到有效的%d日自适应阈值缓存，已回退固定金额分档。",
+			tradeFlowLookbackDays,
+		))
+	}
 	b.WriteString(fmt.Sprintf(
-		"阈值来源为%s，基于最近%d个交易日逐笔成交金额从大到小排序，并按累计成交额占比分档：0%%~10%%为超大单，10%%~30%%为大单，30%%~55%%为中单，55%%~100%%为小单。当前阈值为超大单>=%s，大单>=%s，中单>=%s，低于中单阈值为小单。TDX Status=0计为流入，Status=1计为流出，Status=2计为中性。该结果为TDX逐笔成交估算，不等同于外部APP官方资金流。",
-		e.ThresholdSource,
-		tradeFlowLookbackDays,
+		"当前阈值为超大单>=%s，大单>=%s，中单>=%s，低于中单阈值为小单。TDX Status=0计为流入，Status=1计为流出，Status=2计为中性。该结果为TDX逐笔成交估算，不等同于外部APP官方资金流。",
 		formatCNYText(e.Thresholds.SuperLarge.Amount),
 		formatCNYText(e.Thresholds.Large.Amount),
 		formatCNYText(e.Thresholds.Medium.Amount),
@@ -366,7 +375,10 @@ func formatFlowText(value float64) string {
 func loadTradeFlowThresholds(code string) (TradeFlowThresholds, string, []string) {
 	cache, err := readTradeFlowThresholdCache(code)
 	if err != nil {
-		return defaultTradeFlowThresholds, "fixed", []string{"未找到自适应阈值缓存，已回退固定阈值。"}
+		return defaultTradeFlowThresholds, "fixed", []string{fmt.Sprintf(
+			"未找到有效的%d日自适应阈值缓存，已回退固定阈值。",
+			tradeFlowLookbackDays,
+		)}
 	}
 	return TradeFlowThresholds{
 		SuperLarge: TradeFlowThreshold{Amount: cache.SuperLargeAmount},
@@ -384,10 +396,27 @@ func readTradeFlowThresholdCache(code string) (*TradeFlowThresholdCache, error) 
 	if err := json.Unmarshal(data, &cache); err != nil {
 		return nil, err
 	}
-	if cache.Code == "" || cache.SampleCount == 0 {
-		return nil, fmt.Errorf("阈值缓存无效")
+	if err := validateTradeFlowThresholdCache(&cache, code); err != nil {
+		return nil, err
 	}
 	return &cache, nil
+}
+
+func validateTradeFlowThresholdCache(cache *TradeFlowThresholdCache, code string) error {
+	if cache.Code != code {
+		return fmt.Errorf("阈值缓存股票代码不匹配")
+	}
+	if cache.LookbackDays != tradeFlowLookbackDays {
+		return fmt.Errorf("阈值缓存周期为%d日，当前要求%d日", cache.LookbackDays, tradeFlowLookbackDays)
+	}
+	if cache.SampleCount <= 0 || cache.Method != "historical_tick_amount_cumulative_share" {
+		return fmt.Errorf("阈值缓存样本或算法无效")
+	}
+	if cache.SuperLargeAmount < cache.LargeAmount ||
+		cache.LargeAmount < cache.MediumAmount || cache.MediumAmount <= 0 {
+		return fmt.Errorf("阈值缓存分档无效")
+	}
+	return nil
 }
 
 func refreshTradeFlowThresholds(c *tdx.Client, code string, delay time.Duration) (*TradeFlowThresholdCache, error) {

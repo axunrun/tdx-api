@@ -145,6 +145,12 @@ func TestMCPToolSchemasDescribeAgentReadableConstraints(t *testing.T) {
 	if len(sectorDetail.InputSchema["anyOf"].([]map[string]any)) != 2 {
 		t.Fatalf("sector detail anyOf = %+v", sectorDetail.InputSchema["anyOf"])
 	}
+
+	tradeFlow := findMCPTool(t, "tdx_trade_flow_estimate_text")
+	if !strings.Contains(tradeFlow.Description, "近60个交易日") ||
+		strings.Contains(tradeFlow.Description, "200个交易日") {
+		t.Fatalf("trade flow description has wrong lookback: %s", tradeFlow.Description)
+	}
 }
 
 func TestMCPToolSchemasDescribeCalculationTools(t *testing.T) {

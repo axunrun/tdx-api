@@ -33,9 +33,16 @@ func TestBuildTradeFlowEstimateSplitsLevelsAndMainNet(t *testing.T) {
 	if got.Direction.Status0 != "inflow" || got.Direction.Status1 != "outflow" {
 		t.Fatalf("unexpected direction mapping: %+v", got.Direction)
 	}
+	if !strings.Contains(strings.Join(got.Warnings, " "), "60日自适应阈值缓存") {
+		t.Fatalf("warning has wrong lookback: %+v", got.Warnings)
+	}
 }
 
 func TestTradeFlowAdaptiveThresholdsUseCumulativeAmountShare(t *testing.T) {
+	if tradeFlowLookbackDays != 60 {
+		t.Fatalf("trade flow lookback days = %d, want 60", tradeFlowLookbackDays)
+	}
+
 	amounts := []float64{100, 90, 80, 70, 60, 50, 40, 30, 20, 10}
 
 	got := buildTradeFlowAdaptiveThresholds("603063", amounts)
@@ -48,6 +55,21 @@ func TestTradeFlowAdaptiveThresholdsUseCumulativeAmountShare(t *testing.T) {
 	}
 	if got.Method != "historical_tick_amount_cumulative_share" {
 		t.Fatalf("unexpected method: %s", got.Method)
+	}
+	if err := validateTradeFlowThresholdCache(got, "603063"); err != nil {
+		t.Fatalf("generated cache is invalid: %v", err)
+	}
+}
+
+func TestValidateTradeFlowThresholdCacheRejectsWrongLookback(t *testing.T) {
+	cache := &TradeFlowThresholdCache{
+		Code:         "603063",
+		LookbackDays: 200,
+		SampleCount:  100,
+	}
+
+	if err := validateTradeFlowThresholdCache(cache, "603063"); err == nil {
+		t.Fatal("expected mismatched lookback cache to be rejected")
 	}
 }
 
@@ -67,13 +89,22 @@ func TestBuildTradeFlowEstimateTextIsPlainChineseSummary(t *testing.T) {
 			t.Fatalf("text missing %q: %s", want, text)
 		}
 	}
-	for _, want := range []string{"0%~10%", "10%~30%", "30%~55%", "55%~100%"} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("text missing range %q: %s", want, text)
-		}
-	}
 	if !strings.Contains(text, "Status=0计为流入，Status=1计为流出") {
 		t.Fatalf("text has unexpected direction mapping: %s", text)
+	}
+	if !strings.Contains(text, "未找到有效的60日自适应阈值缓存") {
+		t.Fatalf("fixed threshold explanation missing: %s", text)
+	}
+
+	estimate.ThresholdSource = "adaptive"
+	adaptiveText := buildTradeFlowEstimateText(estimate)
+	if !strings.Contains(adaptiveText, "基于最近60个交易日") {
+		t.Fatalf("adaptive threshold lookback missing: %s", adaptiveText)
+	}
+	for _, want := range []string{"0%~10%", "10%~30%", "30%~55%", "55%~100%"} {
+		if !strings.Contains(adaptiveText, want) {
+			t.Fatalf("adaptive text missing range %q: %s", want, adaptiveText)
+		}
 	}
 }
 
