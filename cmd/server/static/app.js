@@ -617,7 +617,9 @@ function describeActivity(item) {
   if (item.actionType === "fill_order") {
     const side = response.side === "sell" ? "卖出成交" : "买入成交";
     const name = response.name || response.code || request.name || request.code || "";
-    return `${side}：${name} ${fmtNumber.format(response.quantity || 0)} 股，成交额 ${fmtMoney.format(response.amount || 0)}`;
+    const reason = request.reason ? `，理由：${request.reason}` : "";
+    return `${side}：${name} ${fmtNumber.format(response.quantity || 0)} 股` +
+      `，成交额 ${fmtMoney.format(response.amount || 0)}${reason}`;
   }
   if (item.actionType === "cancel_order") {
     return `撤销委托：${request.orderId || ""}`;

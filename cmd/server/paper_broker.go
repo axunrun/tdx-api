@@ -132,6 +132,51 @@ func (s *PaperStore) ListAccounts() ([]PaperAccount, error) {
 	return accounts, rows.Err()
 }
 
+func (s *PaperStore) DeleteAccount(accountID string) error {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return errors.New("account ID is required")
+	}
+
+	tx, err := s.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var exists int
+	if err := tx.QueryRow(
+		"SELECT 1 FROM paper_accounts WHERE id = ?",
+		accountID,
+	).Scan(&exists); err != nil {
+		return err
+	}
+
+	for _, table := range []string{
+		"paper_closed_position_tracking",
+		"paper_closed_positions",
+		"paper_account_snapshots",
+		"paper_agent_actions",
+		"paper_position_ledger",
+		"paper_cash_ledger",
+		"paper_trades",
+		"paper_orders",
+		"paper_positions",
+		"paper_account_initial_positions",
+	} {
+		if _, err := tx.Exec(
+			"DELETE FROM "+table+" WHERE account_id = ?",
+			accountID,
+		); err != nil {
+			return fmt.Errorf("delete %s: %w", table, err)
+		}
+	}
+	if _, err := tx.Exec("DELETE FROM paper_accounts WHERE id = ?", accountID); err != nil {
+		return fmt.Errorf("delete paper account: %w", err)
+	}
+	return tx.Commit()
+}
+
 func (s *PaperStore) ListPositions(accountID string) ([]PaperPosition, error) {
 	rows, err := s.db.Query(`
 		SELECT account_id, code, COALESCE(name, ''), asset_type, quantity,
@@ -156,6 +201,14 @@ func (s *PaperStore) ListPositions(accountID string) ([]PaperPosition, error) {
 		positions = append(positions, position)
 	}
 	return positions, rows.Err()
+}
+
+func (s *PaperStore) MakeAllPositionsSellable() error {
+	_, err := s.db.Exec(`
+		UPDATE paper_positions
+		SET sellable_quantity = MAX(0, quantity - frozen_quantity)
+	`)
+	return err
 }
 
 func (s *PaperStore) RefreshSellablePositions(now time.Time) error {

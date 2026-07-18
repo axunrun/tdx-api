@@ -56,7 +56,9 @@ func main() {
 		log.Printf("paper db init failed: %v", err)
 	} else {
 		paperStore = NewPaperStore(paperDB)
-		startPaperBackgroundTasks(paperStore, quotePaperFromTDX)
+		if err := paperStore.MakeAllPositionsSellable(); err != nil {
+			log.Printf("paper position migration failed: %v", err)
+		}
 		log.Println("paper trading store initialized")
 	}
 

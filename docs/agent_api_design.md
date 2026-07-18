@@ -600,12 +600,14 @@ WebUI 只读展示，不提供人工下单按钮，不直接读取 SQLite，也�
 
 | MCP 工具 | 作用 | 关键参数 |
 |---|---|---|
-| `tdx_paper_account` | 创建、列出、查询模拟账户 | `action=create|list|get|close|recreate`；`name`；`initialCash`；`initialPositions`；`accountId` |
-| `tdx_paper_order` | 提交委托、撤单、查询委托 | `action=place|cancel|list|get`；`accountId`；`code`；`side=buy|sell`；`orderType=market|limit|auction`；`price`；`quantity`；`timeInForce=day|auction_only`；`orderId`；`reason` 交易理由 |
+| `tdx_paper_account` | 创建、列出、查询、永久删除模拟账户 | `action=create|list|get|delete|close|recreate`；`name`；`initialCash`；`initialPositions`；`accountId`；`create/delete/close/recreate` 必须传 `confirm=true` |
+| `tdx_paper_order` | 按指定价格立即记录买卖并查询历史记录 | `action=place|cancel|list|get`；`accountId`；`code`；`side=buy|sell`；`price` 必填成交价；`quantity`；`orderId`；`reason` 交易理由；`place/cancel` 必须传 `confirm=true` |
 | `tdx_paper_portfolio` | 查询资金、持仓、成交、收益和清仓表现 | `accountId`；`view=summary|cash|positions|trades|orders|performance|closed_positions|actions`；`from`；`to`；`limit`；`code` |
 | `tdx_paper_rules` | 返回模拟交易规则说明 | 无必填参数 |
 
-当前第一版已实现账户创建/查询、下单、撤单、订单查询、持仓查询、成交查询、清仓查询和规则说明。
+当前第一版已实现账户创建/查询/永久删除、立即记录买卖、历史委托查询、持仓查询、成交查询、清仓查询和规则说明。
+账户 `delete` 会在共享 SQLite 内永久删除指定账户及其持仓、委托、成交、资金流水、持仓流水、
+资产快照、清仓跟踪和 Agent 行为记录，不删除数据库文件，也不影响其他账户。
 账户 `close/recreate` 保留 schema，后续在需要销户重建审计流程时再打开。
 
 ### Paper HTTP API
@@ -622,14 +624,13 @@ WebUI 只读展示，不提供人工下单按钮，不直接读取 SQLite，也�
 
 - 支持 A股股票与 A股 ETF。
 - 现金买入，持仓卖出，不支持真实券商接入、融资融券或做空。
-- 委托方向：`buy`、`sell`。
-- 委托类型：`market`、`limit`、`auction`。
+- 买卖方向：`buy`、`sell`。
 - 数量必须为 100 的整数倍。
-- 限价买入提交时冻结资金，限价卖出提交时冻结可卖持仓。
-- 市价买入不预冻结资金，撮合时按服务端实时行情校验现金并成交。
-- 买入成交后当天不增加可卖持仓，服务端按 A股 T+1 可卖口径约束。
-- 第一版不做部分成交；一笔委托要么整笔成交，要么保持 pending。
-- 撤单会释放冻结资金或冻结持仓。
+- `place` 必须由 Agent 提供正数 `price`，服务端按该价格立即整笔成交并自动记账。
+- 模拟交易不读取 TDX 实时行情、不判断交易日期或交易时段，也不启动定时撮合任务。
+- 买入后持仓立即可卖；卖出时校验当前可卖数量，不执行 T+1 限制。
+- 每次成交自动更新现金、持仓、费用、成交、清仓表现和账面资产快照。
+- `cancel` 仅用于处理旧版本遗留的 `pending` 委托，新版 `place` 不产生待成交委托。
 - 费用固定：佣金万 1，全佣；股票卖出收印花税；股票收过户费；ETF 不收印花税。
 
 ### 验证输出

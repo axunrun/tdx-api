@@ -160,9 +160,9 @@ func (s *PaperStore) FillOrder(orderID string, quote PaperQuote) error {
 	}
 
 	if order.Side == paperSideBuy {
-		err = fillPaperBuy(tx, order, trade, fee, now)
+		err = fillPaperBuy(tx, order, trade, fee, 0, now)
 	} else {
-		err = fillPaperSell(tx, order, trade, fee, quote, now)
+		err = fillPaperSell(tx, order, trade, fee, quote, true, now)
 	}
 	if err != nil {
 		return err
@@ -177,6 +177,98 @@ func (s *PaperStore) FillOrder(orderID string, quote PaperQuote) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+func (s *PaperStore) ExecuteTrade(
+	req PaperPlaceOrderRequest,
+) (PaperOrder, PaperTrade, error) {
+	if req.Price <= 0 {
+		return PaperOrder{}, PaperTrade{}, errors.New("price must be positive")
+	}
+	req.OrderType = paperOrderMarket
+	req.TimeInForce = paperTimeInForceDay
+	if err := normalizePaperOrderRequest(&req); err != nil {
+		return PaperOrder{}, PaperTrade{}, err
+	}
+
+	now := time.Now().Format(time.RFC3339Nano)
+	order := PaperOrder{
+		ID:          newPaperID("ord"),
+		AccountID:   req.AccountID,
+		Code:        req.Code,
+		Name:        req.Name,
+		AssetType:   req.AssetType,
+		Side:        req.Side,
+		OrderType:   paperOrderMarket,
+		Status:      paperOrderPending,
+		TimeInForce: paperTimeInForceDay,
+		Price:       req.Price,
+		Quantity:    req.Quantity,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	amount := req.Price * float64(req.Quantity)
+	fee := calculatePaperFee(PaperFeeInput{
+		AssetType: req.AssetType,
+		Side:      req.Side,
+		Amount:    amount,
+	})
+	trade := PaperTrade{
+		ID:          newPaperID("trd"),
+		OrderID:     order.ID,
+		AccountID:   order.AccountID,
+		Code:        order.Code,
+		Side:        order.Side,
+		TradedAt:    now,
+		Price:       req.Price,
+		Quantity:    order.Quantity,
+		Amount:      amount,
+		Commission:  fee.Commission,
+		StampTax:    fee.StampTax,
+		TransferFee: fee.TransferFee,
+	}
+	quote := PaperQuote{Code: req.Code, Name: req.Name, Price: req.Price}
+
+	tx, err := s.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return PaperOrder{}, PaperTrade{}, err
+	}
+	defer tx.Rollback()
+	if err := ensurePaperAccountActive(tx, req.AccountID); err != nil {
+		return PaperOrder{}, PaperTrade{}, err
+	}
+	if err := insertPaperOrder(tx, order); err != nil {
+		return PaperOrder{}, PaperTrade{}, err
+	}
+	if order.Side == paperSideBuy {
+		err = fillPaperBuy(tx, order, trade, fee, order.Quantity, now)
+	} else {
+		err = fillPaperSell(tx, order, trade, fee, quote, false, now)
+	}
+	if err != nil {
+		return PaperOrder{}, PaperTrade{}, err
+	}
+	if err := insertPaperTrade(tx, trade); err != nil {
+		return PaperOrder{}, PaperTrade{}, err
+	}
+	if err := markPaperOrderFilled(tx, order, now); err != nil {
+		return PaperOrder{}, PaperTrade{}, err
+	}
+	if err := insertPaperExecutionAction(tx, req, trade, now); err != nil {
+		return PaperOrder{}, PaperTrade{}, err
+	}
+	if err := insertPaperBookValueSnapshot(tx, order.AccountID, now); err != nil {
+		return PaperOrder{}, PaperTrade{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return PaperOrder{}, PaperTrade{}, err
+	}
+
+	order.Status = paperOrderFilled
+	order.FilledQuantity = order.Quantity
+	order.FilledAt = now
+	order.UpdatedAt = now
+	return order, trade, nil
 }
 
 func (s *PaperStore) ListTrades(accountID string) ([]PaperTrade, error) {
@@ -381,6 +473,7 @@ func fillPaperBuy(
 	order PaperOrder,
 	trade PaperTrade,
 	fee PaperFee,
+	sellableDelta int64,
 	now string,
 ) error {
 	totalCost := trade.Amount + fee.Total()
@@ -400,7 +493,14 @@ func fillPaperBuy(
 	if err := insertPaperCashLedger(tx, order, trade.ID, -totalCost, balance, now); err != nil {
 		return err
 	}
-	quantityAfter, err := addPaperPosition(tx, order, trade, totalCost, now)
+	quantityAfter, err := addPaperPosition(
+		tx,
+		order,
+		trade,
+		totalCost,
+		sellableDelta,
+		now,
+	)
 	if err != nil {
 		return err
 	}
@@ -414,24 +514,41 @@ func fillPaperSell(
 	trade PaperTrade,
 	fee PaperFee,
 	quote PaperQuote,
+	reserved bool,
 	now string,
 ) error {
 	position, err := getPaperPosition(tx, order)
 	if err != nil {
 		return err
 	}
-	if position.Quantity < order.Quantity || position.FrozenQuantity < order.Quantity {
+	if position.Quantity < order.Quantity {
+		return errors.New("insufficient position")
+	}
+	if reserved && position.FrozenQuantity < order.Quantity {
 		return errors.New("insufficient frozen position")
+	}
+	if !reserved && position.SellableQuantity < order.Quantity {
+		return errors.New("insufficient sellable position")
 	}
 	netAmount := trade.Amount - fee.Total()
 	quantityAfter := position.Quantity - order.Quantity
-	_, err = tx.Exec(`
-		UPDATE paper_positions
-		SET quantity = quantity - ?,
-			frozen_quantity = frozen_quantity - ?,
-			updated_at = ?
-		WHERE id = ?
-	`, order.Quantity, order.Quantity, now, position.ID)
+	if reserved {
+		_, err = tx.Exec(`
+			UPDATE paper_positions
+			SET quantity = quantity - ?,
+				frozen_quantity = frozen_quantity - ?,
+				updated_at = ?
+			WHERE id = ?
+		`, order.Quantity, order.Quantity, now, position.ID)
+	} else {
+		_, err = tx.Exec(`
+			UPDATE paper_positions
+			SET quantity = quantity - ?,
+				sellable_quantity = sellable_quantity - ?,
+				updated_at = ?
+			WHERE id = ?
+		`, order.Quantity, order.Quantity, now, position.ID)
+	}
 	if err != nil {
 		return err
 	}
@@ -542,9 +659,9 @@ func addPaperPosition(
 	order PaperOrder,
 	trade PaperTrade,
 	totalCost float64,
+	sellableDelta int64,
 	now string,
 ) (int64, error) {
-	sellableDelta := paperBuySellableDelta(order)
 	position, err := getPaperPosition(tx, order)
 	if err == sql.ErrNoRows {
 		_, err = tx.Exec(`
@@ -573,10 +690,6 @@ func addPaperPosition(
 		WHERE id = ?
 	`, quantityAfter, sellableDelta, avgCost, now, position.ID)
 	return quantityAfter, err
-}
-
-func paperBuySellableDelta(_ PaperOrder) int64 {
-	return 0
 }
 
 func insertPaperTrade(tx *sql.Tx, trade PaperTrade) error {
@@ -676,6 +789,61 @@ func insertPaperFillAction(
 		) VALUES (?, ?, ?, ?, ?, ?)
 	`, newPaperID("act"), order.AccountID, "fill_order", string(requestJSON),
 		string(responseJSON), now)
+	return err
+}
+
+func insertPaperExecutionAction(
+	tx *sql.Tx,
+	req PaperPlaceOrderRequest,
+	trade PaperTrade,
+	now string,
+) error {
+	requestJSON, _ := json.Marshal(req)
+	responseJSON, _ := json.Marshal(trade)
+	_, err := tx.Exec(`
+		INSERT INTO paper_agent_actions (
+			id, account_id, action_type, request, response, created_at
+		) VALUES (?, ?, ?, ?, ?, ?)
+	`, newPaperID("act"), req.AccountID, "fill_order", string(requestJSON),
+		string(responseJSON), now)
+	return err
+}
+
+func insertPaperBookValueSnapshot(tx *sql.Tx, accountID, now string) error {
+	var availableCash float64
+	var frozenCash float64
+	if err := tx.QueryRow(`
+		SELECT available_cash, frozen_cash
+		FROM paper_accounts
+		WHERE id = ?
+	`, accountID).Scan(&availableCash, &frozenCash); err != nil {
+		return err
+	}
+	var marketValue float64
+	if err := tx.QueryRow(`
+		SELECT COALESCE(SUM(avg_cost * quantity), 0)
+		FROM paper_positions
+		WHERE account_id = ? AND quantity > 0
+	`, accountID).Scan(&marketValue); err != nil {
+		return err
+	}
+	var realizedPnL float64
+	if err := tx.QueryRow(`
+		SELECT COALESCE(SUM(realized_pnl), 0)
+		FROM paper_closed_positions
+		WHERE account_id = ?
+	`, accountID).Scan(&realizedPnL); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`
+		INSERT INTO paper_account_snapshots (
+			id, account_id, trading_day, total_assets, cash_available,
+			cash_frozen, market_value, realized_pnl, unrealized_pnl,
+			daily_return, total_return, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?)
+	`, newPaperID("snap"), accountID, now[:10],
+		availableCash+frozenCash+marketValue, availableCash, frozenCash,
+		marketValue, realizedPnL, now)
 	return err
 }
 

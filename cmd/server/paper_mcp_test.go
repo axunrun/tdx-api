@@ -1,7 +1,9 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -25,14 +27,17 @@ func TestPaperMCPToolsAreListed(t *testing.T) {
 	}
 }
 
-func TestPaperOrderMCPSchemaDescribesEnums(t *testing.T) {
+func TestPaperOrderMCPSchemaDescribesImmediateExecution(t *testing.T) {
 	tool := findPaperMCPTool(t, "tdx_paper_order")
 	properties := tool.InputSchema["properties"].(map[string]any)
 
 	assertMCPEnum(t, properties, "action", "place", "cancel", "list", "get")
 	assertMCPEnum(t, properties, "side", "buy", "sell")
-	assertMCPEnum(t, properties, "orderType", "market", "limit", "auction")
-	assertMCPEnum(t, properties, "timeInForce", "day", "auction_only")
+	for _, name := range []string{"orderType", "timeInForce"} {
+		if _, ok := properties[name]; ok {
+			t.Fatalf("legacy matching property %s should not be agent-visible", name)
+		}
+	}
 
 	quantity := properties["quantity"].(map[string]any)
 	if quantity["type"] != "integer" || quantity["minimum"] != 100 ||
@@ -44,16 +49,9 @@ func TestPaperOrderMCPSchemaDescribesEnums(t *testing.T) {
 		!strings.Contains(assetType["description"].(string), "默认 stock") {
 		t.Fatalf("assetType schema = %+v", assetType)
 	}
-	timeInForce := properties["timeInForce"].(map[string]any)
-	if timeInForce["default"] != nil ||
-		!strings.Contains(timeInForce["description"].(string), "auction_only") {
-		t.Fatalf("timeInForce schema = %+v", timeInForce)
-	}
-	for _, name := range []string{"side", "orderType"} {
-		property := properties[name].(map[string]any)
-		if property["default"] != nil {
-			t.Fatalf("%s should not have default: %+v", name, property)
-		}
+	price := properties["price"].(map[string]any)
+	if price["type"] != "number" || price["exclusiveMinimum"] != 0 {
+		t.Fatalf("price schema = %+v", price)
 	}
 
 	required := tool.InputSchema["required"].([]string)
@@ -65,21 +63,19 @@ func TestPaperOrderMCPSchemaDescribesEnums(t *testing.T) {
 		t.Fatal("paper order conditional schema missing")
 	}
 	placeRequired := conditions[0]["then"].(map[string]any)["required"].([]string)
-	if !hasString(placeRequired, "timeInForce") {
-		t.Fatalf("place required = %+v, want timeInForce", placeRequired)
+	for _, name := range []string{"code", "side", "price", "quantity"} {
+		if !hasString(placeRequired, name) {
+			t.Fatalf("place required = %+v, missing %s", placeRequired, name)
+		}
 	}
 	conditionJSON, err := json.Marshal(conditions)
 	if err != nil {
 		t.Fatal(err)
 	}
 	conditionText := string(conditionJSON)
-	for _, want := range []string{
-		`"const":"auction"`,
-		`"const":"auction_only"`,
-		`"const":"day"`,
-	} {
-		if !strings.Contains(conditionText, want) {
-			t.Fatalf("conditional schema missing %s: %s", want, conditionText)
+	for _, unwanted := range []string{"auction", "auction_only", "timeInForce"} {
+		if strings.Contains(conditionText, unwanted) {
+			t.Fatalf("legacy matching condition %q remains: %s", unwanted, conditionText)
 		}
 	}
 }
@@ -87,16 +83,28 @@ func TestPaperOrderMCPSchemaDescribesEnums(t *testing.T) {
 func TestPaperAccountMCPSchemaRequiresConfirmForSideEffects(t *testing.T) {
 	tool := findPaperMCPTool(t, "tdx_paper_account")
 	properties := tool.InputSchema["properties"].(map[string]any)
+	assertMCPEnum(t, properties, "action", "create", "list", "get", "delete", "close", "recreate")
 	confirm := properties["confirm"].(map[string]any)
 	if confirm["type"] != "boolean" {
 		t.Fatalf("confirm schema = %+v", confirm)
 	}
 	note := properties["note"].(map[string]any)
-	if !strings.Contains(note["description"].(string), "不参与撮合计算") {
+	if !strings.Contains(note["description"].(string), "不参与资金和持仓计算") {
 		t.Fatalf("note schema = %+v", note)
 	}
-	if len(tool.InputSchema["allOf"].([]map[string]any)) == 0 {
+	conditions := tool.InputSchema["allOf"].([]map[string]any)
+	if len(conditions) == 0 {
 		t.Fatal("paper account conditional schema missing")
+	}
+	conditionJSON, err := json.Marshal(conditions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(conditionJSON), `"delete"`) {
+		t.Fatalf("delete confirmation condition missing: %s", conditionJSON)
+	}
+	if !strings.Contains(string(conditionJSON), `"required":["accountId"]`) {
+		t.Fatalf("accountId condition missing: %s", conditionJSON)
 	}
 }
 
@@ -130,23 +138,23 @@ func TestPaperPortfolioMCPSchemaDescriptions(t *testing.T) {
 	}
 }
 
-func TestPaperRulesDescribeAutomaticMatching(t *testing.T) {
+func TestPaperRulesDescribeImmediateExecution(t *testing.T) {
 	result, err := callMCPTool(mustMCPParams(t, "tdx_paper_rules", map[string]any{}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	content := result["content"].([]map[string]string)
-	if len(content) != 1 || !strings.Contains(content[0]["text"], "30 秒") ||
-		!strings.Contains(content[0]["text"], "自动失效") {
+	if len(content) != 1 || !strings.Contains(content[0]["text"], "指定价格立即成交") ||
+		strings.Contains(content[0]["text"], "30 秒") {
 		t.Fatalf("content = %+v", content)
 	}
 	structured := result["structuredContent"].(map[string]any)
 	rules := structured["rules"].(map[string]any)
-	matching := fmt.Sprint(rules["matching"])
-	if !strings.Contains(matching, "09:20:00-09:25:00") ||
-		!strings.Contains(matching, "positions") ||
-		!strings.Contains(matching, "orders") {
-		t.Fatalf("matching rules = %s", matching)
+	execution := fmt.Sprint(rules["execution"])
+	if !strings.Contains(execution, "price") ||
+		!strings.Contains(execution, "positions") ||
+		!strings.Contains(execution, "orders") {
+		t.Fatalf("execution rules = %s", execution)
 	}
 }
 
@@ -211,6 +219,210 @@ func TestPaperMCPAccountCreateWithInitialPositions(t *testing.T) {
 	}
 	if len(persisted) != 1 || persisted[0].Code != "600000" {
 		t.Fatalf("persisted positions = %+v", persisted)
+	}
+}
+
+func TestPaperMCPAccountDeleteRemovesOnlySelectedAccountData(t *testing.T) {
+	store := newTestPaperStore(t)
+	withPaperMCPStore(t, store)
+
+	deleted, err := store.CreateAccount(PaperCreateAccountRequest{
+		Name:        "deleted",
+		InitialCash: 10000,
+		InitialPositions: []PaperInitialPosition{
+			{Code: "600000", Quantity: 100, CostPrice: 10},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	survivor, err := store.CreateAccount(PaperCreateAccountRequest{
+		Name:        "survivor",
+		InitialCash: 20000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	order, err := store.PlaceOrder(PaperPlaceOrderRequest{
+		AccountID:   deleted.ID,
+		Code:        "600000",
+		Side:        paperSideBuy,
+		OrderType:   paperOrderLimit,
+		TimeInForce: paperTimeInForceDay,
+		Price:       9,
+		Quantity:    100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.FillOrder(order.ID, PaperQuote{Code: "600000", Price: 9}); err != nil {
+		t.Fatal(err)
+	}
+	seedPaperAccountDeletionRows(t, store.db, deleted.ID)
+
+	if _, err := callMCPTool(mustMCPParams(t, "tdx_paper_account", map[string]any{
+		"action":    "delete",
+		"accountId": deleted.ID,
+	})); err == nil {
+		t.Fatal("delete without confirm error = nil, want error")
+	}
+
+	result, err := callMCPTool(mustMCPParams(t, "tdx_paper_account", map[string]any{
+		"action":    "delete",
+		"accountId": deleted.ID,
+		"confirm":   true,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	structured := result["structuredContent"].(map[string]any)
+	if structured["accountId"] != deleted.ID {
+		t.Fatalf("structuredContent = %+v", structured)
+	}
+	if _, err := store.GetAccount(deleted.ID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("GetAccount(deleted) error = %v, want sql.ErrNoRows", err)
+	}
+	if got, err := store.GetAccount(survivor.ID); err != nil || got.Name != "survivor" {
+		t.Fatalf("GetAccount(survivor) = %+v, %v", got, err)
+	}
+
+	accountDataTables := []string{
+		"paper_account_initial_positions",
+		"paper_positions",
+		"paper_orders",
+		"paper_trades",
+		"paper_cash_ledger",
+		"paper_position_ledger",
+		"paper_agent_actions",
+		"paper_account_snapshots",
+		"paper_closed_positions",
+		"paper_closed_position_tracking",
+	}
+	for _, table := range accountDataTables {
+		var count int
+		query := "SELECT COUNT(*) FROM " + table + " WHERE account_id = ?"
+		if err := store.db.QueryRow(query, deleted.ID).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 0 {
+			t.Fatalf("%s rows for deleted account = %d, want 0", table, count)
+		}
+	}
+}
+
+func TestPaperMCPPlaceExecutesImmediatelyAtProvidedPrice(t *testing.T) {
+	store := newTestPaperStore(t)
+	withPaperMCPStore(t, store)
+	account, err := store.CreateAccount(PaperCreateAccountRequest{
+		Name:        "recorder",
+		InitialCash: 20000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	buyResult, err := callMCPTool(mustMCPParams(t, "tdx_paper_order", map[string]any{
+		"action":    "place",
+		"accountId": account.ID,
+		"code":      "600000",
+		"name":      "浦发银行",
+		"side":      "buy",
+		"price":     10,
+		"quantity":  100,
+		"reason":    "记录买入",
+		"confirm":   true,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	buyData := buyResult["structuredContent"].(map[string]any)
+	buyOrder, ok := buyData["order"].(PaperOrder)
+	if !ok || buyOrder.Status != paperOrderFilled || buyOrder.FilledQuantity != 100 {
+		t.Fatalf("buy order = %+v", buyData["order"])
+	}
+	buyTrade, ok := buyData["trade"].(PaperTrade)
+	if !ok || buyTrade.Price != 10 || buyTrade.Quantity != 100 {
+		t.Fatalf("buy trade = %+v", buyData["trade"])
+	}
+	positions, err := store.ListPositions(account.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(positions) != 1 || positions[0].Quantity != 100 ||
+		positions[0].SellableQuantity != 100 || positions[0].FrozenQuantity != 0 {
+		t.Fatalf("positions after buy = %+v", positions)
+	}
+	if _, err := store.db.Exec(`
+		UPDATE paper_positions SET sellable_quantity = 0 WHERE account_id = ?
+	`, account.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.MakeAllPositionsSellable(); err != nil {
+		t.Fatal(err)
+	}
+
+	sellResult, err := callMCPTool(mustMCPParams(t, "tdx_paper_order", map[string]any{
+		"action":    "place",
+		"accountId": account.ID,
+		"code":      "600000",
+		"name":      "浦发银行",
+		"side":      "sell",
+		"price":     11,
+		"quantity":  100,
+		"reason":    "记录卖出",
+		"confirm":   true,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sellData := sellResult["structuredContent"].(map[string]any)
+	sellOrder, ok := sellData["order"].(PaperOrder)
+	if !ok || sellOrder.Status != paperOrderFilled {
+		t.Fatalf("sell order = %+v", sellData["order"])
+	}
+	positions, err = store.ListPositions(account.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(positions) != 0 {
+		t.Fatalf("positions after sell = %+v", positions)
+	}
+	updated, err := store.GetAccount(account.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.AvailableCash <= account.InitialCash || updated.FrozenCash != 0 {
+		t.Fatalf("account after round trip = %+v", updated)
+	}
+	assertPaperRowCount(t, store.db, "paper_trades", 2)
+	assertPaperRowCount(t, store.db, "paper_account_snapshots", 2)
+}
+
+func seedPaperAccountDeletionRows(t *testing.T, db *sql.DB, accountID string) {
+	t.Helper()
+	now := "2026-07-18T15:00:00+08:00"
+	if _, err := db.Exec(`
+		INSERT INTO paper_account_snapshots (
+			id, account_id, trading_day, total_assets, cash_available,
+			cash_frozen, market_value, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, "snapshot-delete", accountID, "2026-07-18", 10000, 1000, 0, 9000, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO paper_closed_positions (
+			id, account_id, code, quantity, open_amount, close_amount,
+			realized_pnl, closed_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, "closed-delete", accountID, "600000", 100, 1000, 1100, 100, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO paper_closed_position_tracking (
+			id, closed_position_id, account_id, code, trading_day, price, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, "tracking-delete", "closed-delete", accountID, "600000", "2026-07-18", 11, now); err != nil {
+		t.Fatal(err)
 	}
 }
 
