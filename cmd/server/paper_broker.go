@@ -203,6 +203,192 @@ func (s *PaperStore) ListPositions(accountID string) ([]PaperPosition, error) {
 	return positions, rows.Err()
 }
 
+func (s *PaperStore) SetPosition(
+	req PaperSetPositionRequest,
+) (PaperPosition, string, error) {
+	req.AccountID = strings.TrimSpace(req.AccountID)
+	req.Position.Code = strings.TrimSpace(req.Position.Code)
+	req.Position.SecurityName = strings.TrimSpace(req.Position.SecurityName)
+	req.Position.AssetType = strings.TrimSpace(req.Position.AssetType)
+	req.Reason = strings.TrimSpace(req.Reason)
+	if req.AccountID == "" {
+		return PaperPosition{}, "", errors.New("account id is required")
+	}
+	if req.Position.Code == "" {
+		return PaperPosition{}, "", errors.New("position code is required")
+	}
+	if req.Position.AssetType == "" {
+		req.Position.AssetType = paperAssetStock
+	}
+	if req.Position.AssetType != paperAssetStock &&
+		req.Position.AssetType != paperAssetETF {
+		return PaperPosition{}, "", fmt.Errorf(
+			"unsupported asset type: %s",
+			req.Position.AssetType,
+		)
+	}
+	if req.Position.Quantity < 0 {
+		return PaperPosition{}, "", errors.New("position quantity cannot be negative")
+	}
+	if req.Position.Quantity > 0 && req.Position.CostPrice == nil {
+		return PaperPosition{}, "", errors.New(
+			"position cost price is required when quantity is positive",
+		)
+	}
+	if req.Position.CostPrice != nil && *req.Position.CostPrice < 0 {
+		return PaperPosition{}, "", errors.New("position cost price cannot be negative")
+	}
+	costPrice := 0.0
+	if req.Position.CostPrice != nil {
+		costPrice = *req.Position.CostPrice
+	}
+
+	now := time.Now().Format(time.RFC3339Nano)
+	tx, err := s.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return PaperPosition{}, "", err
+	}
+	defer tx.Rollback()
+	if err := ensurePaperAccountActive(tx, req.AccountID); err != nil {
+		return PaperPosition{}, "", err
+	}
+
+	positionID, previous, found, err := getPaperAdjustmentPosition(tx, req)
+	if err != nil {
+		return PaperPosition{}, "", err
+	}
+	if found && previous.FrozenQuantity > 0 {
+		return PaperPosition{}, "", errors.New(
+			"position has frozen quantity; cancel legacy pending orders first",
+		)
+	}
+	if !found && req.Position.Quantity == 0 {
+		return PaperPosition{}, "", errors.New("position not found")
+	}
+
+	name := req.Position.SecurityName
+	if name == "" && found {
+		name = previous.Name
+	}
+	current := PaperPosition{
+		AccountID:        req.AccountID,
+		Code:             req.Position.Code,
+		Name:             name,
+		AssetType:        req.Position.AssetType,
+		Quantity:         req.Position.Quantity,
+		SellableQuantity: req.Position.Quantity,
+		AvgCost:          costPrice,
+		UpdatedAt:        now,
+	}
+	operation := "added"
+	delta := req.Position.Quantity
+	ledgerReason := "manual_position_set"
+	switch {
+	case req.Position.Quantity == 0:
+		operation = "deleted"
+		delta = -previous.Quantity
+		ledgerReason = "manual_position_delete"
+		if _, err := tx.Exec("DELETE FROM paper_positions WHERE id = ?", positionID); err != nil {
+			return PaperPosition{}, "", err
+		}
+	case found:
+		operation = "updated"
+		delta = req.Position.Quantity - previous.Quantity
+		if _, err := tx.Exec(`
+			UPDATE paper_positions
+			SET name = ?, quantity = ?, sellable_quantity = ?,
+				frozen_quantity = 0, avg_cost = ?, updated_at = ?
+			WHERE id = ?
+		`, nullIfEmpty(name), current.Quantity, current.SellableQuantity,
+			current.AvgCost, now, positionID); err != nil {
+			return PaperPosition{}, "", err
+		}
+	default:
+		if _, err := tx.Exec(`
+			INSERT INTO paper_positions (
+				id, account_id, code, name, asset_type, quantity,
+				sellable_quantity, frozen_quantity, avg_cost, updated_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+		`, newPaperID("pos"), current.AccountID, current.Code,
+			nullIfEmpty(current.Name), current.AssetType, current.Quantity,
+			current.SellableQuantity, current.AvgCost, now); err != nil {
+			return PaperPosition{}, "", err
+		}
+	}
+	if _, err := tx.Exec(`
+		INSERT INTO paper_position_ledger (
+			id, account_id, code, quantity_delta, quantity_after,
+			reason, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, newPaperID("posled"), current.AccountID, current.Code, delta,
+		current.Quantity, ledgerReason, now); err != nil {
+		return PaperPosition{}, "", err
+	}
+	requestJSON, _ := json.Marshal(req)
+	responseJSON, _ := json.Marshal(map[string]any{
+		"operation": operation,
+		"position":  current,
+	})
+	if _, err := tx.Exec(`
+		INSERT INTO paper_agent_actions (
+			id, account_id, action_type, request, response, created_at
+		) VALUES (?, ?, ?, ?, ?, ?)
+	`, newPaperID("act"), current.AccountID, "set_position", string(requestJSON),
+		string(responseJSON), now); err != nil {
+		return PaperPosition{}, "", err
+	}
+	if err := insertPaperBookValueSnapshot(tx, current.AccountID, now); err != nil {
+		return PaperPosition{}, "", err
+	}
+	if err := tx.Commit(); err != nil {
+		return PaperPosition{}, "", err
+	}
+	return current, operation, nil
+}
+
+func getPaperAdjustmentPosition(
+	tx *sql.Tx,
+	req PaperSetPositionRequest,
+) (string, PaperPosition, bool, error) {
+	var count int
+	if err := tx.QueryRow(`
+		SELECT COUNT(*)
+		FROM paper_positions
+		WHERE account_id = ? AND code = ? AND asset_type = ?
+	`, req.AccountID, req.Position.Code, req.Position.AssetType).Scan(&count); err != nil {
+		return "", PaperPosition{}, false, err
+	}
+	if count > 1 {
+		return "", PaperPosition{}, false, errors.New(
+			"duplicate positions found; manual database cleanup is required",
+		)
+	}
+	if count == 0 {
+		return "", PaperPosition{}, false, nil
+	}
+
+	var positionID string
+	var position PaperPosition
+	err := tx.QueryRow(`
+		SELECT id, account_id, code, COALESCE(name, ''), asset_type,
+			quantity, sellable_quantity, frozen_quantity, avg_cost, updated_at
+		FROM paper_positions
+		WHERE account_id = ? AND code = ? AND asset_type = ?
+	`, req.AccountID, req.Position.Code, req.Position.AssetType).Scan(
+		&positionID,
+		&position.AccountID,
+		&position.Code,
+		&position.Name,
+		&position.AssetType,
+		&position.Quantity,
+		&position.SellableQuantity,
+		&position.FrozenQuantity,
+		&position.AvgCost,
+		&position.UpdatedAt,
+	)
+	return positionID, position, true, err
+}
+
 func (s *PaperStore) MakeAllPositionsSellable() error {
 	_, err := s.db.Exec(`
 		UPDATE paper_positions

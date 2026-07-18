@@ -11,23 +11,33 @@ import (
 func paperMCPTools() []mcpTool {
 	account := newMCPTool(
 		"tdx_paper_account",
-		"纸上交易账户生命周期工具。create/delete/close/recreate 是副作用操作，必须由用户明确确认并传 confirm=true；delete 会永久删除指定账户及其全部持仓、委托、成交、流水、绩效和行为记录，但不会影响其他账户；账户创建后初始资金和初始持仓会锁定，首版 close/recreate 仅保留 schema。",
+		"模拟账户和持仓校正工具。set_position 直接新增、覆盖或删除单只持仓，不改变现金、不生成成交记录；create/set_position/delete/close/recreate 必须由用户明确确认并传 confirm=true。delete 会永久删除指定账户全部数据，但不影响其他账户。",
 		"",
 		nil,
-		requiredEnum("action", "操作：create 创建、list 列表、get 详情、delete 永久删除、close 关闭、recreate 重建。", "create", "list", "get", "delete", "close", "recreate"),
-		optionalString("accountId", "账户ID；get/delete/close/recreate 时需要。"),
+		requiredEnum("action", "操作：create 创建、list 列表、get 详情、set_position 校正持仓、delete 永久删除、close 关闭、recreate 重建。", "create", "list", "get", "set_position", "delete", "close", "recreate"),
+		optionalString("accountId", "账户ID；get/set_position/delete/close/recreate 时需要。"),
 		optionalString("name", "账户名称，create 时需要。"),
 		optionalNumberSchema("initialCash", "初始现金；create 可选，默认 0。", map[string]any{"minimum": 0}),
 		optionalString("note", "账户备注，可记录策略、来源或说明；不参与资金和持仓计算。"),
-		optionalBool("confirm", "create/delete/close/recreate 等有副作用操作必须为 true。"),
+		optionalString("reason", "持仓校正原因；set_position 时可传，将写入 Agent 行为时间线。"),
+		optionalBool("confirm", "create/set_position/delete/close/recreate 等有副作用操作必须为 true。"),
 	)
-	account.InputSchema["properties"].(map[string]any)["initialPositions"] =
-		paperInitialPositionsSchema()
+	accountProperties := account.InputSchema["properties"].(map[string]any)
+	accountProperties["initialPositions"] = paperInitialPositionsSchema()
+	accountProperties["position"] = paperPositionAdjustmentSchema()
 	account.InputSchema["allOf"] = []map[string]any{
 		{
 			"if": map[string]any{
 				"properties": map[string]any{
-					"action": map[string]any{"enum": []string{"create", "delete", "close", "recreate"}},
+					"action": map[string]any{
+						"enum": []string{
+							"create",
+							"set_position",
+							"delete",
+							"close",
+							"recreate",
+						},
+					},
 				},
 				"required": []string{"action"},
 			},
@@ -49,6 +59,17 @@ func paperMCPTools() []mcpTool {
 			},
 			"then": map[string]any{
 				"required": []string{"accountId"},
+			},
+		},
+		{
+			"if": map[string]any{
+				"properties": map[string]any{
+					"action": map[string]any{"const": "set_position"},
+				},
+				"required": []string{"action"},
+			},
+			"then": map[string]any{
+				"required": []string{"accountId", "position"},
 			},
 		},
 	}
@@ -124,7 +145,7 @@ func paperMCPTools() []mcpTool {
 
 	rules := newMCPTool(
 		"tdx_paper_rules",
-		"返回纸上交易规则、费用、委托限制和账户生命周期说明。",
+		"返回模拟交易记录、持仓账务校正、费用和账户生命周期规则。",
 		"",
 		nil,
 	)
@@ -179,6 +200,53 @@ func paperInitialPositionsSchema() map[string]any {
 				},
 			},
 			"required": []string{"code", "quantity"},
+		},
+	}
+}
+
+func paperPositionAdjustmentSchema() map[string]any {
+	return map[string]any{
+		"type":        "object",
+		"description": "持仓账务校正。quantity 大于 0 时新增或覆盖；等于 0 时删除。该操作不改变现金，也不生成成交记录。",
+		"properties": map[string]any{
+			"code": map[string]any{
+				"type":        "string",
+				"description": "证券代码。",
+			},
+			"securityName": map[string]any{
+				"type":        "string",
+				"description": "证券名称，可选；覆盖时不传则保留原名称。",
+			},
+			"assetType": map[string]any{
+				"type":        "string",
+				"description": "资产类型，默认 stock；ETF 必须明确传 etf。",
+				"enum":        []string{"stock", "etf"},
+				"default":     "stock",
+			},
+			"quantity": map[string]any{
+				"type":        "integer",
+				"description": "校正后的绝对持仓数量；0 表示删除，允许零股和碎股校正。",
+				"minimum":     0,
+			},
+			"costPrice": map[string]any{
+				"type":        "number",
+				"description": "校正后的单位成本；quantity 大于 0 时必填。",
+				"minimum":     0,
+			},
+		},
+		"required": []string{"code", "quantity"},
+		"allOf": []map[string]any{
+			{
+				"if": map[string]any{
+					"properties": map[string]any{
+						"quantity": map[string]any{"minimum": 1},
+					},
+					"required": []string{"quantity"},
+				},
+				"then": map[string]any{
+					"required": []string{"costPrice"},
+				},
+			},
 		},
 	}
 }
@@ -262,6 +330,22 @@ func callPaperAccountMCP(args map[string]any) (map[string]any, error) {
 			"orders":    emptyPaperOrders(orders),
 			"trades":    emptyPaperTrades(trades),
 		}), nil
+	case "set_position":
+		if err := requirePaperConfirm(args); err != nil {
+			return nil, err
+		}
+		var req PaperSetPositionRequest
+		if err := decodePaperMCPArgs(args, &req); err != nil {
+			return nil, err
+		}
+		position, operation, err := store.SetPosition(req)
+		if err != nil {
+			return nil, err
+		}
+		return paperMCPResult(
+			"持仓账务校正已完成；现金和成交记录未改变。",
+			map[string]any{"operation": operation, "position": position},
+		), nil
 	case "delete":
 		if err := requirePaperConfirm(args); err != nil {
 			return nil, err
@@ -479,6 +563,7 @@ func paperRulesMCPResult() map[string]any {
 	rules := map[string]any{
 		"account": []string{
 			"账户创建后，initialCash 和 initialPositions 视为建账快照并锁定。",
+			"set_position 只校正当前持仓，不修改 initialPositions、现金或成交记录。",
 			"只有用户明确要求时，才允许关闭或重建账户。",
 			"首版 MCP 暂不执行 close/recreate，只返回未实现错误。",
 		},
@@ -502,6 +587,13 @@ func paperRulesMCPResult() map[string]any {
 			"每次成交自动更新现金、positions、orders、trades、费用、清仓表现和资产快照。",
 			"Agent 交易决策前必须用固定 accountId 查询 positions 和 orders；服务端以 SQLite 状态为准。",
 		},
+		"positionAdjustment": []string{
+			"set_position 的 quantity 大于 0 时新增或覆盖绝对持仓，小于 0 会被拒绝。",
+			"quantity 等于 0 时删除该持仓；ETF 必须传 assetType=etf。",
+			"数量大于 0 时必须提供 costPrice；允许碎股校正。",
+			"校正会写入持仓流水、Agent 行为和账面资产快照，但不改变现金或生成成交记录。",
+			"存在冻结数量时拒绝校正，需先撤销旧版本遗留的 pending 委托。",
+		},
 	}
 	text := strings.Join([]string{
 		"纸上交易规则：",
@@ -513,6 +605,7 @@ func paperRulesMCPResult() map[string]any {
 		"6. 服务端不读取实时行情、不判断交易时段，也不运行定时撮合。",
 		"7. Agent 交易决策前先查询 positions 和 orders，服务端以 SQLite 状态为准。",
 		"8. place 按整笔成交记录；close/recreate 暂未实现。",
+		"9. set_position 用于账务校正，不改变现金或生成成交记录；quantity=0 表示删除持仓。",
 	}, "\n")
 	return paperMCPResult(text, map[string]any{"rules": rules})
 }

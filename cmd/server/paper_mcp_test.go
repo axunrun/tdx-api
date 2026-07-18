@@ -83,7 +83,18 @@ func TestPaperOrderMCPSchemaDescribesImmediateExecution(t *testing.T) {
 func TestPaperAccountMCPSchemaRequiresConfirmForSideEffects(t *testing.T) {
 	tool := findPaperMCPTool(t, "tdx_paper_account")
 	properties := tool.InputSchema["properties"].(map[string]any)
-	assertMCPEnum(t, properties, "action", "create", "list", "get", "delete", "close", "recreate")
+	assertMCPEnum(
+		t,
+		properties,
+		"action",
+		"create",
+		"list",
+		"get",
+		"set_position",
+		"delete",
+		"close",
+		"recreate",
+	)
 	confirm := properties["confirm"].(map[string]any)
 	if confirm["type"] != "boolean" {
 		t.Fatalf("confirm schema = %+v", confirm)
@@ -105,6 +116,22 @@ func TestPaperAccountMCPSchemaRequiresConfirmForSideEffects(t *testing.T) {
 	}
 	if !strings.Contains(string(conditionJSON), `"required":["accountId"]`) {
 		t.Fatalf("accountId condition missing: %s", conditionJSON)
+	}
+	if !strings.Contains(string(conditionJSON), `"required":["accountId","position"]`) {
+		t.Fatalf("set_position condition missing: %s", conditionJSON)
+	}
+	position := properties["position"].(map[string]any)
+	positionProperties := position["properties"].(map[string]any)
+	quantity := positionProperties["quantity"].(map[string]any)
+	if quantity["type"] != "integer" || quantity["minimum"] != 0 {
+		t.Fatalf("position quantity schema = %+v", quantity)
+	}
+	positionJSON, err := json.Marshal(position)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(positionJSON), `"required":["costPrice"]`) {
+		t.Fatalf("positive position costPrice condition missing: %s", positionJSON)
 	}
 }
 
@@ -396,6 +423,137 @@ func TestPaperMCPPlaceExecutesImmediatelyAtProvidedPrice(t *testing.T) {
 	}
 	assertPaperRowCount(t, store.db, "paper_trades", 2)
 	assertPaperRowCount(t, store.db, "paper_account_snapshots", 2)
+}
+
+func TestPaperMCPSetPositionAddsUpdatesAndDeletesWithoutChangingCash(t *testing.T) {
+	store := newTestPaperStore(t)
+	withPaperMCPStore(t, store)
+	account, err := store.CreateAccount(PaperCreateAccountRequest{
+		Name:        "position recorder",
+		InitialCash: 20000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := callMCPTool(mustMCPParams(t, "tdx_paper_account", map[string]any{
+		"action":    "set_position",
+		"accountId": account.ID,
+		"position": map[string]any{
+			"code":     "600000",
+			"quantity": 100,
+		},
+		"confirm": true,
+	})); err == nil {
+		t.Fatal("set_position without costPrice error = nil, want error")
+	}
+
+	assertSetPositionResult(t, account.ID, setPositionExpectation{
+		position: map[string]any{
+			"code":         "600000",
+			"securityName": "浦发银行",
+			"quantity":     150,
+			"costPrice":    10,
+		},
+		operation: "added",
+		quantity:  150,
+		costPrice: 10,
+	})
+	if _, err := store.db.Exec(`
+		UPDATE paper_positions
+		SET sellable_quantity = 140, frozen_quantity = 10
+		WHERE account_id = ? AND code = ?
+	`, account.ID, "600000"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := callMCPTool(mustMCPParams(t, "tdx_paper_account", map[string]any{
+		"action":    "set_position",
+		"accountId": account.ID,
+		"position": map[string]any{
+			"code":      "600000",
+			"quantity":  80,
+			"costPrice": 12,
+		},
+		"confirm": true,
+	})); err == nil {
+		t.Fatal("set_position with frozen quantity error = nil, want error")
+	}
+	if _, err := store.db.Exec(`
+		UPDATE paper_positions
+		SET sellable_quantity = quantity, frozen_quantity = 0
+		WHERE account_id = ? AND code = ?
+	`, account.ID, "600000"); err != nil {
+		t.Fatal(err)
+	}
+	assertSetPositionResult(t, account.ID, setPositionExpectation{
+		position: map[string]any{
+			"code":         "600000",
+			"securityName": "浦发银行",
+			"quantity":     80,
+			"costPrice":    12,
+		},
+		operation: "updated",
+		quantity:  80,
+		costPrice: 12,
+	})
+	assertSetPositionResult(t, account.ID, setPositionExpectation{
+		position: map[string]any{
+			"code":     "600000",
+			"quantity": 0,
+		},
+		operation: "deleted",
+	})
+
+	positions, err := store.ListPositions(account.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(positions) != 0 {
+		t.Fatalf("positions = %+v, want none", positions)
+	}
+	updated, err := store.GetAccount(account.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFloatEqual(t, updated.AvailableCash, account.AvailableCash)
+	assertFloatEqual(t, updated.FrozenCash, account.FrozenCash)
+	assertPaperRowCount(t, store.db, "paper_orders", 0)
+	assertPaperRowCount(t, store.db, "paper_trades", 0)
+	assertPaperRowCount(t, store.db, "paper_position_ledger", 3)
+	assertPaperRowCount(t, store.db, "paper_account_snapshots", 3)
+	assertPaperRowCount(t, store.db, "paper_agent_actions", 4)
+}
+
+type setPositionExpectation struct {
+	position  map[string]any
+	operation string
+	quantity  int64
+	costPrice float64
+}
+
+func assertSetPositionResult(
+	t *testing.T,
+	accountID string,
+	want setPositionExpectation,
+) {
+	t.Helper()
+	result, err := callMCPTool(mustMCPParams(t, "tdx_paper_account", map[string]any{
+		"action":    "set_position",
+		"accountId": accountID,
+		"position":  want.position,
+		"reason":    "人工校正持仓",
+		"confirm":   true,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := result["structuredContent"].(map[string]any)
+	if data["operation"] != want.operation {
+		t.Fatalf("operation = %v, want %s", data["operation"], want.operation)
+	}
+	got, ok := data["position"].(PaperPosition)
+	if !ok || got.Quantity != want.quantity || got.AvgCost != want.costPrice {
+		t.Fatalf("position = %+v", data["position"])
+	}
 }
 
 func seedPaperAccountDeletionRows(t *testing.T, db *sql.DB, accountID string) {

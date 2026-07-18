@@ -40,6 +40,20 @@ type PaperInitialPosition struct {
 	BuyDate   string  `json:"buyDate,omitempty"`
 }
 
+type PaperSetPositionRequest struct {
+	AccountID string                  `json:"accountId"`
+	Position  PaperPositionAdjustment `json:"position"`
+	Reason    string                  `json:"reason,omitempty"`
+}
+
+type PaperPositionAdjustment struct {
+	Code         string   `json:"code"`
+	SecurityName string   `json:"securityName,omitempty"`
+	AssetType    string   `json:"assetType,omitempty"`
+	Quantity     int64    `json:"quantity"`
+	CostPrice    *float64 `json:"costPrice,omitempty"`
+}
+
 type PaperPlaceOrderRequest struct {
 	AccountID   string  `json:"accountId"`
 	Code        string  `json:"code"`

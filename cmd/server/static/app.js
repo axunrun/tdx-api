@@ -621,6 +621,14 @@ function describeActivity(item) {
     return `${side}：${name} ${fmtNumber.format(response.quantity || 0)} 股` +
       `，成交额 ${fmtMoney.format(response.amount || 0)}${reason}`;
   }
+  if (item.actionType === "set_position") {
+    const position = response.position || request.position || {};
+    const labels = { added: "新增", updated: "修改", deleted: "删除" };
+    const operation = labels[response.operation] || "校正";
+    const name = position.name || position.securityName || position.code || "";
+    const reason = request.reason ? `，原因：${request.reason}` : "";
+    return `持仓${operation}：${name} ${fmtNumber.format(position.quantity || 0)} 股${reason}`;
+  }
   if (item.actionType === "cancel_order") {
     return `撤销委托：${request.orderId || ""}`;
   }
