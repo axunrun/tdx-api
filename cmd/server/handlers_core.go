@@ -31,6 +31,7 @@ func handleQuote(w http.ResponseWriter, r *http.Request) {
 func handleKline(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
 	typ := r.URL.Query().Get("type")
+	if typ == "" { typ = "day" }
 	if code == "" { jsonErr(w, "缺少code"); return }
 	cnt := parseCount(r.URL.Query().Get("count"), 10)
 	c := cli()

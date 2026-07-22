@@ -53,9 +53,10 @@ snake_case，主键和索引含义必须能从字段名直接看出。
 - HTTP API：`http://<服务器IP>:8080/api/agent/...`
 - MCP endpoint：`http://<服务器IP>:8080/mcp`
 
-MCP 当前只暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text` 风格，例如
-`tdx_stock_brief_text`、`tdx_kline_summary_text`、`tdx_market_review_text`。
-JSON 调试和人工核查仍使用原 `/api/agent/*` HTTP 接口，避免 MCP 输出塞入过多原始数据。
+MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text` 风格，例如
+`tdx_stock_brief_text`、`tdx_kline_summary_text`、`tdx_market_review_text`。另外提供
+`tdx_kline` 结构化工具，用于按参数获取精确的日/周/月/季/年 K 线及逐期收盘价；常规趋势判断
+仍优先使用 `tdx_kline_summary_text`，避免原始数组占用过多上下文。
 
 ## 当前进度
 

@@ -153,6 +153,42 @@ func TestMCPToolSchemasDescribeAgentReadableConstraints(t *testing.T) {
 	}
 }
 
+func TestMCPKlineSchemaDescribesRawDailyTradingData(t *testing.T) {
+	kline := findMCPTool(t, "tdx_kline")
+	if !strings.Contains(kline.Description, "逐日收盘价") ||
+		!strings.Contains(kline.Description, "tdx_kline_summary_text") {
+		t.Fatalf("kline description missing usage boundary: %s", kline.Description)
+	}
+
+	properties := kline.InputSchema["properties"].(map[string]any)
+	code := properties["code"].(map[string]any)
+	if code["pattern"] != `^\d{6}$` {
+		t.Fatalf("code schema = %+v", code)
+	}
+	period := properties["type"].(map[string]any)
+	if period["default"] != "day" ||
+		!hasString(period["enum"].([]string), "week") ||
+		hasString(period["enum"].([]string), "minute1") {
+		t.Fatalf("type schema = %+v", period)
+	}
+	count := properties["count"].(map[string]any)
+	if count["default"] != 10 || count["minimum"] != 1 || count["maximum"] != 800 {
+		t.Fatalf("count schema = %+v", count)
+	}
+
+	outputProperties := kline.OutputSchema["properties"].(map[string]any)
+	data := outputProperties["data"].(map[string]any)
+	dataProperties := data["properties"].(map[string]any)
+	list := dataProperties["list"].(map[string]any)
+	item := list["items"].(map[string]any)
+	itemProperties := item["properties"].(map[string]any)
+	for _, name := range []string{"date", "open", "high", "low", "close", "volume", "amount"} {
+		if itemProperties[name] == nil {
+			t.Fatalf("kline output schema missing %s", name)
+		}
+	}
+}
+
 func TestMCPToolSchemasDescribeCalculationTools(t *testing.T) {
 	scenario := findMCPTool(t, "tdx_scenario_valuation_text")
 	scenarioProperties := scenario.InputSchema["properties"].(map[string]any)

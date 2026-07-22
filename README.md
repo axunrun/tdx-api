@@ -58,7 +58,7 @@ GitHub Actions 会在 `master`、`main` 或 `v*.*.*` tag 推送时自动构建�
 docker pull ghcr.io/axunrun/tdx-api:latest
 ```
 
-MCP 当前暴露的是已经完成的 agent 文本聚合工具，例如
+MCP 当前主要暴露已经完成的 agent 文本聚合工具，并提供 `tdx_kline` 原始结构化 K 线工具。例如
 `tdx_stock_brief_text`、`tdx_kline_summary_text`、`tdx_market_review_text` 和
 `tdx_global_market_brief_text`。JSON 调试接口继续通过原 REST API 使用。
 

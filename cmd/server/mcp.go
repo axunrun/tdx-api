@@ -104,11 +104,40 @@ func handleMCP(w http.ResponseWriter, r *http.Request) {
 }
 
 func mcpTools() []mcpTool {
+	klineTool := newMCPTool(
+		"tdx_kline",
+		"原始K线行情结构化数据。用于获取逐日或逐周期的开盘价、最高价、最低价、收盘价、成交量和成交额；逐日收盘价序列读取type=day结果的list[].date与list[].close。需要低Token趋势判断时优先调用tdx_kline_summary_text。",
+		"/api/kline",
+		handleKline,
+		mcpToolParam{
+			Name:        "code",
+			Type:        "string",
+			Description: "必填，6位A股股票代码，例如300499。",
+			Required:    true,
+			Schema:      map[string]any{"pattern": `^\d{6}$`},
+		},
+		optionalEnumDefault(
+			"type",
+			"K线周期：day日线（默认）、week周线、month月线、quarter季线、year年线。返回最近count个对应周期；逐日收盘价必须使用day。",
+			"day",
+			"day", "week", "month", "quarter", "year",
+		),
+		optionalIntegerDefault(
+			"count",
+			"返回最近K线数量，默认10，范围1-800。数量越大返回内容和Token占用越高。",
+			10,
+			1,
+			800,
+		),
+	)
+	klineTool.OutputSchema = klineToolOutputSchema()
+
 	tools := []mcpTool{
 		newMCPTool("tdx_asset_search_text", "按名称、代码或拼音搜索A股资产。用于用户只给股票名称或模糊关键词时先确认标准代码；返回候选股票、市场、名称和主要板块。", "/api/agent/assets/search-text", handleAgentAssetsSearchText,
 			requiredString("keyword", "股票名称、代码或拼音关键词"),
 			optionalIntegerDefault("limit", "返回数量，默认20，最大50。", 20, 1, 50),
 		),
+		klineTool,
 		newMCPTool("tdx_stock_brief_text", "单只A股快速概览。适合作为个股分析第一步，不等于深度买卖建议；输出行情、基本面、最新财报、所属板块、估值表现、数据一致性和日/周/月技术指标。", "/api/agent/stock-brief-text", handleAgentStockBriefText,
 			requiredString("code", "股票代码，例如300499"),
 			optionalMarket("mkt"),
@@ -388,6 +417,54 @@ func jsonToolOutputSchema() map[string]any {
 		"type":                 "object",
 		"description":          "工具调用结果。content[0].text 为简短文本说明；structuredContent 为机器可读 JSON 数据。调用失败时返回 MCP error.message。",
 		"additionalProperties": true,
+	}
+}
+
+func klineToolOutputSchema() map[string]any {
+	numberField := func(description string) map[string]any {
+		return map[string]any{"type": "number", "description": description}
+	}
+	return map[string]any{
+		"type":        "object",
+		"description": "原始K线MCP结果。精确数据位于data.list；text是同一数据的JSON文本表示。",
+		"properties": map[string]any{
+			"endpoint": map[string]any{
+				"type":        "string",
+				"description": "内部HTTP接口路径，固定为/api/kline。",
+			},
+			"text": map[string]any{
+				"type":        "string",
+				"description": "原始K线JSON的文本表示；程序化读取优先使用data。",
+			},
+			"data": map[string]any{
+				"type":        "object",
+				"description": "K线结构化响应。",
+				"properties": map[string]any{
+					"code":  map[string]any{"type": "string", "description": "股票代码。"},
+					"type":  map[string]any{"type": "string", "description": "实际K线周期。"},
+					"count": map[string]any{"type": "integer", "description": "实际返回条数。"},
+					"list": map[string]any{
+						"type":        "array",
+						"description": "K线记录。逐日收盘价取date和close字段。",
+						"items": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"date":   map[string]any{"type": "string", "description": "K线日期，YYYY-MM-DD。"},
+								"open":   numberField("开盘价。"),
+								"high":   numberField("最高价。"),
+								"low":    numberField("最低价。"),
+								"close":  numberField("收盘价；type=day时即逐日收盘价。"),
+								"volume": map[string]any{"type": "integer", "description": "成交量。"},
+								"amount": numberField("成交额。"),
+							},
+							"required": []string{"date", "open", "high", "low", "close", "volume"},
+						},
+					},
+				},
+				"required": []string{"code", "type", "count", "list"},
+			},
+		},
+		"required": []string{"endpoint", "text", "data"},
 	}
 }
 
