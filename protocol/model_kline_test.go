@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"encoding/hex"
+	"math"
 	"testing"
 )
 
@@ -30,5 +31,73 @@ func Test_stockKline_Decode(t *testing.T) {
 	t.Log(len(resp.List))
 	for _, v := range resp.List {
 		t.Log(v)
+	}
+}
+
+func TestRSIFloatUsesWilderSmoothing(t *testing.T) {
+	closes := []float64{10, 11, 10, 12, 11}
+	klines := make(Klines, 0, len(closes))
+	for _, closePrice := range closes {
+		klines = append(klines, &Kline{Close: Yuan(closePrice)})
+	}
+
+	got := klines.RSIFloat(3)
+	want := 54.54545454545455
+	if math.Abs(got-want) > 1e-9 {
+		t.Fatalf("RSIFloat(3) = %.12f, want %.12f", got, want)
+	}
+}
+
+func TestKDJUsesFullRecursiveSeries(t *testing.T) {
+	values := []struct {
+		high  float64
+		low   float64
+		close float64
+	}{
+		{12, 8, 10},
+		{13, 9, 12},
+		{14, 10, 13},
+		{15, 11, 14},
+		{16, 12, 13},
+	}
+	klines := make(Klines, 0, len(values))
+	for _, value := range values {
+		klines = append(klines, &Kline{
+			High:  Yuan(value.high),
+			Low:   Yuan(value.low),
+			Close: Yuan(value.close),
+		})
+	}
+
+	k, d, j, ok := klines.KDJ(3)
+	if !ok {
+		t.Fatal("KDJ(3) unavailable")
+	}
+	for name, pair := range map[string][2]float64{
+		"K": {k, 62.3456790123457},
+		"D": {d, 59.8765432098765},
+		"J": {j, 67.2839506172839},
+	} {
+		if math.Abs(pair[0]-pair[1]) > 1e-9 {
+			t.Fatalf("%s = %.12f, want %.12f", name, pair[0], pair[1])
+		}
+	}
+}
+
+func TestATRFloatUsesWilderSmoothing(t *testing.T) {
+	trueRanges := []float64{0, 3, 6, 9, 12, 15}
+	klines := make(Klines, 0, len(trueRanges))
+	for _, trueRange := range trueRanges {
+		klines = append(klines, &Kline{
+			High:  Yuan(100 + trueRange),
+			Low:   Yuan(100),
+			Close: Yuan(100),
+		})
+	}
+
+	got := klines.ATRFloat(3)
+	want := 10.333333333333334
+	if math.Abs(got-want) > 1e-9 {
+		t.Fatalf("ATRFloat(3) = %.12f, want %.12f", got, want)
 	}
 }

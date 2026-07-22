@@ -285,7 +285,7 @@ func appendTechnicalText(b *strings.Builder, summary *AgentTechnicalSummary) {
 		return
 	}
 	b.WriteString("技术指标：\n")
-	b.WriteString("说明：RSI反映价格动量，OBV反映量价确认；二者不一致时表示价格动量与成交量确认存在背离，不是数据冲突。\n")
+	b.WriteString("说明：各周期技术指标最多使用250根可用K线预热；RSI和ATR使用Wilder平滑，OBV反映量价确认。\n")
 	for _, period := range summary.Periods {
 		parts := []string{fmt.Sprintf("%s：收盘%.2f", period.Name, period.Close)}
 		if ma20, ok := metricValue(period.MA["ma20"]); ok {

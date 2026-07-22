@@ -84,6 +84,12 @@ type agentTechnicalSpec struct {
 	fetch  func(string, uint16) (*protocol.KlineResp, error)
 }
 
+const agentIndicatorWarmupBars = 250
+
+func indicatorWarmupCount(requested int) int {
+	return max(requested, agentIndicatorWarmupBars)
+}
+
 type AgentStockBrief struct {
 	Code         string                  `json:"code"`
 	Name         string                  `json:"name,omitempty"`
@@ -261,11 +267,11 @@ func buildAgentStockBrief(c *tdx.Client, code, rawMarket string) (AgentStockBrie
 		Source: "tdx_agent_stock_brief",
 		Blocks: make([]AgentBriefBlock, 0),
 		Limits: map[string]int{
-			"technicalDay":   250,
-			"technicalWeek":  156,
-			"technicalMonth": 120,
+			"technicalDay":   agentIndicatorWarmupBars,
+			"technicalWeek":  agentIndicatorWarmupBars,
+			"technicalMonth": agentIndicatorWarmupBars,
 		},
-		Note: "面向Agent的单股概览聚合接口；板块返回该股完整所属板块摘要；技术指标只返回各周期最新有效值。RSI反映价格动量，OBV反映量价确认，二者不一致时表示价格动量与成交量确认存在背离，不是数据冲突。",
+		Note: "面向Agent的单股概览聚合接口；板块返回该股完整所属板块摘要；技术指标使用各周期最多250根可用K线预热并只返回最新有效值。RSI和ATR使用Wilder平滑；OBV反映量价确认。",
 	}
 
 	if quote, err := buildAgentBriefQuote(c, code); err != nil {
@@ -315,10 +321,10 @@ func buildAgentTechnicalSummary(c *tdx.Client, code string) (AgentTechnicalSumma
 		{"day", "日线", 250, func(code string, count uint16) (*protocol.KlineResp, error) {
 			return fetchDayKlines(c, code, count)
 		}},
-		{"week", "周线", 156, func(code string, count uint16) (*protocol.KlineResp, error) {
+		{"week", "周线", agentIndicatorWarmupBars, func(code string, count uint16) (*protocol.KlineResp, error) {
 			return fetchWeekKlines(c, code, count)
 		}},
-		{"month", "月线", 120, func(code string, count uint16) (*protocol.KlineResp, error) {
+		{"month", "月线", agentIndicatorWarmupBars, func(code string, count uint16) (*protocol.KlineResp, error) {
 			return fetchMonthKlines(c, code, count)
 		}},
 	}
@@ -332,11 +338,11 @@ func buildAgentTechnicalSummary(c *tdx.Client, code string) (AgentTechnicalSumma
 		Source:  "tdx_kline_local_indicators",
 		Periods: periods,
 		Limits: map[string]int{
-			"day":   250,
-			"week":  156,
-			"month": 120,
+			"day":   agentIndicatorWarmupBars,
+			"week":  agentIndicatorWarmupBars,
+			"month": agentIndicatorWarmupBars,
 		},
-		Note:     "技术指标由tdx K线在本地计算，仅返回日线、周线、月线最后一个有效指标值；available=false表示该周期K线数量不足。RSI反映价格动量，OBV反映量价确认，二者不一致时表示价格动量与成交量确认存在背离，不是数据冲突。",
+		Note:     "技术指标由tdx K线在本地计算，各周期最多使用250根可用K线预热，仅返回最后一个有效值；available=false表示K线不足。RSI和ATR使用Wilder平滑；OBV反映量价确认。",
 		Warnings: warnings,
 	}, nil
 }
@@ -762,9 +768,9 @@ func buildAgentTechnicalPeriod(period, name string, ks protocol.Klines) AgentTec
 		MA:         ma,
 		MACD:       macd,
 		RSI: map[string]Metric{
-			"rsi6":  intMetric(ks, 7, ks.RSI(6), "RSI6"),
-			"rsi12": intMetric(ks, 13, ks.RSI(12), "RSI12"),
-			"rsi24": intMetric(ks, 25, ks.RSI(24), "RSI24"),
+			"rsi6":  rsiMetric(ks, 6, "RSI6"),
+			"rsi12": rsiMetric(ks, 12, "RSI12"),
+			"rsi24": rsiMetric(ks, 24, "RSI24"),
 		},
 		BOLL:    boll,
 		ATR:     atr,
@@ -781,12 +787,12 @@ func priceMetric(ks protocol.Klines, required int, value protocol.Price, label s
 	return Metric{Available: true, Value: &v, Text: fmt.Sprintf("%s=%.3f", label, v)}
 }
 
-func intMetric(ks protocol.Klines, required int, value int64, label string) Metric {
-	if len(ks) < required {
-		return unavailableMetric(fmt.Sprintf("K线数量不足%d根", required))
+func rsiMetric(ks protocol.Klines, days int, label string) Metric {
+	if len(ks) <= days {
+		return unavailableMetric(fmt.Sprintf("K线数量不足%d根", days+1))
 	}
-	v := float64(value)
-	return Metric{Available: true, Value: &v, Text: fmt.Sprintf("%s=%.0f", label, v)}
+	v := ks.RSIFloat(days)
+	return Metric{Available: true, Value: &v, Text: fmt.Sprintf("%s=%.2f", label, v)}
 }
 
 func unavailableMetric(reason string) Metric {
@@ -831,7 +837,7 @@ func buildATR(ks protocol.Klines) AgentATR {
 	if len(ks) < 15 {
 		return AgentATR{Available: false, Reason: "K线数量不足15根"}
 	}
-	atr14 := ks.ATR(14).Float64()
+	atr14 := ks.ATRFloat(14)
 	return AgentATR{
 		Available: true,
 		ATR14:     &atr14,

@@ -242,17 +242,17 @@ func buildTechnicalScoreSummary(
 	specs := []agentTechnicalSpec{{
 		period: "day",
 		name:   "日线",
-		count:  uint16(dayCount),
+		count:  uint16(indicatorWarmupCount(dayCount)),
 		fetch: func(code string, count uint16) (*protocol.KlineResp, error) {
 			return fetchTechnicalDayKlines(c, code, count, adjust)
 		},
 	}}
 	if includeWeeklyMonthly {
 		specs = append(specs,
-			agentTechnicalSpec{"week", "周线", 156, func(code string, count uint16) (*protocol.KlineResp, error) {
+			agentTechnicalSpec{"week", "周线", agentIndicatorWarmupBars, func(code string, count uint16) (*protocol.KlineResp, error) {
 				return fetchWeekKlines(c, code, count)
 			}},
-			agentTechnicalSpec{"month", "月线", 120, func(code string, count uint16) (*protocol.KlineResp, error) {
+			agentTechnicalSpec{"month", "月线", agentIndicatorWarmupBars, func(code string, count uint16) (*protocol.KlineResp, error) {
 				return fetchMonthKlines(c, code, count)
 			}},
 		)
@@ -323,7 +323,7 @@ func buildTechnicalScoreSummary(
 		b.WriteString(strings.Join(warnings, "；"))
 		b.WriteString("。\n")
 	}
-	b.WriteString("数据口径与限制：KDJ/BIAS/量价由K线公式计算；多空比由TDX逐笔成交估算，仅日线计分，不等同官方资金流。\n")
+	b.WriteString("数据口径与限制：递推指标至少使用250根K线预热；RSI使用Wilder平滑；KDJ(9,3,3)逐根递推，金叉/死叉比较前后周期；BIAS/量价由K线公式计算；多空比由TDX逐笔成交估算，仅日线计分，不等同官方资金流。\n")
 	return strings.TrimSpace(b.String()), nil
 }
 
@@ -367,14 +367,16 @@ func fetchTechnicalDayKlines(
 func technicalScoreKlineHeader(adjust string, dayCount int, includeWeeklyMonthly bool) string {
 	if adjust == "none" {
 		return fmt.Sprintf(
-			"K线口径：日线样本 %d，周/月线 %t；日线价格指标使用未复权TDX日K线；成交量使用未复权成交量；周/月线使用现有TDX周/月K线口径。\n",
+			"K线口径：日线参数 %d，指标预热请求 %d，周/月线 %t；日线价格指标使用未复权TDX日K线；成交量使用未复权成交量；周/月线使用现有TDX周/月K线口径。\n",
 			dayCount,
+			indicatorWarmupCount(dayCount),
 			includeWeeklyMonthly,
 		)
 	}
 	return fmt.Sprintf(
-		"K线口径：日线样本 %d，周/月线 %t；日线价格指标使用 Gbbq 前复权日K线；成交量沿用K线原始volume；周/月线使用现有TDX周/月K线口径。\n",
+		"K线口径：日线参数 %d，指标预热请求 %d，周/月线 %t；日线价格指标使用 Gbbq 前复权日K线；成交量沿用K线原始volume；周/月线使用现有TDX周/月K线口径。\n",
 		dayCount,
+		indicatorWarmupCount(dayCount),
 		includeWeeklyMonthly,
 	)
 }
@@ -470,32 +472,13 @@ func scoreBOLL(period AgentTechnicalPeriod) technicalScoreRow {
 }
 
 func scoreKDJ(periodName string, klines protocol.Klines) technicalScoreRow {
-	if len(klines) < 9 {
+	k, d, j, ok := klines.KDJ(9)
+	if !ok {
 		return technicalScoreRow{Period: periodName, Item: "KDJ", Value: "-", Signal: "K线不足9根", Score: 0}
 	}
-	items := klines[len(klines)-9:]
-	high := items[0].High.Float64()
-	low := items[0].Low.Float64()
-	for _, item := range items[1:] {
-		if h := item.High.Float64(); h > high {
-			high = h
-		}
-		if l := item.Low.Float64(); l < low {
-			low = l
-		}
-	}
-	rsv := 50.0
-	if high != low {
-		rsv = (klines[len(klines)-1].Close.Float64() - low) / (high - low) * 100
-	}
-	k := 2.0/3.0*50 + 1.0/3.0*rsv
-	d := 2.0/3.0*50 + 1.0/3.0*k
-	j := 3*k - 2*d
-	score := -1
-	signal := "K下穿D"
-	if k > d {
-		score = 1
-		signal = "K上穿D"
+	signal, score := kdjSignal(k, d, k, d)
+	if previousK, previousD, _, available := klines[:len(klines)-1].KDJ(9); available {
+		signal, score = kdjSignal(previousK, previousD, k, d)
 	}
 	return technicalScoreRow{
 		Period: periodName,
@@ -503,6 +486,21 @@ func scoreKDJ(periodName string, klines protocol.Klines) technicalScoreRow {
 		Value:  fmt.Sprintf("K=%.2f D=%.2f J=%.2f", k, d, j),
 		Signal: signal,
 		Score:  score,
+	}
+}
+
+func kdjSignal(previousK, previousD, currentK, currentD float64) (string, int) {
+	switch {
+	case previousK <= previousD && currentK > currentD:
+		return "K上穿D", 1
+	case previousK >= previousD && currentK < currentD:
+		return "K下穿D", -1
+	case currentK > currentD:
+		return "K在D上方", 1
+	case currentK < currentD:
+		return "K在D下方", -1
+	default:
+		return "K与D重合", 0
 	}
 }
 

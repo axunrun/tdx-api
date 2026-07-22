@@ -64,11 +64,11 @@ MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text
 |---|---|---|---|
 | `/api/agent/stock-brief` | 个股简讯 JSON | 已完成 | 聚合行情、财务、F10 cat0、板块、估值、资金统计、技术指标 |
 | `/api/agent/stock-brief-text` | 个股简讯文本 | 已完成 | 面向 Agent 的中文低噪音输出 |
-| `/api/agent/technical-summary` | 技术指标摘要 | 已完成 | 日/周/月 MA、MACD、RSI、BOLL、ATR；也已并入 `stock-brief` |
+| `/api/agent/technical-summary` | 技术指标摘要 | 已完成 | 日/周/月 MA、MACD、Wilder RSI、BOLL、Wilder ATR；各周期最多250根预热，也已并入 `stock-brief` |
 | SQLite 股票名称库 | A 股代码-名称字典 | 已完成 | 容器启动时刷新，避免只返回股票代码 |
 | SQLite 板块索引库 | 个股所属板块查询 | 已完成 | 容器启动时刷新，更新而非追加 |
 | `/api/agent/kline-summary` | K 线聚合 JSON | 已完成 | 日线按 level/dayCount 限量返回原始 K 线聚合数据；周线、月线全量返回 |
-| `/api/agent/kline-summary-text` | K 线形态与阶段走势文本 | 已完成 | 面向 Agent 的中文低噪音输出，包含趋势阶段和风险摘要 |
+| `/api/agent/kline-summary-text` | K 线形态与阶段走势文本 | 已完成 | 面向 Agent 的中文低噪音输出，包含 RSI6、OBV、ATR、趋势阶段和风险摘要 |
 | `/api/agent/trade-flow-estimate` | 单日逐笔资金流估算 JSON | 已完成 | 支持 `date=YYYY-MM-DD`，优先按60个交易日逐笔成交额自适应阈值估算分档资金流；旧周期缓存自动失效 |
 | `/api/agent/trade-flow-estimate-text` | 单日逐笔资金流估算文本 | 已完成 | 面向 Agent 的中文低噪音输出，明确非外部 APP 官方口径 |
 | `/api/agent/f10-summary` | F10 深度资料 JSON | 已完成 | 覆盖股本、股东、机构、分红、资金、资本、题材、公告、经营、行业、研报等低频资料 |
@@ -102,7 +102,8 @@ MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text
 | `/api/agent/stock-brief` | `code` 必填；`mkt` 可选 | `code` 为股票代码；`mkt` 用于覆盖市场，通常可省略 |
 | `/api/agent/stock-brief-text` | `code` 必填；`mkt` 可选 | 与 JSON 版一致，返回中文低噪音文本 |
 | `/api/agent/technical-summary` | `code` 必填 | 返回日/周/月技术指标摘要 |
-| `/api/agent/kline-summary` | `code` 必填；`level` 可选；`dayCount` 可选 | `level=brief|normal|deep`；`dayCount` 覆盖日线数量，最大 500 |
+| `/api/agent/technical-score-text` | `code` 必填；`dayCount`、`includeWeeklyMonthly`、`adjust`、`level` 可选 | `dayCount=60..500`，默认250，小于250仍按250根预热；`includeWeeklyMonthly=true|false`，默认true；`adjust=qfq|none`，默认qfq；`level` 仅作信息标记 |
+| `/api/agent/kline-summary` | `code` 必填；`level` 可选；`dayCount` 可选 | `level=brief|normal|deep`；`dayCount` 控制日线展示与阶段统计数量，最大500；递推指标至少使用250根预热 |
 | `/api/agent/kline-summary-text` | `code` 必填；`level` 可选；`dayCount` 可选 | 与 JSON 版一致，但只返回中文清洗摘要 |
 | `/api/agent/trade-flow-estimate` | `code` 必填；`date` 可选 | `date=YYYY-MM-DD` 或 `YYYYMMDD`；不传默认今天 |
 | `/api/agent/trade-flow-estimate-text` | `code` 必填；`date` 可选 | 与 JSON 版一致，返回中文资金流估算摘要 |
@@ -129,6 +130,20 @@ MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text
 | `/api/agent/intraday-alerts-text` | 同 JSON 版 | 返回中文盘中异动摘要；若非交易日导致分时为空，会明确提示“非交易日无可用分时数据” |
 | `/api/agent/global-market-brief` | 无参数 | 返回外围权重资产池；分组包括 `risk`、`apac`、`commodity`、`fx`、`bond`、`leader`；每项包含 `price`、`changePct`、`range20`、`range60`，其中区间字段包含涨跌幅、区间最高、区间最低和当前区间位置；TDX 未验证到 Sensex30、俄罗斯RTS 本体稳定直连代码，暂不硬塞无效项 |
 | `/api/agent/global-market-brief-text` | 无参数 | 返回中文摘要；保留每项现价、当日涨跌、20/60 日涨跌幅、区间高低点和观察意义 |
+
+## 技术指标统一口径
+
+- RSI6/12/24 使用 Wilder 平滑：以前 `n` 个涨跌初始化平均涨幅和平均跌幅，随后按
+  `1/n` 逐根递推。
+- KDJ 使用标准 KDJ(9,3,3)：RSV 取近 9 根最高价和最低价，`K0=D0=50`，K、D
+  从首根可计算 K 线开始逐根递推。
+- ATR14 使用 Wilder 平滑：以前14个真实波幅初始化，随后按 `1/14` 逐根递推。
+- “金叉/死叉”必须比较前一周期与当前周期的 K、D 关系；只有位置发生穿越才输出交叉，
+  否则仅输出“K在D上方/下方”。
+- 日/周/月递推指标最多使用250根可用K线预热；上市历史不足时使用全部可得数据。
+  `kline-summary-text` 的 `level/dayCount` 只控制展示和阶段统计，不缩短指标预热序列。
+- 指标复算必须同时对齐K线周期、截止日期和复权方式。`technical-score-text`日线默认前复权，
+  `kline-summary-text`和`stock-brief-text`日线使用未复权数据。
 
 ## 已确认的 stock-brief 边界
 
@@ -164,7 +179,8 @@ MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text
 | `/api/agent/stock-brief` | 个股简讯 | 已完成 | `GetQuote`、`GetFinanceInfo`、F10 cat0、SQLite 板块、`GetTdxStat`、`GetTdxStat2`、`technical-summary` | 主入口之一 |
 | `/api/agent/stock-brief-text` | 个股简讯文本 | 已完成 | 同上 | 给 Agent 低上下文阅读 |
 | `/api/agent/technical-summary` | 技术指标摘要 | 已完成 | 日/周/月 K 线本地计算 | 可独立调用，也并入 brief |
-| `/api/agent/kline-summary` | K 线摘要 | 已完成 | `GetKlineDay`、`GetKlineWeekAll`、`GetKlineMonthAll` | 输出阶段涨跌、量能、关键价位、均线结构、趋势阶段、风险等级，不返回原始数组 |
+| `/api/agent/technical-score-text` | 统一技术评分文本 | 已完成 | Wilder RSI、递推 KDJ(9,3,3)、MA、MACD、BOLL、BIAS、量价和多空比 | 金叉/死叉必须比较前后两个周期，避免把静态 K/D 位置误报为交叉 |
+| `/api/agent/kline-summary` | K 线摘要 | 已完成 | `GetKlineDay`、`GetKlineWeekAll`、`GetKlineMonthAll` | 输出 RSI6、OBV、ATR、阶段涨跌、量能、关键价位、均线结构、趋势阶段和风险等级，不返回原始数组 |
 | `/api/agent/kline-summary-text` | K 线摘要文本 | 已完成 | 同上 | 给 Agent 低上下文阅读 |
 | `/api/agent/trade-flow-estimate` | 单日资金流估算 | 已完成 | `GetMinuteTradeAll`、`GetHistoryMinuteTradeDay` | 支持指定日期；按超大/大/中/小单分档估算 |
 | `/api/agent/trade-flow-estimate-text` | 单日资金流估算文本 | 已完成 | 同上 | 给 Agent 低上下文阅读 |

@@ -42,6 +42,14 @@ func TestBuildAgentTechnicalSummaryFromSpecsKeepsSuccessfulPeriods(t *testing.T)
 	}
 }
 
+func TestIndicatorWarmupCountUsesAtLeast250Bars(t *testing.T) {
+	for requested, want := range map[int]int{60: 250, 120: 250, 250: 250, 500: 500} {
+		if got := indicatorWarmupCount(requested); got != want {
+			t.Fatalf("indicatorWarmupCount(%d) = %d, want %d", requested, got, want)
+		}
+	}
+}
+
 func TestBuildOBVUsesCloseDirectionAndWindowVolume(t *testing.T) {
 	resp := testKlineResp(22)
 	ks := protocol.Klines(resp.List)

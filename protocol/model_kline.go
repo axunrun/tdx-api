@@ -3,6 +3,7 @@ package protocol
 import (
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"time"
 
@@ -292,37 +293,68 @@ func (ks Klines) MACD() (dif, dea, hist Price) {
 	return dif, dea, hist
 }
 
-// RSI 常用于超买超卖
+// RSI 常用于超买超卖。保留整数返回值兼容旧调用，新代码优先使用 RSIFloat。
 func (ks Klines) RSI(n int) int64 {
-	if len(ks) == 0 || n <= 0 {
+	return int64(math.Round(ks.RSIFloat(n)))
+}
+
+// RSIFloat 使用 Wilder 平滑计算 RSI。
+func (ks Klines) RSIFloat(n int) float64 {
+	if n <= 0 || len(ks) <= n {
 		return 0
 	}
-	var gain, loss int64
-	var rsi int64
-
-	for i := 1; i < len(ks); i++ {
-		diff := int64(ks[i].Close - ks[i-1].Close)
-
+	var avgGain, avgLoss float64
+	for i := 1; i <= n; i++ {
+		diff := ks[i].Close.Float64() - ks[i-1].Close.Float64()
 		if diff > 0 {
-			gain += diff
+			avgGain += diff
 		} else {
-			loss -= diff
-		}
-
-		if i >= n+1 {
-			prev := int64(ks[i-n].Close - ks[i-n-1].Close)
-			if prev > 0 {
-				gain -= prev
-			} else {
-				loss += prev
-			}
-		}
-
-		if i >= n && loss > 0 {
-			rsi = 100 * gain / (gain + loss)
+			avgLoss -= diff
 		}
 	}
-	return rsi
+	avgGain /= float64(n)
+	avgLoss /= float64(n)
+	for i := n + 1; i < len(ks); i++ {
+		diff := ks[i].Close.Float64() - ks[i-1].Close.Float64()
+		gain, loss := 0.0, 0.0
+		if diff > 0 {
+			gain = diff
+		} else {
+			loss = -diff
+		}
+		avgGain = (avgGain*float64(n-1) + gain) / float64(n)
+		avgLoss = (avgLoss*float64(n-1) + loss) / float64(n)
+	}
+	if avgLoss == 0 {
+		if avgGain > 0 {
+			return 100
+		}
+		return 0
+	}
+	return avgGain / (avgGain + avgLoss) * 100
+}
+
+// KDJ 使用 RSV(n) 和 1/3 权重逐根递推，初始 K、D 均为 50。
+func (ks Klines) KDJ(n int) (k, d, j float64, ok bool) {
+	if n <= 0 || len(ks) < n {
+		return 0, 0, 0, false
+	}
+	k, d = 50, 50
+	for i := n - 1; i < len(ks); i++ {
+		high := ks[i-n+1].High.Float64()
+		low := ks[i-n+1].Low.Float64()
+		for _, item := range ks[i-n+2 : i+1] {
+			high = math.Max(high, item.High.Float64())
+			low = math.Min(low, item.Low.Float64())
+		}
+		rsv := 50.0
+		if high != low {
+			rsv = (ks[i].Close.Float64() - low) / (high - low) * 100
+		}
+		k = 2.0/3.0*k + 1.0/3.0*rsv
+		d = 2.0/3.0*d + 1.0/3.0*k
+	}
+	return k, d, 3*k - 2*d, true
 }
 
 // BOLL 布林带（洗盘神器）
@@ -343,28 +375,33 @@ func (ks Klines) BOLL(n int) (upper, mid, lower Price) {
 	return upper, mid, lower
 }
 
-// ATR 常用于判断是否该止损
+// ATR 常用于判断是否该止损。保留价格返回值兼容旧调用。
 func (ks Klines) ATR(n int) Price {
-	if len(ks) == 0 || n <= 0 {
+	return Yuan(ks.ATRFloat(n))
+}
+
+// ATRFloat 使用 Wilder 平滑计算 ATR，需要 n+1 根K线得到首个值。
+func (ks Klines) ATRFloat(n int) float64 {
+	if n <= 0 || len(ks) <= n {
 		return 0
 	}
-	var sum int64
-	var atr Price
+	trueRange := func(i int) float64 {
+		high := ks[i].High.Float64()
+		low := ks[i].Low.Float64()
+		previousClose := ks[i-1].Close.Float64()
+		return math.Max(high-low, math.Max(
+			math.Abs(high-previousClose),
+			math.Abs(low-previousClose),
+		))
+	}
 
-	for i := 1; i < len(ks); i++ {
-		h := ks[i].High
-		l := ks[i].Low
-		pc := ks[i-1].Close
-
-		tr := max(h-l, max((h-pc).Abs(), (l-pc).Abs()))
-		sum += int64(tr)
-
-		if i >= n {
-			prev := max(ks[i-n+1].High-ks[i-n+1].Low,
-				max((ks[i-n+1].High-ks[i-n].Close).Abs(), (ks[i-n+1].Low-ks[i-n].Close).Abs()))
-			sum -= int64(prev)
-			atr = Price(sum / int64(n))
-		}
+	atr := 0.0
+	for i := 1; i <= n; i++ {
+		atr += trueRange(i)
+	}
+	atr /= float64(n)
+	for i := n + 1; i < len(ks); i++ {
+		atr = (atr*float64(n-1) + trueRange(i)) / float64(n)
 	}
 	return atr
 }

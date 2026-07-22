@@ -265,6 +265,39 @@ func TestScoreTechnicalPeriodCalculatesFormerMissingRows(t *testing.T) {
 	}
 }
 
+func TestScoreKDJUsesRecursiveValuesAndRealCrossingState(t *testing.T) {
+	row := scoreKDJ("日线", testTechnicalScoreKlines())
+
+	if row.Value != "K=72.22 D=60.37 J=95.93" {
+		t.Fatalf("KDJ value = %q", row.Value)
+	}
+	if row.Signal != "K在D上方" || row.Score != 1 {
+		t.Fatalf("KDJ signal = %+v", row)
+	}
+}
+
+func TestKDJSignalRequiresPreviousDayCrossing(t *testing.T) {
+	tests := []struct {
+		name                 string
+		previousK, previousD float64
+		currentK, currentD   float64
+		want                 string
+	}{
+		{"golden cross", 40, 45, 50, 46, "K上穿D"},
+		{"death cross", 55, 50, 45, 49, "K下穿D"},
+		{"above without cross", 55, 50, 60, 52, "K在D上方"},
+		{"below without cross", 45, 50, 40, 48, "K在D下方"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, _ := kdjSignal(tt.previousK, tt.previousD, tt.currentK, tt.currentD)
+			if got != tt.want {
+				t.Fatalf("kdjSignal() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func testTechnicalScoreKlines() protocol.Klines {
 	out := make(protocol.Klines, 0, 10)
 	last := protocol.Yuan(10)

@@ -137,7 +137,8 @@ func TestMCPToolSchemasDescribeAgentReadableConstraints(t *testing.T) {
 	if dayCount["default"] != nil ||
 		!strings.Contains(dayCount["description"].(string), "brief=60") ||
 		!strings.Contains(dayCount["description"].(string), "normal=120") ||
-		!strings.Contains(dayCount["description"].(string), "deep=250") {
+		!strings.Contains(dayCount["description"].(string), "deep=250") ||
+		!strings.Contains(dayCount["description"].(string), "250根") {
 		t.Fatalf("dayCount dynamic default description = %+v", dayCount)
 	}
 
@@ -245,6 +246,22 @@ func TestMCPToolSchemasDescribeCalculationTools(t *testing.T) {
 	dayCount := technicalProperties["dayCount"].(map[string]any)
 	if dayCount["minimum"] != 60 || dayCount["maximum"] != 500 {
 		t.Fatalf("technical dayCount schema = %+v", dayCount)
+	}
+	for _, want := range []string{"250根", "Wilder", "逐根递推", "前后周期"} {
+		if !strings.Contains(technical.Description, want) {
+			t.Fatalf("technical description missing %q: %s", want, technical.Description)
+		}
+	}
+
+	kline := findMCPTool(t, "tdx_kline_summary_text")
+	for _, want := range []string{"RSI6", "Wilder ATR", "250根"} {
+		if !strings.Contains(kline.Description, want) {
+			t.Fatalf("kline summary description missing %q: %s", want, kline.Description)
+		}
+	}
+	multiBrief := findMCPTool(t, "tdx_multi_brief_text")
+	if !strings.Contains(multiBrief.Description, "250根") {
+		t.Fatalf("multi brief description missing warmup: %s", multiBrief.Description)
 	}
 }
 

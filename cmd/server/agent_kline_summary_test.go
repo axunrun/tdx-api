@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -145,8 +146,45 @@ func TestBuildAgentKlinePeriodSummaryUsesCompactSignals(t *testing.T) {
 	}
 }
 
+func TestKlineSummaryUsesFullSeriesForRecursiveIndicators(t *testing.T) {
+	klines := make(protocol.Klines, 0, 250)
+	start := time.Date(2025, 1, 1, 0, 0, 0, 0, time.Local)
+	for i := 0; i < 250; i++ {
+		closePrice := 100 + float64((i*7)%19) - float64(i%5)
+		klines = append(klines, &protocol.Kline{
+			Time:   start.AddDate(0, 0, i),
+			Open:   protocol.Yuan(closePrice - 0.5),
+			High:   protocol.Yuan(closePrice + 1 + float64(i%4)),
+			Low:    protocol.Yuan(closePrice - 1),
+			Close:  protocol.Yuan(closePrice),
+			Volume: int64(1000 + i),
+		})
+	}
+
+	period := buildAgentKlinePeriodSummary("day", "日线", klines, 20)
+
+	if period.TotalCount != 250 || period.UsedCount != 20 {
+		t.Fatalf("counts = %d/%d, want 250/20", period.TotalCount, period.UsedCount)
+	}
+	if period.RSI6 == nil || math.Abs(*period.RSI6-klines.RSIFloat(6)) > 1e-9 {
+		t.Fatalf("RSI6 = %v, want full-series %.12f", period.RSI6, klines.RSIFloat(6))
+	}
+	if math.Abs(period.Volatility.Atr-klines.ATRFloat(14)) > 1e-9 {
+		t.Fatalf("ATR14 = %.12f, want full-series %.12f", period.Volatility.Atr, klines.ATRFloat(14))
+	}
+}
+
 func TestBuildAgentKlinePeriodSummaryAddsSecondBatchKlineDetails(t *testing.T) {
 	klines := protocol.Klines{
+		testSummaryKline("2025-12-23", 91, 93, 90, 92),
+		testSummaryKline("2025-12-24", 92, 94, 91, 93),
+		testSummaryKline("2025-12-25", 93, 95, 92, 94),
+		testSummaryKline("2025-12-26", 94, 96, 93, 95),
+		testSummaryKline("2025-12-27", 95, 97, 94, 96),
+		testSummaryKline("2025-12-28", 96, 98, 95, 97),
+		testSummaryKline("2025-12-29", 97, 99, 96, 98),
+		testSummaryKline("2025-12-30", 98, 100, 97, 99),
+		testSummaryKline("2025-12-31", 99, 101, 98, 100),
 		testSummaryKline("2026-01-01", 100, 103, 99, 102),
 		testSummaryKline("2026-01-02", 102, 105, 101, 104),
 		testSummaryKline("2026-01-03", 104, 107, 103, 106),
@@ -197,6 +235,7 @@ func TestBuildAgentKlineSummaryTextIsChineseAndCompact(t *testing.T) {
 				TrendStage:     "上升趋势中的回调",
 				RiskLevel:      "中",
 				Position:       "接近区间高位",
+				RSI6:           floatPtr(20.46),
 				StageReturns: map[string]float64{
 					"ret5":  1.20,
 					"ret20": -3.40,
@@ -253,6 +292,7 @@ func TestBuildAgentKlineSummaryTextIsChineseAndCompact(t *testing.T) {
 		"风险：中",
 		"近5/20/60涨跌：+1.20%/-3.40%/+12.34%",
 		"量能：温和放量",
+		"RSI6 20.46",
 		"均线：多头排列",
 		"距20日高点 -16.42%",
 		"收盘高于MA20",
