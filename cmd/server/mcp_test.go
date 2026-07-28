@@ -83,6 +83,11 @@ func TestMCPToolSchemasDescribeHotspotParameters(t *testing.T) {
 	if hotspot.Description == "" {
 		t.Fatal("hotspot tool description missing")
 	}
+	for _, want := range []string{"指标数据日期", "最近完整交易日", "实际交易日区间"} {
+		if !strings.Contains(hotspot.Description, want) {
+			t.Fatalf("hotspot description missing %q: %s", want, hotspot.Description)
+		}
+	}
 
 	properties := hotspot.InputSchema["properties"].(map[string]any)
 	for _, name := range []string{"metric", "sectorType", "startDate", "endDate", "limit"} {
@@ -95,6 +100,9 @@ func TestMCPToolSchemasDescribeHotspotParameters(t *testing.T) {
 	if len(metric["enum"].([]string)) == 0 {
 		t.Fatal("metric enum missing")
 	}
+	if !strings.Contains(metric["description"].(string), "不是盘中实时值") {
+		t.Fatalf("metric description does not explain changePct timing: %+v", metric)
+	}
 	if metric["default"] != "chg20" {
 		t.Fatalf("metric default = %v, want chg20", metric["default"])
 	}
@@ -105,6 +113,23 @@ func TestMCPToolSchemasDescribeHotspotParameters(t *testing.T) {
 	startDate := properties["startDate"].(map[string]any)
 	if startDate["pattern"] != `^(\d{4}-\d{2}-\d{2}|\d{8})$` {
 		t.Fatalf("startDate pattern = %+v", startDate["pattern"])
+	}
+}
+
+func TestMCPMarketReviewDescribesDataDatesAndSessionMeaning(t *testing.T) {
+	tool := findMCPTool(t, "tdx_market_review_text")
+	if !strings.Contains(tool.Description, "当前交易日实时广度") ||
+		!strings.Contains(tool.Description, "最近完整交易日盘后广度") {
+		t.Fatalf("market review description = %q", tool.Description)
+	}
+
+	properties := tool.InputSchema["properties"].(map[string]any)
+	session := properties["session"].(map[string]any)
+	description := session["description"].(string)
+	for _, want := range []string{"09:20-09:25集合竞价", "不会回溯", "数据日期"} {
+		if !strings.Contains(description, want) {
+			t.Fatalf("session description missing %q: %s", want, description)
+		}
 	}
 }
 

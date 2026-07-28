@@ -14,11 +14,11 @@
 | `/api/agent/sector-membership-text` | 个股板块归属文本 | SQLite `block_memberships` | `code` 必填 | 输出该股所属概念、地域/风格、指数板块，用于后续选择板块分析入口。 |
 | `/api/agent/stock-in-sector-text` | 个股板块内位置文本 | SQLite 板块、`GetTdxStat` | `code` 必填；`sectorType`、`sectorName`、`metric`、`limit` 可选 | 输出个股在指定或默认所属板块中的相对排名、阶段表现和同板块比较。 |
 | `/api/agent/sector-detail-text` | 指定板块深度分析文本 | SQLite 板块、`GetTdxStat`、`GetIndexDayAll` | `sectorName` 或 `indexCode` 必填；`sectorType` 可选；`metric` 可选；`topStocks` 可选；`excludeNew` 可选 | 输出板块样本数、上涨比例、板块指数近 20/60 日表现、强势股、中游股和弱势股。 |
-| `/api/agent/hotspot-scan-text` | 热点扫描文本 | SQLite 板块、`GetTdxStat`、`GetIndexDayAll` | `sectorType`、`metric`、`startDate`、`endDate`、`window`、`offset`、`limit`、`topStocks`、`minMembers`、`excludeNew` 可选 | 输出强势、中游、弱势板块及代表股票；支持近 5/20/60 日或指定历史窗口。 |
+| `/api/agent/hotspot-scan-text` | 热点扫描文本 | SQLite 板块、`GetTdxStat`、`GetIndexDayAll` | `sectorType`、`metric`、`startDate`、`endDate`、`window`、`offset`、`limit`、`topStocks`、`minMembers`、`excludeNew` 可选 | 输出生成时间、指标来源、最近完整交易日或板块指数实际交易日区间，以及强势/中游/弱势板块和代表股票。 |
 | `/api/agent/multi-brief-text` | 多股简讯文本 | 批量复用 `stock-brief` | `codes` 或多个 `code` 必填；最多 20 只 | 一次输出多只股票的简短行情、成交、换手、20 日表现和主要板块；适合快速扫关注池。 |
 | `/api/agent/auction-text` | 集合竞价分析文本 | `GetCallAuction`、`GetQuote`、近 5/20 日日 K | `code` 必填；`session=open\|close\|all` 可选；`limit` 可选 | 默认输出 09:20-09:25 开盘不可撤单竞价摘要，包括末笔价格、较昨收涨跌、匹配量、未匹配方向和竞价信号。 |
 | `/api/agent/intraday-alerts-text` | 盘中异动提醒文本 | `GetQuote`、`GetMinute`、交易日判断、本地分时窗口计算 | `codes` 或多个 `code` 必填；`windowMinutes` 可选，默认 30，范围 5-60 | 输出多只股票当前行情、短时涨跌、短时放量和异动信号；非交易日或分时不可用时明确降级为行情快照。 |
-| `/api/agent/market-review-text` | 市场级复盘文本 | 指数行情、`GetTdxStat`、热点扫描、可选关注股联动 | `session=auto\|current\|morning\|full` 可选；`codes` 可选；`top` 可选，默认 10，最大 20 | 按查询时间输出盘前、盘中、午间或收盘视角，包含上证、深成、创业板、科创50、北证50、市场广度、强/中/弱板块和关注股联动。 |
+| `/api/agent/market-review-text` | 市场级复盘文本 | 指数行情、严格A股实时行情、`GetTdxStat`最近完整盘后统计、热点扫描、可选关注股联动 | `session=auto\|current\|morning\|full` 可选；`codes` 可选；`top` 可选，默认 10，最大 20 | 按查询时间识别非交易日、盘前、09:20-09:25集合竞价、竞价结束、盘中、午休或收盘；同时分列当前实时广度和最近完整盘后广度，明确日期、时点、股票范围及有效样本数。 |
 | `/api/agent/global-market-brief-text` | 全球外围市场简报文本 | 内置全球主要资产白名单、`ExQuote`、`ExBars`、本地 20/60 日区间计算 | 无参数 | 输出全球风险偏好、亚太核心市场、商品、汇率、利率债券和全球权重股的当日、20 日、60 日表现及区间位置；含欧洲STOXX50ETF、恒生科技、韩国/台湾可用指数代理。 |
 
 ## 参数解释
@@ -31,7 +31,7 @@
 | `codes` | 多股接口 | 多个 A 股代码 | 逗号、中文逗号、空格、换行分隔，如 `300499,603063` | 无 | 用于多股简讯、盘中异动、市场复盘关注股联动。 |
 | `mkt` | `stock-brief-text`、`f10-summary-text` | 手动指定市场 | 通常可省略；代码无法判断市场时再传 | 自动识别 | 日常 A 股分析不建议传，避免误设。 |
 | `limit` | 搜索、板块、热点等接口 | 控制返回条数 | 正整数，各接口上限不同 | 由接口决定 | Agent 默认少取，人工要求扩展时再调大。 |
-| `metric` | 板块/排序类接口 | 排序指标 | `changePct`、`chg5`、`chg20`、`chg60`、`peTtm`、`divYield`、`windowReturn` | 多数为 `chg20` | 中短线看 `chg20`，中期主线看 `chg60`，当日异动看 `changePct`。 |
+| `metric` | 板块/排序类接口 | 排序指标 | `changePct`、`chg5`、`chg20`、`chg60`、`peTtm`、`divYield`、`windowReturn` | 多数为 `chg20` | `changePct/chg5/chg20/chg60` 均为最近完整交易日 `TdxStat`，不是盘中实时；历史板块指数区间使用 `windowReturn`。 |
 | `sectorType` | 板块接口 | 板块类别 | `concept`、`style_region`、`index` | 多数为 `concept` | 做题材和行业分析时优先 `concept`。 |
 
 ### 资产搜索
@@ -68,8 +68,8 @@
 
 | 参数 | 接口 | 含义 | 可选值/格式 | 默认值 | 使用建议 |
 |---|---|---|---|---|---|
-| `startDate` | `hotspot-scan-text` | 历史窗口起始日期 | `YYYY-MM-DD` 或 `YYYYMMDD` | 无 | 与 `endDate` 同时使用，适合回看某段行情。 |
-| `endDate` | `hotspot-scan-text` | 历史窗口结束日期 | `YYYY-MM-DD` 或 `YYYYMMDD` | 无 | 与 `startDate` 同时使用时，优先于 `window/offset`。 |
+| `startDate` | `hotspot-scan-text` | 请求窗口起始日期 | `YYYY-MM-DD` 或 `YYYYMMDD` | 无 | 与 `endDate` 同时使用；若为非交易日，输出会标明实际采用的首个交易日。 |
+| `endDate` | `hotspot-scan-text` | 请求窗口结束日期 | `YYYY-MM-DD` 或 `YYYYMMDD` | 无 | 与 `startDate` 同时使用并优先于 `window/offset`；输出会标明实际采用的末个交易日。 |
 | `window` | `hotspot-scan-text` | 历史窗口长度 | 交易日数量 | 无 | 兼容旧用法；新调用优先用日期区间。 |
 | `offset` | `hotspot-scan-text` | 从当前往前偏移的交易日数量 | 交易日数量 | 0 | 兼容旧用法；新调用优先用日期区间。 |
 | `minMembers` | `hotspot-scan-text` | 板块最小成分股数量 | 正整数 | 20 | 过滤过小板块，避免样本太少导致排序失真。 |
@@ -79,7 +79,7 @@
 | 参数 | 接口 | 含义 | 可选值/格式 | 默认值 | 使用建议 |
 |---|---|---|---|---|---|
 | `session` | `auction-text` | 竞价阶段 | `open`、`close`、`all` | `open` | 真实开盘集合竞价分析用 `open`，调试全天竞价记录用 `all`。 |
-| `session` | `market-review-text` | 市场复盘视角 | `auto`、`current`、`morning`、`full` | `auto` | 常规使用 `auto`，由查询时间决定输出盘中/午间/收盘视角。 |
+| `session` | `market-review-text` | 市场复盘视角 | `auto`、`current`、`morning`、`full` | `auto` | 常规使用 `auto`，由系统时间识别非交易日、盘前、集合竞价、盘中、午休和收盘；其他值只改变文字视角，不会回溯或改写数据日期。 |
 | `windowMinutes` | `intraday-alerts-text` | 分时近段窗口 | 5-60 分钟 | 30 | 观察短时异动用 15 或 30；过短容易噪音高。 |
 | `top` | `market-review-text` | 市场复盘展示板块数量 | 1-20 | 10 | 人工复盘可调到 20；Agent 快速判断保持默认。 |
 

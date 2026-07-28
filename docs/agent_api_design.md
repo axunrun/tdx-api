@@ -82,14 +82,14 @@ MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text
 | `/api/agent/stock-in-sector-text` | 个股板块内位置文本 | 已完成 | 面向 Agent 的中文低噪音相对强弱摘要 |
 | `/api/agent/sector-detail` | 指定板块深度分析 JSON | 已完成 | 根据板块名称或指数代码返回板块阶段表现、成分股强弱、中游股和弱势股 |
 | `/api/agent/sector-detail-text` | 指定板块深度分析文本 | 已完成 | 面向 Agent 的中文低噪音板块拆解摘要 |
-| `/api/agent/hotspot-scan` | 热点扫描 JSON | 已完成 | 按概念/地域/指数板块扫描近20日或指定历史窗口涨跌，默认返回最强20、中游20、最弱20并排除新股异常涨幅 |
-| `/api/agent/hotspot-scan-text` | 热点扫描文本 | 已完成 | 面向 Agent 的中文低噪音强弱与中游板块摘要 |
+| `/api/agent/hotspot-scan` | 热点扫描 JSON | 已完成 | 按概念/地域/指数板块扫描近20日或指定历史窗口涨跌；明确接口生成时间、TdxStat最近完整交易日和板块指数实际交易日区间 |
+| `/api/agent/hotspot-scan-text` | 热点扫描文本 | 已完成 | 面向 Agent 的中文低噪音强弱与中游板块摘要，明确请求日期与实际采用交易日 |
 | `/api/agent/multi-brief` | 多股简讯 JSON | 已完成 | 请求参数传入股票列表，批量复用 `stock-brief`；不作为分时监控接口 |
 | `/api/agent/multi-brief-text` | 多股简讯文本 | 已完成 | 面向 Agent 的中文多股 brief 列表摘要 |
 | `/api/agent/auction` | 集合竞价分析 JSON | 已完成 | 默认分析 09:20-09:25 开盘不可撤单竞价，返回末笔、相对昨收、未匹配方向和近 5/20 个交易日日K走势背景 |
 | `/api/agent/auction-text` | 集合竞价分析文本 | 已完成 | 面向 Agent 的中文低噪音竞价摘要 |
-| `/api/agent/market-review` | 市场级复盘 JSON | 已完成 | 按查询时间自动识别开盘前、盘中、上午收盘、午后盘中或全天收盘视角，聚合上证、深成、创业板、科创50、北证50、市场广度、热点板块和可选关注股 |
-| `/api/agent/market-review-text` | 市场级复盘文本 | 已完成 | 面向 Agent 的中文低噪音市场环境摘要 |
+| `/api/agent/market-review` | 市场级复盘 JSON | 已完成 | 按查询时间自动识别非交易日、盘前、09:20-09:25集合竞价、竞价结束、盘中、午休或收盘视角；分开输出带日期和时点的当前实时广度与最近完整盘后广度，并聚合上证、深成、创业板、科创50、北证50、热点板块和可选关注股 |
+| `/api/agent/market-review-text` | 市场级复盘文本 | 已完成 | 面向 Agent 的中文低噪音市场环境摘要；严格标明当前数据、最近完整盘后数据及各自日期，不用历史统计冒充实时行情 |
 | `/api/agent/intraday-alerts` | 盘中异动提醒 JSON | 已完成 | 按调用时点检查多只关注股的当日强弱、近段涨跌和近段放量；分时不可用时降级为实时行情快照 |
 | `/api/agent/intraday-alerts-text` | 盘中异动提醒文本 | 已完成 | 面向 Agent 的中文低噪音异动摘要，不做后台轮询和推送 |
 | `/api/agent/global-market-brief` | 全球外围权重资产 JSON | 已完成 | 内置精选白名单，不使用 SQLite；覆盖风险偏好、亚太核心市场、商品、汇率、利率债券和全球权重股；补入欧洲STOXX50ETF、恒生科技指数、韩国/台湾可用指数代理、印度、日本宽基和东证代理；实时读取 TDX 扩展行情并计算 20/60 日涨跌幅、区间高低点和区间位置 |
@@ -118,14 +118,14 @@ MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text
 | `/api/agent/stock-in-sector-text` | 同 JSON 版 | 返回中文相对强弱摘要 |
 | `/api/agent/sector-detail` | `sectorName` 或 `indexCode` 必填；`sectorType` 可选；`metric` 可选；`topStocks` 可选；`excludeNew` 可选 | `sectorType=concept|style_region|index`，默认 `concept`；`metric=changePct|chg5|chg20|chg60|peTtm|divYield`，默认 `chg20`；`topStocks` 默认 10 最大 30；`excludeNew` 默认 true，过滤新股/异常涨幅样本；返回板块指数近20/60日收益、成分股上涨比例、强势股、中游股和弱势股 |
 | `/api/agent/sector-detail-text` | 同 JSON 版 | 返回中文板块深度摘要，适合在 `hotspot-scan` 找到板块后继续拆解 |
-| `/api/agent/hotspot-scan` | `sectorType` 可选；`metric` 可选；`startDate` 可选；`endDate` 可选；`window` 可选；`offset` 可选；`limit` 可选；`topStocks` 可选；`minMembers` 可选；`excludeNew` 可选 | `sectorType=concept|style_region|index`，默认 `concept`；`metric=chg20` 默认，适合中长线热点；`metric=chg5` 短期热点；`metric=chg60` 中期主线；`metric=changePct` 当日异动；`metric=windowReturn` 使用板块指数日 K 线计算历史窗口收益，推荐传 `startDate=YYYY-MM-DD&endDate=YYYY-MM-DD`；`window/offset` 保留兼容；另支持 `peTtm|divYield`；`limit` 默认 20 最大 50，控制最强/最弱数量，中游最多返回 `limit` 个且不与最强/最弱重叠；每个板块含 `topStocks` 和 `bottomStocks`；`topStocks` 默认 3 最大 10；`minMembers` 默认 20；`excludeNew` 默认 true；`windowReturn` 通过 `GetIndexDayAll` 获取板块指数 K 线，避免普通 K 线解码导致日期错位 |
-| `/api/agent/hotspot-scan-text` | 同 JSON 版 | 返回中文强弱与中游板块扫描摘要 |
+| `/api/agent/hotspot-scan` | `sectorType` 可选；`metric` 可选；`startDate` 可选；`endDate` 可选；`window` 可选；`offset` 可选；`limit` 可选；`topStocks` 可选；`minMembers` 可选；`excludeNew` 可选 | `sectorType=concept|style_region|index`，默认 `concept`；`metric=chg20` 默认；`chg5/chg20/chg60/changePct` 均使用最近完整交易日 `TdxStat`，不是盘中实时值；`metric=windowReturn` 使用 `GetIndexDayAll` 板块指数日 K 计算历史窗口收益，推荐同时传 `startDate/endDate`；请求日期遇非交易日时输出 `metricStartDate/metricEndDate` 标明实际采用交易日；`window/offset` 保留兼容；`limit` 默认 20 最大 50；`topStocks` 默认 3 最大 10；`minMembers` 默认 20；`excludeNew` 默认 true |
+| `/api/agent/hotspot-scan-text` | 同 JSON 版 | 返回生成时间、指标来源、最近完整交易日或板块指数实际交易日区间，以及中文强弱与中游板块摘要 |
 | `/api/agent/multi-brief` | `codes` 或 `code` 必填 | `codes=603063,000001` 或多次传 `code=603063&code=000001`；最多 20 只；JSON 返回每只股票的 `stock-brief` 聚合结果 |
 | `/api/agent/multi-brief-text` | 同 JSON 版 | 返回中文多股简讯摘要，每只股票一行，包含价格、涨跌幅、成交额、换手率、20日表现和主要板块 |
 | `/api/agent/auction` | `code` 必填；`session` 可选；`limit` 可选 | `session=open|close|all`，默认 `open`；`open` 过滤 09:20-09:25 开盘不可撤单竞价，`close` 过滤 14:57-15:00，`all` 返回全天竞价记录；`limit` 默认 20 最大 100 |
 | `/api/agent/auction-text` | 同 JSON 版 | 返回中文竞价摘要，包含末笔价格、较昨收涨跌、匹配量、未匹配方向、近 5/20 个交易日日K累计涨跌背景和信号 |
-| `/api/agent/market-review` | `session` 可选；`codes` 可选；`top` 可选 | `session=auto|current|morning|full`，默认 `auto`；`auto` 按查询时间判断视角；`codes` 传关注股列表；`top` 默认 10 最大 20，控制强/中/弱板块数量 |
-| `/api/agent/market-review-text` | 同 JSON 版 | 返回中文市场环境摘要，包含上证、深成、创业板、科创50、北证50、市场广度、强/中/弱板块和可选关注股联动 |
+| `/api/agent/market-review` | `session` 可选；`codes` 可选；`top` 可选 | `session=auto|current|morning|full`，默认 `auto`；`auto` 按系统时间判断非交易日、盘前、09:20-09:25集合竞价、竞价结束、盘中、午休和收盘；非 `auto` 值只调整复盘文字视角，不改变数据真实日期；`codes` 传关注股列表；`top` 默认 10 最大 20，控制强/中/弱板块数量 |
+| `/api/agent/market-review-text` | 同 JSON 版 | `currentBreadth` 使用严格A股代码池和实时行情，`latestCompletedBreadth` 使用 `TdxStat` 最新完整盘后日期；两者均输出日期、时点、股票范围和有效样本数。若当前行情不可用则明确提示，不回退冒充当前数据 |
 | `/api/agent/intraday-alerts` | `codes` 或 `code` 必填；`windowMinutes` 可选 | `codes=603063,000001` 或多次传 `code=603063&code=000001`；最多 20 只；`windowMinutes` 默认 30，允许 5-60；JSON 返回交易日判断、每只股票的实时行情、分时近段涨跌、近段成交量变化和异动信号 |
 | `/api/agent/intraday-alerts-text` | 同 JSON 版 | 返回中文盘中异动摘要；若非交易日导致分时为空，会明确提示“非交易日无可用分时数据” |
 | `/api/agent/global-market-brief` | 无参数 | 返回外围权重资产池；分组包括 `risk`、`apac`、`commodity`、`fx`、`bond`、`leader`；每项包含 `price`、`changePct`、`range20`、`range60`，其中区间字段包含涨跌幅、区间最高、区间最低和当前区间位置；TDX 未验证到 Sensex30、俄罗斯RTS 本体稳定直连代码，暂不硬塞无效项 |
@@ -475,8 +475,8 @@ Agent 聚合 API 建议保持统一外壳：
 `/api/agent/hotspot-scan` 和 `/api/agent/hotspot-scan-text`：
 
 - 默认：`sectorType=concept&metric=chg20&limit=20&topStocks=3&minMembers=20&excludeNew=true`。
-- `metric=chg20|chg60|chg5|changePct|peTtm|divYield` 使用 `GetTdxStat` 当前统计字段排序，默认可返回最强、中游、最弱各 `limit` 个板块。
-- `metric=windowReturn` 使用板块指数日 K 线计算历史区间收益；推荐传 `startDate=YYYY-MM-DD&endDate=YYYY-MM-DD`，也兼容 `YYYYMMDD`。
+- `metric=chg20|chg60|chg5|changePct|peTtm|divYield` 使用 `GetTdxStat` 最近完整交易日统计字段排序，绝不表示盘中实时；JSON 的 `constituentDataDate` 和 `metricEndDate`、text 的“最近完整交易日”给出数据日期。
+- `metric=windowReturn` 使用板块指数日 K 线计算历史区间收益；推荐传 `startDate=YYYY-MM-DD&endDate=YYYY-MM-DD`，也兼容 `YYYYMMDD`。请求日期与实际交易日可能不同，JSON 使用 `metricStartDate/metricEndDate`、text 使用“实际交易日区间”明确标注。
 - `window`、`offset` 仍保留为兼容参数；若同时传 `startDate/endDate`，以日期区间为准，`window/offset` 不参与计算。
 - `windowReturn` 依赖板块指数 K 线覆盖率；若可计算板块数不足 `limit * 3`，中游板块可能少于 `limit`，接口会在 `warnings` 中说明失败数量。若必须稳定返回每组 20，需要后续改为“板块成分股历史 K 线聚合”口径，而不是当前板块指数 K 线口径。
 - 2026-06-28 修正：`windowReturn` 已改用 `GetIndexDayAll` 读取板块指数 K 线，避免 `GetKlineDayAll` 按普通股票 K 线解码导致日期错位。
@@ -528,7 +528,10 @@ Agent 聚合 API 建议保持统一外壳：
 - 原计划的 `/api/agent/noon-review` 和 `/api/agent/close-review` 不再单独实现，统一合并为 `market-review`。
 - 参数：`session` 可选，默认 `auto`。
 - `session=auto` 按查询时间判断：
-  - 09:30 前：`preopen` 开盘前市场背景。
+  - 周末：`non_trading` 非交易日市场背景。
+  - 09:20 前：`preopen` 开盘前市场背景。
+  - 09:20-09:25：`call_auction` 开盘集合竞价。
+  - 09:25-09:30：`preopen_after_auction` 竞价结束、等待连续竞价。
   - 09:30-11:30：`current` 盘中当前状态。
   - 11:30-13:00：`morning` 上午收盘复盘。
   - 13:00-15:00：`current_with_morning_reference` 午后盘中状态。
@@ -537,14 +540,16 @@ Agent 聚合 API 建议保持统一外壳：
 - `codes` 可选，用于关注股联动摘要。
 - `top` 可选，默认 10，最大 20，控制强/中/弱板块数量。
 - 输出包含：
-  - 主要指数：上证指数、深证成指、创业板指、科创50。
-  - 市场广度：上涨/下跌/平盘、涨停/跌停近似数、平均涨跌、中位数涨跌。
+  - 主要指数：上证指数、深证成指、创业板指、科创50、北证50，并标明指数日期。
+  - `currentBreadth`：严格A股代码池的实时行情广度，标明日期、查询时点、股票总数和有效报价数。
+  - `latestCompletedBreadth`：`TdxStat` 最新完整盘后广度，只统计该日期的A股股票并排除ETF、基金和债券。
   - 热点板块：复用热点扫描逻辑，返回强势、中游、弱势板块。
-  - 关注股联动：可选 `codes` 下的个股当日和 20 日表现。
+  - 关注股联动：可选 `codes` 下的个股最近盘后单日和 20 日表现，明确标注盘后统计日期。
 - 当前边界：
-  - 市场广度来自 `GetTdxStat` 查询时点快照。
+  - 当前广度与最近完整盘后广度绝不混用；当前行情不可用时明确返回不可用。
+  - 集合竞价期间若指数和个股行情尚未形成当日有效快照，当前广度会明确不可用，仅保留最近完整盘后数据。
   - 涨停/跌停按 `±9.9%` 近似统计，不区分 ST、北交所和 20cm 品种。
-  - 上午历史市场广度尚未缓存，15:00 后无法精确回放 11:30 宽度快照；后续如需要，应增加 11:30 定时缓存。
+  - 午休时查询得到上午收盘后的当前快照；15:00 后得到全天收盘快照。接口不根据 `session` 参数伪造或回放历史时点。
   - 第一版不输出全量分时数组。
 
 本次人工检查输出：

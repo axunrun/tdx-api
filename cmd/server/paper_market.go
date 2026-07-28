@@ -84,8 +84,9 @@ func buildPaperMarketSnapshot(
 	warnings := make([]string, 0)
 	indexes := []PaperMarketIndex{}
 	breadth := AgentMarketBreadth{
-		Source:     "GetTdxStat",
-		SourceNote: "市场广度使用TdxStat快照；涨停/跌停按±9.9%近似统计。",
+		DataType:   "current_snapshot",
+		Source:     "GetStockCodeAll+GetQuote",
+		SourceNote: "市场广度暂不可用",
 	}
 
 	if c == nil {
@@ -99,7 +100,18 @@ func buildPaperMarketSnapshot(
 		if err != nil {
 			warnings = append(warnings, "GetTdxStat失败: "+err.Error())
 		} else {
-			breadth = buildMarketBreadth(stats)
+			completedBreadth := buildLatestCompletedMarketBreadth(stats)
+			currentBreadth, breadthWarnings := loadCurrentMarketBreadth(c, agentIndexes, now)
+			warnings = append(warnings, breadthWarnings...)
+			if currentBreadth.Available {
+				breadth = currentBreadth
+			} else {
+				breadth = completedBreadth
+				warnings = append(
+					warnings,
+					"当前交易日广度不可用，展示最近完整盘后广度："+completedBreadth.Date,
+				)
+			}
 		}
 	}
 

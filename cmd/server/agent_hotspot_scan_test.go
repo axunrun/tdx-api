@@ -138,6 +138,67 @@ func TestHotspotDateWindowReturnUsesDateRange(t *testing.T) {
 	}
 }
 
+func TestHotspotDateWindowReturnReportsActualTradingDates(t *testing.T) {
+	klines := protocol.Klines{
+		{Time: time.Date(2026, 1, 2, 0, 0, 0, 0, time.Local), Close: 100000},
+		{Time: time.Date(2026, 1, 5, 0, 0, 0, 0, time.Local), Close: 110000},
+	}
+
+	got, startDate, endDate, ok := hotspotDateWindowReturnWithDates(
+		klines,
+		time.Date(2026, 1, 1, 0, 0, 0, 0, time.Local),
+		time.Date(2026, 1, 6, 0, 0, 0, 0, time.Local),
+	)
+
+	if !ok || got != 10 || startDate != "2026-01-02" || endDate != "2026-01-05" {
+		t.Fatalf(
+			"date window return = %.2f, range=%s..%s, ok=%v",
+			got,
+			startDate,
+			endDate,
+			ok,
+		)
+	}
+}
+
+func TestMergeHotspotDateRangeRejectsMismatchedRange(t *testing.T) {
+	startDate, endDate, mixed := mergeHotspotDateRange(
+		"2026-07-27",
+		"2026-07-28",
+		"2026-07-26",
+		"2026-07-28",
+	)
+
+	if !mixed || startDate != "2026-07-27" || endDate != "2026-07-28" {
+		t.Fatalf("unexpected merged range: %s..%s mixed=%v", startDate, endDate, mixed)
+	}
+}
+
+func TestBuildAgentHotspotScanUsesOnlyLatestStatDate(t *testing.T) {
+	sectors := []agentSectorMemberSet{
+		{
+			Block: AgentBriefBlock{Type: "concept", TypeName: "概念板块", Name: "风电"},
+			Members: []stockRow{
+				{Code: "000001", Name: "旧日期样本"},
+				{Code: "000002", Name: "最新日期样本"},
+			},
+		},
+	}
+	stats := []*protocol.TdxStat{
+		{Code: "000001", Date: "20260727", Chg20: 100},
+		{Code: "000002", Date: "20260728", Chg20: -10},
+	}
+
+	got := buildAgentHotspotScan(sectors, stats, "chg20", 1, 1, 1, false)
+
+	if got.ConstituentDataDate != "2026-07-28" || got.MetricEndDate != "2026-07-28" {
+		t.Fatalf("unexpected data dates: %+v", got)
+	}
+	if len(got.Sectors) != 1 || got.Sectors[0].AverageValue != -10 {
+		t.Fatalf("old-date stats must not enter latest snapshot: %+v", got.Sectors)
+	}
+}
+
 func TestBuildAgentHotspotScanReturnsStrongMiddleAndWeakSectors(t *testing.T) {
 	sectors := make([]agentSectorMemberSet, 7)
 	stats := make([]*protocol.TdxStat, 7)
@@ -227,9 +288,13 @@ func TestBuildAgentHotspotScanDefaultsToTwentyDayRanking(t *testing.T) {
 
 func TestBuildAgentHotspotScanTextIsCompactChinese(t *testing.T) {
 	summary := AgentHotspotScan{
-		Metric:        "changePct",
-		ExcludeNew:    true,
-		ExcludedCount: 1,
+		GeneratedAt:         "2026-07-29T10:30:00+08:00",
+		MetricSource:        "TdxStat成分股聚合",
+		MetricEndDate:       "2026-07-28",
+		ConstituentDataDate: "2026-07-28",
+		Metric:              "changePct",
+		ExcludeNew:          true,
+		ExcludedCount:       1,
 		Sectors: []AgentHotspotSector{
 			{
 				Name:         "风电",
@@ -265,7 +330,22 @@ func TestBuildAgentHotspotScanTextIsCompactChinese(t *testing.T) {
 
 	text := buildAgentHotspotScanText(summary)
 
-	for _, want := range []string{"热点扫描：", "最强板块：", "中游板块：", "最弱板块：", "已排除新股/异常涨幅样本1条", "风电", "平均+4.00%", "平安银行+5.00%", "消费电子", "煤炭", "平均-6.00%", "抗跌股：抗跌样本-1.00%"} {
+	for _, want := range []string{
+		"热点扫描：",
+		"生成时间：2026-07-29T10:30:00+08:00",
+		"指标数据：TdxStat成分股聚合，最近完整交易日2026-07-28",
+		"最强板块：",
+		"中游板块：",
+		"最弱板块：",
+		"已排除新股/异常涨幅样本1条",
+		"风电",
+		"成分股平均+4.00%",
+		"平安银行+5.00%",
+		"消费电子",
+		"煤炭",
+		"成分股平均-6.00%",
+		"抗跌股：抗跌样本-1.00%",
+	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("text missing %q: %s", want, text)
 		}

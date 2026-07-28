@@ -12,17 +12,18 @@ import (
 )
 
 type AgentMarketReview struct {
-	Source      string                 `json:"source"`
-	Session     string                 `json:"session"`
-	ReviewType  string                 `json:"reviewType"`
-	GeneratedAt string                 `json:"generatedAt"`
-	Indexes     []AgentMarketIndex     `json:"indexes"`
-	Breadth     AgentMarketBreadth     `json:"breadth"`
-	Hotspots    *AgentMarketHotspots   `json:"hotspots,omitempty"`
-	Watchlist   []AgentMarketWatchItem `json:"watchlist,omitempty"`
-	Limits      map[string]int         `json:"limits"`
-	Warnings    []string               `json:"warnings,omitempty"`
-	Note        string                 `json:"note"`
+	Source                 string                 `json:"source"`
+	Session                string                 `json:"session"`
+	ReviewType             string                 `json:"reviewType"`
+	GeneratedAt            string                 `json:"generatedAt"`
+	Indexes                []AgentMarketIndex     `json:"indexes"`
+	CurrentBreadth         AgentMarketBreadth     `json:"currentBreadth"`
+	LatestCompletedBreadth AgentMarketBreadth     `json:"latestCompletedBreadth"`
+	Hotspots               *AgentMarketHotspots   `json:"hotspots,omitempty"`
+	Watchlist              []AgentMarketWatchItem `json:"watchlist,omitempty"`
+	Limits                 map[string]int         `json:"limits"`
+	Warnings               []string               `json:"warnings,omitempty"`
+	Note                   string                 `json:"note"`
 }
 
 type AgentMarketIndex struct {
@@ -35,17 +36,26 @@ type AgentMarketIndex struct {
 }
 
 type AgentMarketBreadth struct {
-	Total         int     `json:"total"`
-	Rising        int     `json:"rising"`
-	Falling       int     `json:"falling"`
-	Flat          int     `json:"flat"`
-	LimitUp       int     `json:"limitUp"`
-	LimitDown     int     `json:"limitDown"`
-	RisingPct     float64 `json:"risingPct"`
-	AverageChange float64 `json:"averageChange"`
-	MedianChange  float64 `json:"medianChange"`
-	Source        string  `json:"source"`
-	SourceNote    string  `json:"sourceNote"`
+	Available        bool    `json:"available"`
+	Complete         bool    `json:"complete"`
+	DataType         string  `json:"dataType"`
+	Date             string  `json:"date,omitempty"`
+	AsOf             string  `json:"asOf,omitempty"`
+	Universe         string  `json:"universe"`
+	UniverseTotal    int     `json:"universeTotal"`
+	ValidCount       int     `json:"validCount"`
+	UnavailableCount int     `json:"unavailableCount"`
+	Total            int     `json:"total"`
+	Rising           int     `json:"rising"`
+	Falling          int     `json:"falling"`
+	Flat             int     `json:"flat"`
+	LimitUp          int     `json:"limitUp"`
+	LimitDown        int     `json:"limitDown"`
+	RisingPct        float64 `json:"risingPct"`
+	AverageChange    float64 `json:"averageChange"`
+	MedianChange     float64 `json:"medianChange"`
+	Source           string  `json:"source"`
+	SourceNote       string  `json:"sourceNote"`
 }
 
 type AgentMarketHotspots struct {
@@ -138,34 +148,45 @@ func buildAgentMarketReview(
 	warnings := make([]string, 0)
 	indexes, indexWarnings := buildMarketIndexes(c)
 	warnings = append(warnings, indexWarnings...)
+	currentBreadth, breadthWarnings := loadCurrentMarketBreadth(c, indexes, now)
+	warnings = append(warnings, breadthWarnings...)
+	completedBreadth := buildLatestCompletedMarketBreadth(stats)
 	hotspots, hotspotWarnings := buildMarketHotspots(stats, top)
 	warnings = append(warnings, hotspotWarnings...)
 	return AgentMarketReview{
-		Source:      "tdx_agent_market_review",
-		Session:     session,
-		ReviewType:  reviewType,
-		GeneratedAt: now.Format(time.RFC3339),
-		Indexes:     indexes,
-		Breadth:     buildMarketBreadth(stats),
-		Hotspots:    hotspots,
-		Watchlist:   buildMarketWatchItems(stats, codes),
+		Source:                 "tdx_agent_market_review",
+		Session:                session,
+		ReviewType:             reviewType,
+		GeneratedAt:            now.Format(time.RFC3339),
+		Indexes:                indexes,
+		CurrentBreadth:         currentBreadth,
+		LatestCompletedBreadth: completedBreadth,
+		Hotspots:               hotspots,
+		Watchlist:              buildMarketWatchItems(stats, codes),
 		Limits: map[string]int{
 			"hotspotTop": top,
 			"watchlist":  20,
 		},
 		Warnings: warnings,
-		Note:     "市场级复盘接口；市场广度为查询时点快照，上午历史广度需后续增加定时缓存后才能精确回放。",
+		Note:     "当前广度与最近完整盘后广度分开输出；所有数据均携带实际日期和时点。",
 	}
 }
 
 func resolveMarketReviewType(session string, now time.Time) string {
+	if now.Weekday() == time.Saturday || now.Weekday() == time.Sunday {
+		return "non_trading"
+	}
 	if session != "auto" && session != "" {
 		return session
 	}
 	minute := now.Hour()*60 + now.Minute()
 	switch {
-	case minute < 9*60+30:
+	case minute < 9*60+20:
 		return "preopen"
+	case minute < 9*60+25:
+		return "call_auction"
+	case minute < 9*60+30:
+		return "preopen_after_auction"
 	case minute < 11*60+30:
 		return "current"
 	case minute < 13*60:
@@ -202,44 +223,6 @@ func buildMarketIndexes(c *tdx.Client) ([]AgentMarketIndex, []string) {
 		})
 	}
 	return items, warnings
-}
-
-func buildMarketBreadth(stats []*protocol.TdxStat) AgentMarketBreadth {
-	values := make([]float64, 0, len(stats))
-	breadth := AgentMarketBreadth{
-		Source:     "GetTdxStat",
-		SourceNote: "市场广度使用TdxStat查询时点快照；涨停/跌停按±9.9%近似统计，不区分ST、北交所和20cm品种。",
-	}
-	sum := 0.0
-	for _, stat := range stats {
-		if stat == nil || stat.Code == "" {
-			continue
-		}
-		change := stat.ChangePct
-		breadth.Total++
-		sum += change
-		values = append(values, change)
-		switch {
-		case change > 0:
-			breadth.Rising++
-		case change < 0:
-			breadth.Falling++
-		default:
-			breadth.Flat++
-		}
-		if change >= 9.9 {
-			breadth.LimitUp++
-		}
-		if change <= -9.9 {
-			breadth.LimitDown++
-		}
-	}
-	if breadth.Total > 0 {
-		breadth.RisingPct = float64(breadth.Rising) / float64(breadth.Total) * 100
-		breadth.AverageChange = sum / float64(breadth.Total)
-		breadth.MedianChange = medianFloat64(values)
-	}
-	return breadth
 }
 
 func medianFloat64(values []float64) float64 {
@@ -285,9 +268,10 @@ func buildMarketWatchItems(stats []*protocol.TdxStat, codes []string) []AgentMar
 			item.ChangePct = stat.ChangePct
 			item.Chg20 = stat.Chg20
 			item.Text = fmt.Sprintf(
-				"%s%s，当日%s，20日%s",
+				"%s%s，盘后统计(%s)单日%s，20日%s",
 				item.Name,
 				code,
+				formatTdxStatDate(stat.Date),
 				formatPercentText(item.ChangePct),
 				formatPercentText(item.Chg20),
 			)
@@ -307,20 +291,27 @@ func buildAgentMarketReviewText(summary AgentMarketReview) string {
 		for _, index := range summary.Indexes {
 			parts = append(parts, fmt.Sprintf("%s%s", index.Name, formatPercentText(index.ChangePct)))
 		}
-		b.WriteString("主要指数：" + strings.Join(parts, "，") + "。\n")
+		indexDate := latestMarketIndexDate(summary.Indexes)
+		label := "最近指数"
+		if indexDate != "" && strings.HasPrefix(summary.GeneratedAt, indexDate) {
+			label = "今日指数"
+		}
+		b.WriteString(fmt.Sprintf("%s（%s）：%s。\n", label, indexDate, strings.Join(parts, "，")))
 	}
-	b.WriteString(fmt.Sprintf(
-		"市场广度：上涨%d家，下跌%d家，平盘%d家，上涨占比%s；涨停约%d家，跌停约%d家；平均涨跌%s，中位数%s。\n",
-		summary.Breadth.Rising,
-		summary.Breadth.Falling,
-		summary.Breadth.Flat,
-		formatPercentText(summary.Breadth.RisingPct),
-		summary.Breadth.LimitUp,
-		summary.Breadth.LimitDown,
-		formatPercentText(summary.Breadth.AverageChange),
-		formatPercentText(summary.Breadth.MedianChange),
-	))
+	appendCurrentMarketBreadthText(&b, summary.CurrentBreadth)
+	appendCompletedMarketBreadthText(
+		&b,
+		summary.LatestCompletedBreadth,
+		summary.CurrentBreadth.Date,
+	)
 	if summary.Hotspots != nil {
+		if summary.LatestCompletedBreadth.Date != "" {
+			b.WriteString(
+				"板块统计基准日：" +
+					summary.LatestCompletedBreadth.Date +
+					"（20日区间指标）。\n",
+			)
+		}
 		b.WriteString("强势板块：" + marketSectorNames(summary.Hotspots.Strong, 5) + "。\n")
 		b.WriteString("中游板块：" + marketSectorNames(summary.Hotspots.Middle, 5) + "。\n")
 		b.WriteString("弱势板块：" + marketSectorNames(summary.Hotspots.Weak, 5) + "。\n")
@@ -339,8 +330,14 @@ func buildAgentMarketReviewText(summary AgentMarketReview) string {
 
 func marketReviewTypeText(reviewType string) string {
 	switch reviewType {
+	case "non_trading":
+		return "非交易日市场背景"
 	case "preopen":
 		return "开盘前市场背景"
+	case "call_auction":
+		return "09:20-09:25开盘集合竞价"
+	case "preopen_after_auction":
+		return "集合竞价结束、等待连续竞价"
 	case "morning":
 		return "上午收盘复盘"
 	case "current_with_morning_reference":
@@ -350,6 +347,57 @@ func marketReviewTypeText(reviewType string) string {
 	default:
 		return "盘中当前状态"
 	}
+}
+
+func appendCurrentMarketBreadthText(b *strings.Builder, breadth AgentMarketBreadth) {
+	if !breadth.Available {
+		b.WriteString(fmt.Sprintf("当前市场广度：不可用（%s）。\n", breadth.SourceNote))
+		return
+	}
+	b.WriteString(fmt.Sprintf(
+		"当前市场广度（%s，截至%s）：有效%d/%d只，上涨%d家，下跌%d家，平盘%d家，"+
+			"上涨占比%s；涨停约%d家，跌停约%d家；平均涨跌%s，中位数%s。\n",
+		breadth.Date,
+		breadth.AsOf,
+		breadth.ValidCount,
+		breadth.UniverseTotal,
+		breadth.Rising,
+		breadth.Falling,
+		breadth.Flat,
+		formatPercentText(breadth.RisingPct),
+		breadth.LimitUp,
+		breadth.LimitDown,
+		formatPercentText(breadth.AverageChange),
+		formatPercentText(breadth.MedianChange),
+	))
+}
+
+func appendCompletedMarketBreadthText(
+	b *strings.Builder,
+	breadth AgentMarketBreadth,
+	currentDate string,
+) {
+	if !breadth.Available {
+		b.WriteString("最近完整盘后广度：不可用。\n")
+		return
+	}
+	label := "最近完整盘后广度"
+	if currentDate == "" || breadth.Date < currentDate {
+		label = "上一交易日盘后广度"
+	}
+	b.WriteString(fmt.Sprintf(
+		"%s（%s）：A股%d只，上涨%d家，下跌%d家，平盘%d家，上涨占比%s；"+
+			"平均涨跌%s，中位数%s。\n",
+		label,
+		breadth.Date,
+		breadth.ValidCount,
+		breadth.Rising,
+		breadth.Falling,
+		breadth.Flat,
+		formatPercentText(breadth.RisingPct),
+		formatPercentText(breadth.AverageChange),
+		formatPercentText(breadth.MedianChange),
+	))
 }
 
 func marketSectorNames(sectors []AgentHotspotSector, limit int) string {
