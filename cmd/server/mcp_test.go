@@ -85,8 +85,9 @@ func TestMCPToolSchemasDescribeHotspotParameters(t *testing.T) {
 	}
 	for _, want := range []string{
 		"同周期板块指数",
-		"最近完整交易日上涨比例",
-		"实际交易日区间",
+		"与TdxStat统计日对齐",
+		"成分股上涨比例明确使用",
+		"固定输出最近完整交易日板块指数单日涨跌",
 	} {
 		if !strings.Contains(hotspot.Description, want) {
 			t.Fatalf("hotspot description missing %q: %s", want, hotspot.Description)
@@ -103,6 +104,9 @@ func TestMCPToolSchemasDescribeHotspotParameters(t *testing.T) {
 	metric := properties["metric"].(map[string]any)
 	if len(metric["enum"].([]string)) == 0 {
 		t.Fatal("metric enum missing")
+	}
+	if !hasString(metric["enum"].([]string), "dailyReturn") {
+		t.Fatalf("metric enum missing dailyReturn: %+v", metric)
 	}
 	if !strings.Contains(metric["description"].(string), "不是盘中实时值") {
 		t.Fatalf("metric description does not explain changePct timing: %+v", metric)
@@ -194,6 +198,47 @@ func TestMCPToolSchemasDescribeAgentReadableConstraints(t *testing.T) {
 	sectorDetail := findMCPTool(t, "tdx_sector_detail_text")
 	if len(sectorDetail.InputSchema["anyOf"].([]map[string]any)) != 2 {
 		t.Fatalf("sector detail anyOf = %+v", sectorDetail.InputSchema["anyOf"])
+	}
+	for _, want := range []string{"最近完整交易日单日涨跌", "近20/60日", "不会把未收盘"} {
+		if !strings.Contains(sectorDetail.Description, want) {
+			t.Fatalf("sector detail description missing %q: %s", want, sectorDetail.Description)
+		}
+	}
+	sectorDetailProperties := sectorDetail.InputSchema["properties"].(map[string]any)
+	sectorName := sectorDetailProperties["sectorName"].(map[string]any)
+	if !strings.Contains(sectorName["description"].(string), "精确一致") {
+		t.Fatalf("sector detail sectorName must explain exact matching: %+v", sectorName)
+	}
+	topStocks := sectorDetailProperties["topStocks"].(map[string]any)
+	if !strings.Contains(topStocks["description"].(string), "强势、中游、弱势各") {
+		t.Fatalf("sector detail topStocks scope unclear: %+v", topStocks)
+	}
+	sectorExcludeNew := sectorDetailProperties["excludeNew"].(map[string]any)
+	for _, want := range []string{"N/C", "单日涨幅超过100%", "排序值超过100%"} {
+		if !strings.Contains(sectorExcludeNew["description"].(string), want) {
+			t.Fatalf("sector detail excludeNew missing %q: %+v", want, sectorExcludeNew)
+		}
+	}
+
+	sectorRealtime := findMCPTool(t, "tdx_sector_realtime_text")
+	if len(sectorRealtime.InputSchema["anyOf"].([]map[string]any)) != 2 {
+		t.Fatalf("sector realtime anyOf = %+v", sectorRealtime.InputSchema["anyOf"])
+	}
+	for _, want := range []string{
+		"09:30-11:30",
+		"13:00-15:00",
+		"不回退为历史数据",
+	} {
+		if !strings.Contains(sectorRealtime.Description, want) {
+			t.Fatalf("sector realtime description missing %q: %s", want, sectorRealtime.Description)
+		}
+	}
+	realtimeProperties := sectorRealtime.InputSchema["properties"].(map[string]any)
+	for _, name := range []string{"sectorName", "indexCode", "sectorType"} {
+		property := realtimeProperties[name].(map[string]any)
+		if property["description"] == "" {
+			t.Fatalf("sector realtime %s description missing", name)
+		}
 	}
 
 	tradeFlow := findMCPTool(t, "tdx_trade_flow_estimate_text")

@@ -80,10 +80,12 @@ MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text
 | `/api/agent/sector-membership-text` | 个股板块归属文本 | 已完成 | 面向 Agent 的中文低噪音板块归属摘要 |
 | `/api/agent/stock-in-sector` | 个股板块内位置 JSON | 已完成 | 在指定或默认所属板块内按涨跌/估值等指标排序 |
 | `/api/agent/stock-in-sector-text` | 个股板块内位置文本 | 已完成 | 面向 Agent 的中文低噪音相对强弱摘要 |
-| `/api/agent/sector-detail` | 指定板块深度分析 JSON | 已完成 | 根据板块名称或指数代码返回板块阶段表现、成分股强弱、中游股和弱势股 |
-| `/api/agent/sector-detail-text` | 指定板块深度分析文本 | 已完成 | 面向 Agent 的中文低噪音板块拆解摘要 |
-| `/api/agent/hotspot-scan` | 热点扫描 JSON | 已完成 | 按概念/地域/指数板块扫描；标准周期同时返回成分股平均、同周期板块指数收益和最近完整交易日上涨比例 |
-| `/api/agent/hotspot-scan-text` | 热点扫描文本 | 已完成 | 面向 Agent 的中文低噪音强弱摘要，明确每项指标周期、统计日期和指数实际交易日区间 |
+| `/api/agent/sector-detail` | 指定板块深度分析 JSON | 已完成 | 返回板块指数最近完整交易日单日涨跌及日期、截至该日的近20/60日收益，并分开标注成分股统计日期 |
+| `/api/agent/sector-detail-text` | 指定板块深度分析文本 | 已完成 | 面向 Agent 的中文低噪音板块拆解摘要，盘中不会混入未收盘日数据 |
+| `/api/agent/sector-realtime` | 指定板块盘中实时涨跌 JSON | 已完成 | 仅连续交易时段返回 TDX 板块指数当日日K实时涨跌、交易日期和查询时点 |
+| `/api/agent/sector-realtime-text` | 指定板块盘中实时涨跌文本 | 已完成 | 盘外明确返回无实时数据且不回退历史值 |
+| `/api/agent/hotspot-scan` | 热点扫描 JSON | 已完成 | `dailyReturn` 可按完整日指数涨跌排序；20/60日等标准口径也固定附带最近完整交易日板块指数单日涨跌 |
+| `/api/agent/hotspot-scan-text` | 热点扫描文本 | 已完成 | 面向 Agent 的中文低噪音强弱摘要，同时明确固定单日指数日期、所选周期和实际交易日区间 |
 | `/api/agent/multi-brief` | 多股简讯 JSON | 已完成 | 请求参数传入股票列表，批量复用 `stock-brief`；不作为分时监控接口 |
 | `/api/agent/multi-brief-text` | 多股简讯文本 | 已完成 | 面向 Agent 的中文多股 brief 列表摘要 |
 | `/api/agent/auction` | 集合竞价分析 JSON | 已完成 | 默认分析 09:20-09:25 开盘不可撤单竞价，返回末笔、相对昨收、未匹配方向和近 5/20 个交易日日K走势背景 |
@@ -116,9 +118,10 @@ MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text
 | `/api/agent/sector-membership-text` | `code` 必填 | 与 JSON 版一致，返回中文板块归属摘要 |
 | `/api/agent/stock-in-sector` | `code` 必填；`sectorType` 可选；`sectorName` 可选；`metric` 可选；`limit` 可选 | 默认选第一个概念板块；`metric=changePct|chg5|chg20|chg60|peTtm|divYield`；`limit` 默认 10 最大 50 |
 | `/api/agent/stock-in-sector-text` | 同 JSON 版 | 返回中文相对强弱摘要 |
-| `/api/agent/sector-detail` | `sectorName` 或 `indexCode` 必填；`sectorType` 可选；`metric` 可选；`topStocks` 可选；`excludeNew` 可选 | `sectorType=concept|style_region|index`，默认 `concept`；`metric=changePct|chg5|chg20|chg60|peTtm|divYield`，默认 `chg20`；`topStocks` 默认 10 最大 30；`excludeNew` 默认 true，过滤新股/异常涨幅样本；返回板块指数近20/60日收益、成分股上涨比例、强势股、中游股和弱势股 |
+| `/api/agent/sector-detail` | `sectorName` 或 `indexCode` 必填；`sectorType` 可选；`metric` 可选；`topStocks` 可选；`excludeNew` 可选 | `sectorName` 必须与 TDX 板块名精确一致，名称不确定时使用 `indexCode`；`topStocks` 表示强/中/弱各自上限；`excludeNew=true` 排除 N/C、单日涨幅超过100%及涨跌类 metric 排序值超过100%的样本；返回板块指数完整日与单独标注的 TdxStat 成分股统计日 |
 | `/api/agent/sector-detail-text` | 同 JSON 版 | 返回中文板块深度摘要，适合在 `hotspot-scan` 找到板块后继续拆解 |
-| `/api/agent/hotspot-scan` | `sectorType` 可选；`metric` 可选；`startDate` 可选；`endDate` 可选；`window` 可选；`offset` 可选；`limit` 可选；`topStocks` 可选；`minMembers` 可选；`excludeNew` 可选 | `sectorType=concept|style_region|index`，默认 `concept`；`metric=chg20` 默认；`chg5/chg20/chg60/changePct` 按最近完整交易日 `TdxStat` 成分股平均值排序，并为最终入榜板块补充同周期板块指数收益；上涨比例固定为最近完整交易日单日口径；`windowReturn` 按 `GetIndexDayAll` 板块指数区间收益排序；`startDate/endDate` 必须成对且优先于 `window/offset`；`window` 默认20、范围1-250；`offset` 默认0、范围0-500；`limit` 默认20最大50；`topStocks` 默认3最大10；`minMembers` 默认20；`excludeNew` 默认true |
+| `/api/agent/sector-realtime`、`/api/agent/sector-realtime-text` | `sectorName` 或 `indexCode` 必填；`sectorType` 可选 | 仅工作日 09:30-11:30、13:00-15:00 返回实时板块指数涨跌；盘前、午休、收盘后和周末返回 `available=false` 及明确说明，不回退历史数据 |
+| `/api/agent/hotspot-scan` | `sectorType` 可选；`metric` 可选；`startDate` 可选；`endDate` 可选；`window` 可选；`offset` 可选；`limit` 可选；`topStocks` 可选；`minMembers` 可选；`excludeNew` 可选 | `metric` 默认 `chg20`；`dailyReturn` 按板块指数最近完整交易日单日涨跌排序；`chg5/chg20/chg60/changePct` 按最新完整 TdxStat 成分股平均值排序，但每个入榜板块固定附带最近完整交易日指数单日涨跌，20/60日等口径同时保留同周期指数收益；`windowReturn` 按板块指数区间收益排序 |
 | `/api/agent/hotspot-scan-text` | 同 JSON 版 | 每个板块依次返回同周期板块指数收益、同周期成分股平均、最近完整交易日上涨比例，以及同周期强势股或抗跌股 |
 | `/api/agent/multi-brief` | `codes` 或 `code` 必填 | `codes=603063,000001` 或多次传 `code=603063&code=000001`；最多 20 只；JSON 返回每只股票的 `stock-brief` 聚合结果 |
 | `/api/agent/multi-brief-text` | 同 JSON 版 | 返回中文多股简讯摘要，每只股票一行，包含价格、涨跌幅、成交额、换手率、20日表现和主要板块 |

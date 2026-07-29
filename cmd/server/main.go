@@ -95,6 +95,8 @@ func main() {
 	mux.HandleFunc("/api/agent/stock-in-sector-text", handleAgentStockInSectorText)
 	mux.HandleFunc("/api/agent/sector-detail", handleAgentSectorDetail)
 	mux.HandleFunc("/api/agent/sector-detail-text", handleAgentSectorDetailText)
+	mux.HandleFunc("/api/agent/sector-realtime", handleAgentSectorRealtime)
+	mux.HandleFunc("/api/agent/sector-realtime-text", handleAgentSectorRealtimeText)
 	mux.HandleFunc("/api/agent/hotspot-scan", handleAgentHotspotScan)
 	mux.HandleFunc("/api/agent/hotspot-scan-text", handleAgentHotspotScanText)
 	mux.HandleFunc("/api/agent/multi-brief", handleAgentMultiBrief)
@@ -144,7 +146,7 @@ func main() {
 	if p := os.Getenv("PORT"); p != "" {
 		port = p
 	}
-	nEndpoints := 54
+	nEndpoints := 56
 	log.Printf("TDX API Server v2.1 准备监听 :%s (%d endpoints)", port, nEndpoints)
 
 	startBackgroundInitializers(

@@ -162,28 +162,33 @@ func mcpTools() []mcpTool {
 			requiredString("code", "股票代码，例如300499"),
 			optionalEnumDefault("sectorType", "板块类型：concept为概念板块，style_region为地域/风格板块，index为指数板块；默认concept。", "concept", "concept", "style_region", "index"),
 			optionalString("sectorName", "板块名称；留空时默认选择第一个概念板块"),
-			optionalEnumDefault("metric", "排序指标：changePct为最近完整交易日单日涨跌（非盘中实时），chg5近5日，chg20近20日，chg60近60日，peTtm市盈率，divYield股息率。默认chg20。", "chg20", "changePct", "chg5", "chg20", "chg60", "peTtm", "divYield"),
+			optionalEnumDefault("metric", "成分股排序指标：changePct为输出所标TdxStat完整统计日的单日涨跌（非盘中实时），chg5近5日，chg20近20日，chg60近60日，peTtm市盈率，divYield股息率。默认chg20。", "chg20", "changePct", "chg5", "chg20", "chg60", "peTtm", "divYield"),
 			optionalIntegerDefault("limit", "返回成分股数量，默认10，最大50。", 10, 1, 50),
 		),
-		newMCPTool("tdx_sector_detail_text", "指定板块深度分析。调用时 sectorName 和 indexCode 至少传一个；用于热点扫描后继续拆板块；输出板块近20/60日表现、上涨比例、强势股、中游股和弱势股。", "/api/agent/sector-detail-text", handleAgentSectorDetailText,
-			optionalString("sectorName", "板块名称；sectorName和indexCode至少传一个"),
-			optionalString("indexCode", "板块指数代码；sectorName和indexCode至少传一个"),
+		newMCPTool("tdx_sector_detail_text", "指定板块深度分析。sectorName和indexCode至少传一个；输出板块指数最近完整交易日单日涨跌及日期、截至该日的近20/60日表现，并另列所标TdxStat完整统计日的成分股上涨比例、强势股、中游股和弱势股。板块指数完整日与成分股统计日分别标注，盘中不会把未收盘数据冒充完整日数据。", "/api/agent/sector-detail-text", handleAgentSectorDetailText,
+			optionalString("sectorName", "TDX板块名称，必须与TDX返回名称精确一致，例如液冷服务；sectorName和indexCode至少传一个。名称不确定时优先传indexCode。"),
+			optionalString("indexCode", "TDX板块指数代码，例如880685；sectorName和indexCode至少传一个。"),
 			optionalEnumDefault("sectorType", "板块类型：concept概念，style_region地域/风格，index指数；默认concept。", "concept", "concept", "style_region", "index"),
-			optionalEnumDefault("metric", "排序指标：changePct为最近完整交易日单日涨跌（非盘中实时），chg5近5日，chg20近20日，chg60近60日，peTtm市盈率，divYield股息率。默认chg20。", "chg20", "changePct", "chg5", "chg20", "chg60", "peTtm", "divYield"),
-			optionalIntegerDefault("topStocks", "强弱样本数量，默认10，最大30。", 10, 1, 30),
-			optionalBoolDefault("excludeNew", "是否排除新股/异常涨幅样本，默认true。", true),
+			optionalEnumDefault("metric", "成分股排序指标：changePct为输出所标TdxStat完整统计日的单日涨跌（非盘中实时），chg5近5日，chg20近20日，chg60近60日，peTtm市盈率，divYield股息率。默认chg20。", "chg20", "changePct", "chg5", "chg20", "chg60", "peTtm", "divYield"),
+			optionalIntegerDefault("topStocks", "强势、中游、弱势各最多返回的成分股数量，默认各10只，最大各30只。", 10, 1, 30),
+			optionalBoolDefault("excludeNew", "是否过滤异常样本，默认true：排除名称以N/C开头、TdxStat单日涨幅超过100%的股票；metric为changePct/chg5/chg20/chg60时还排除对应排序值超过100%的股票。", true),
 		),
-		newMCPTool("tdx_hotspot_scan_text", "板块冷热扫描。用于识别市场主线、补涨方向和弱势板块；chg5/chg20/chg60/changePct按成分股平均值排序，并为入榜板块同时输出同周期板块指数收益、最近完整交易日上涨比例和同周期强势/抗跌股；windowReturn按指定板块指数区间排序。输出生成时间、统计日期和指数实际交易日区间。", "/api/agent/hotspot-scan-text", handleAgentHotspotScanText,
+		newMCPTool("tdx_sector_realtime_text", "指定题材板块盘中实时涨跌。仅在工作日09:30-11:30、13:00-15:00连续交易时段返回TDX板块指数实时涨跌幅、交易日期和查询时点；盘前、午休、收盘后及周末明确返回非交易时间且不回退为历史数据。sectorName和indexCode至少传一个。", "/api/agent/sector-realtime-text", handleAgentSectorRealtimeText,
+			optionalString("sectorName", "TDX板块名称，例如液冷服务；sectorName和indexCode至少传一个。名称必须与TDX板块名称一致。"),
+			optionalString("indexCode", "TDX板块指数代码，例如880685；sectorName和indexCode至少传一个。"),
+			optionalEnumDefault("sectorType", "板块类型：concept概念，style_region地域/风格，index指数；默认concept。", "concept", "concept", "style_region", "index"),
+		),
+		newMCPTool("tdx_hotspot_scan_text", "板块冷热扫描。dailyReturn按TDX板块指数最近完整交易日单日涨跌排序；chg5/chg20/chg60/changePct按TdxStat成分股平均值排序。上述标准口径的每个入榜板块都固定输出最近完整交易日板块指数单日涨跌及日期，20/60日等口径同时保留与TdxStat统计日对齐的同周期板块指数收益；成分股上涨比例明确使用所标TdxStat完整统计日。windowReturn按指定指数区间排序。", "/api/agent/hotspot-scan-text", handleAgentHotspotScanText,
 			optionalEnumDefault("sectorType", "扫描板块类型：concept概念板块，style_region地域/风格板块，index指数板块；默认concept。", "concept", "concept", "style_region", "index"),
-			optionalEnumDefault("metric", "排序口径：chg5/chg20/chg60按最近完整交易日TdxStat成分股平均区间涨跌幅排序，并补充同周期板块指数收益；changePct按最近完整交易日成分股平均单日涨跌幅排序，不是盘中实时值；上涨比例始终是最近完整交易日单日口径；windowReturn按TDX板块指数日K区间收益排序，代表股使用最近完整交易日单日涨跌。默认chg20。", "chg20", "chg5", "chg20", "chg60", "changePct", "windowReturn"),
+			optionalEnumDefault("metric", "排序口径：dailyReturn按TDX板块指数最近完整交易日单日涨跌幅排序；changePct按最新TdxStat完整统计日的成分股平均单日涨跌排序，不是盘中实时值；chg5/chg20/chg60按成分股平均区间涨跌排序；windowReturn按TDX板块指数日K区间收益排序。dailyReturn及所有TdxStat标准口径都固定输出最近完整交易日板块指数单日涨跌及日期；chg5/chg20/chg60另输出同周期指数收益；上涨比例使用所标TdxStat完整统计日。默认chg20。", "chg20", "dailyReturn", "chg5", "chg20", "chg60", "changePct", "windowReturn"),
 			optionalDateString("startDate", "windowReturn请求窗口开始日期，YYYY-MM-DD或YYYYMMDD；startDate和endDate必须同时提供，且优先于window/offset。输出另行标明实际采用的首个交易日。"),
 			optionalDateString("endDate", "windowReturn请求窗口结束日期，YYYY-MM-DD或YYYYMMDD；startDate和endDate必须同时提供，且endDate不得早于startDate。输出另行标明实际采用的末个交易日。"),
 			optionalIntegerDefault("window", "仅用于未传startDate/endDate的windowReturn：区间交易日数，默认20，范围1-250。", 20, 1, 250),
 			optionalIntegerDefault("offset", "仅用于未传startDate/endDate的windowReturn：从最新板块指数交易日向前偏移的交易日数，默认0，范围0-500。", 0, 0, 500),
 			optionalIntegerDefault("limit", "强势/中游/弱势各返回数量，默认20，最大50；可排序板块不足时实际数量会减少并输出warning。", 20, 1, 50),
-			optionalIntegerDefault("topStocks", "每个板块返回的股票数量，默认3，最大10；标准周期按所选metric返回强势股，弱势板块同口径称抗跌股；windowReturn下使用最近完整交易日单日涨跌。", 3, 1, 10),
-			optionalIntegerDefault("minMembers", "板块最少有效成分股数量，默认20；按最近完整交易日TdxStat匹配并执行excludeNew过滤后，样本不足的板块不参与排序。", 20, 1, 0),
-			optionalBoolDefault("excludeNew", "是否排除名称以N/C开头的新股及最近完整交易日涨幅超过100%的异常样本，默认true。", true),
+			optionalIntegerDefault("topStocks", "每个板块返回的股票数量，默认3，最大10；chg5/chg20/chg60/changePct按所选成分股指标返回；dailyReturn和windowReturn的代表股使用输出所标TdxStat完整统计日单日涨跌。", 3, 1, 10),
+			optionalIntegerDefault("minMembers", "板块最少有效成分股数量，默认20；按输出所标TdxStat完整统计日匹配并执行excludeNew过滤后，样本不足的板块不参与排序。", 20, 1, 0),
+			optionalBoolDefault("excludeNew", "是否排除名称以N/C开头的新股及TdxStat完整统计日涨幅超过100%的异常样本，默认true。", true),
 		),
 		newMCPTool("tdx_multi_brief_text", "多股快速概览。用于同时检查关注池或多只对比股票；批量输出每只股票的brief摘要，每只股票的递推技术指标最多使用250根可用K线预热。", "/api/agent/multi-brief-text", handleAgentMultiBriefText,
 			requiredString("codes", "逗号分隔股票代码，最多20只，例如300499,603063"),
@@ -236,12 +241,12 @@ func mcpTools() []mcpTool {
 		),
 	}
 	for i := range tools {
-		if tools[i].Name == "tdx_sector_detail_text" {
+		if tools[i].Name == "tdx_sector_detail_text" ||
+			tools[i].Name == "tdx_sector_realtime_text" {
 			tools[i].InputSchema["anyOf"] = []map[string]any{
 				{"required": []string{"sectorName"}},
 				{"required": []string{"indexCode"}},
 			}
-			break
 		}
 	}
 	tools = append(tools, candidatePoolMCPTools()...)

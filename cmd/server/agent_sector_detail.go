@@ -5,33 +5,43 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/injoyai/tdx/protocol"
 )
 
 type AgentSectorDetail struct {
-	Source        string                   `json:"source"`
-	Sector        AgentBriefBlock          `json:"sector"`
-	Metric        string                   `json:"metric"`
-	MemberSize    int                      `json:"memberSize"`
-	Stats         AgentSectorDetailStats   `json:"stats"`
-	ExcludeNew    bool                     `json:"excludeNew"`
-	ExcludedCount int                      `json:"excludedCount,omitempty"`
-	TopStocks     []AgentStockInSectorItem `json:"topStocks"`
-	MidStocks     []AgentStockInSectorItem `json:"midStocks"`
-	WeakStocks    []AgentStockInSectorItem `json:"weakStocks"`
-	Warnings      []string                 `json:"warnings,omitempty"`
-	Note          string                   `json:"note"`
+	Source              string                   `json:"source"`
+	GeneratedAt         string                   `json:"generatedAt"`
+	ConstituentDataDate string                   `json:"constituentDataDate,omitempty"`
+	Sector              AgentBriefBlock          `json:"sector"`
+	Metric              string                   `json:"metric"`
+	MemberSize          int                      `json:"memberSize"`
+	Stats               AgentSectorDetailStats   `json:"stats"`
+	ExcludeNew          bool                     `json:"excludeNew"`
+	ExcludedCount       int                      `json:"excludedCount,omitempty"`
+	TopStocks           []AgentStockInSectorItem `json:"topStocks"`
+	MidStocks           []AgentStockInSectorItem `json:"midStocks"`
+	WeakStocks          []AgentStockInSectorItem `json:"weakStocks"`
+	Warnings            []string                 `json:"warnings,omitempty"`
+	Note                string                   `json:"note"`
 }
 
 type AgentSectorDetailStats struct {
-	RisingCount  int     `json:"risingCount"`
-	FallingCount int     `json:"fallingCount"`
-	RisingPct    float64 `json:"risingPct"`
-	AverageValue float64 `json:"averageValue"`
-	Return20     float64 `json:"return20,omitempty"`
-	Return60     float64 `json:"return60,omitempty"`
-	IndexKlineOK bool    `json:"indexKlineOk"`
+	RisingCount       int      `json:"risingCount"`
+	FallingCount      int      `json:"fallingCount"`
+	RisingPct         float64  `json:"risingPct"`
+	AverageValue      float64  `json:"averageValue"`
+	DailyReturn       *float64 `json:"dailyReturn,omitempty"`
+	DailyBaseDate     string   `json:"dailyBaseDate,omitempty"`
+	DailyDate         string   `json:"dailyDate,omitempty"`
+	Return20          float64  `json:"return20,omitempty"`
+	Return20StartDate string   `json:"return20StartDate,omitempty"`
+	Return20EndDate   string   `json:"return20EndDate,omitempty"`
+	Return60          float64  `json:"return60,omitempty"`
+	Return60StartDate string   `json:"return60StartDate,omitempty"`
+	Return60EndDate   string   `json:"return60EndDate,omitempty"`
+	IndexKlineOK      bool     `json:"indexKlineOk"`
 }
 
 type AgentSectorDetailText struct {
@@ -131,9 +141,24 @@ func buildAgentSectorDetail(
 	limit int,
 	excludeNew bool,
 ) AgentSectorDetail {
+	return buildAgentSectorDetailAt(c, sector, stats, metric, limit, excludeNew, time.Now())
+}
+
+func buildAgentSectorDetailAt(
+	c interface {
+		GetIndexDayAll(string) (*protocol.KlineResp, error)
+	},
+	sector agentSectorMemberSet,
+	stats []*protocol.TdxStat,
+	metric string,
+	limit int,
+	excludeNew bool,
+	now time.Time,
+) AgentSectorDetail {
+	latestStatDate := latestHotspotStatDate(stats)
 	statByCode := make(map[string]*protocol.TdxStat, len(stats))
 	for _, stat := range stats {
-		if stat != nil {
+		if stat != nil && (latestStatDate == "" || stat.Date == latestStatDate) {
 			statByCode[stat.Code] = stat
 		}
 	}
@@ -170,25 +195,42 @@ func buildAgentSectorDetail(
 		klines, ok := loadSectorDetailIndexKlines(c, sector)
 		if ok {
 			statsSummary.IndexKlineOK = true
-			statsSummary.Return20, _ = hotspotWindowReturn(klines, 20, 0)
-			statsSummary.Return60, _ = hotspotWindowReturn(klines, 60, 0)
+			dailyReturn, baseDate, dailyDate, dailyOK :=
+				hotspotCompletedDailyReturn(klines, now)
+			if dailyOK {
+				statsSummary.DailyReturn = &dailyReturn
+				statsSummary.DailyBaseDate = baseDate
+				statsSummary.DailyDate = dailyDate
+				statsSummary.Return20,
+					statsSummary.Return20StartDate,
+					statsSummary.Return20EndDate,
+					_ = hotspotWindowReturnUntilDateWithDates(klines, 20, dailyDate)
+				statsSummary.Return60,
+					statsSummary.Return60StartDate,
+					statsSummary.Return60EndDate,
+					_ = hotspotWindowReturnUntilDateWithDates(klines, 60, dailyDate)
+			} else {
+				warnings = append(warnings, "板块指数K线不足，无法计算最近完整交易日涨跌幅")
+			}
 		} else {
 			warnings = append(warnings, "板块指数K线不可用，已仅返回成分股统计")
 		}
 	}
 	return AgentSectorDetail{
-		Source:        "tdx_agent_sector_detail",
-		Sector:        sector.Block,
-		Metric:        metric,
-		MemberSize:    len(stocks),
-		Stats:         statsSummary,
-		ExcludeNew:    excludeNew,
-		ExcludedCount: excluded,
-		TopStocks:     top,
-		MidStocks:     mid,
-		WeakStocks:    weak,
-		Warnings:      warnings,
-		Note:          "板块深度接口；基于SQLite板块成分和TdxStat统计，板块指数收益使用通达信板块指数日K计算。",
+		Source:              "tdx_agent_sector_detail",
+		GeneratedAt:         now.Format(time.RFC3339),
+		ConstituentDataDate: formatTdxStatDate(latestStatDate),
+		Sector:              sector.Block,
+		Metric:              metric,
+		MemberSize:          len(stocks),
+		Stats:               statsSummary,
+		ExcludeNew:          excludeNew,
+		ExcludedCount:       excluded,
+		TopStocks:           top,
+		MidStocks:           mid,
+		WeakStocks:          weak,
+		Warnings:            warnings,
+		Note:                "板块深度接口；成分股使用最新TdxStat完整统计日，板块指数单日及20/60日收益均截至最近完整交易日。",
 	}
 }
 
@@ -311,6 +353,12 @@ func buildAgentSectorDetailText(summary AgentSectorDetail) string {
 		summary.Sector.TypeName,
 		valueOrDash(summary.Sector.IndexCode),
 	))
+	if summary.GeneratedAt != "" {
+		b.WriteString("生成时间：" + summary.GeneratedAt + "\n")
+	}
+	if summary.ConstituentDataDate != "" {
+		b.WriteString("成分股统计日：" + summary.ConstituentDataDate + "\n")
+	}
 	b.WriteString(fmt.Sprintf(
 		"样本%d只，排序指标%s；平均%s，上涨%d/%d（%s）。\n",
 		summary.MemberSize,
@@ -324,11 +372,30 @@ func buildAgentSectorDetailText(summary AgentSectorDetail) string {
 		b.WriteString(fmt.Sprintf("已过滤新股/异常涨幅样本%d条。\n", summary.ExcludedCount))
 	}
 	if summary.Stats.IndexKlineOK {
-		b.WriteString(fmt.Sprintf(
-			"板块指数：近20日%s，近60日%s。\n",
-			formatPercentText(summary.Stats.Return20),
-			formatPercentText(summary.Stats.Return60),
-		))
+		if summary.Stats.DailyReturn != nil {
+			b.WriteString(fmt.Sprintf(
+				"板块指数：最近完整交易日%s单日%s（较%s收盘）。\n",
+				summary.Stats.DailyDate,
+				formatPercentText(*summary.Stats.DailyReturn),
+				summary.Stats.DailyBaseDate,
+			))
+		}
+		if summary.Stats.Return20EndDate != "" {
+			b.WriteString(fmt.Sprintf(
+				"板块指数近20日：%s（实际交易日%s至%s）。\n",
+				formatPercentText(summary.Stats.Return20),
+				summary.Stats.Return20StartDate,
+				summary.Stats.Return20EndDate,
+			))
+		}
+		if summary.Stats.Return60EndDate != "" {
+			b.WriteString(fmt.Sprintf(
+				"板块指数近60日：%s（实际交易日%s至%s）。\n",
+				formatPercentText(summary.Stats.Return60),
+				summary.Stats.Return60StartDate,
+				summary.Stats.Return60EndDate,
+			))
+		}
 	}
 	writeSectorDetailStocks(&b, "强势股", summary.TopStocks)
 	writeSectorDetailStocks(&b, "中游股", summary.MidStocks)

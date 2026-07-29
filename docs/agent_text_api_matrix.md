@@ -13,8 +13,9 @@
 | `/api/agent/f10-summary-text` | F10 深度资料文本 | `GetCompanyCategory`、`GetCompanyContent`、F10 分类裁剪清洗 | `code` 必填；`mkt` 可选 | 输出股本、股东、机构、分红融资、资金动向、资本运作、热点题材、公告、经营、行业、研报评级等低频资料；不重复 brief 财务字段；研报评级去掉研报摘要和机构调研长文。 |
 | `/api/agent/sector-membership-text` | 个股板块归属文本 | SQLite `block_memberships` | `code` 必填 | 输出该股所属概念、地域/风格、指数板块，用于后续选择板块分析入口。 |
 | `/api/agent/stock-in-sector-text` | 个股板块内位置文本 | SQLite 板块、`GetTdxStat` | `code` 必填；`sectorType`、`sectorName`、`metric`、`limit` 可选 | 输出个股在指定或默认所属板块中的相对排名、阶段表现和同板块比较。 |
-| `/api/agent/sector-detail-text` | 指定板块深度分析文本 | SQLite 板块、`GetTdxStat`、`GetIndexDayAll` | `sectorName` 或 `indexCode` 必填；`sectorType` 可选；`metric` 可选；`topStocks` 可选；`excludeNew` 可选 | 输出板块样本数、上涨比例、板块指数近 20/60 日表现、强势股、中游股和弱势股。 |
-| `/api/agent/hotspot-scan-text` | 热点扫描文本 | SQLite 板块、`GetTdxStat`、`GetIndexDayAll` | `sectorType`、`metric`、`startDate`、`endDate`、`window`、`offset`、`limit`、`topStocks`、`minMembers`、`excludeNew` 可选 | 标准周期按成分股平均排序，同时输出同周期板块指数收益、最近完整交易日上涨比例和同周期强势/抗跌股；`windowReturn` 按板块指数区间排序。 |
+| `/api/agent/sector-detail-text` | 指定板块深度分析文本 | SQLite 板块、`GetTdxStat`、`GetIndexDayAll` | `sectorName` 或 `indexCode` 必填；`sectorName` 必须与 TDX 名称精确一致；`sectorType`、`metric`、`topStocks`、`excludeNew` 可选 | 输出板块指数最近完整交易日单日涨跌及日期、截至该日的近 20/60 日表现，并另列成分股统计日期、上涨比例和强中弱股票。 |
+| `/api/agent/sector-realtime-text` | 指定板块盘中实时涨跌文本 | SQLite 板块、`GetIndexDay` 当日日 K 实时字段 | `sectorName` 或 `indexCode` 必填；`sectorType` 可选 | 仅工作日 09:30-11:30、13:00-15:00 返回实时板块指数涨跌、交易日期和查询时点；其他时段明确返回无实时数据，不回退历史值。 |
+| `/api/agent/hotspot-scan-text` | 热点扫描文本 | SQLite 板块、`GetTdxStat`、`GetIndexDayAll` | `sectorType`、`metric`、`startDate`、`endDate`、`window`、`offset`、`limit`、`topStocks`、`minMembers`、`excludeNew` 可选 | `dailyReturn` 及所有 TdxStat 标准周期均固定输出最近完整交易日板块指数单日涨跌及日期；20/60日等周期同时保留对应指数收益；`windowReturn` 按指数区间排序。 |
 | `/api/agent/multi-brief-text` | 多股简讯文本 | 批量复用 `stock-brief` | `codes` 或多个 `code` 必填；最多 20 只 | 一次输出多只股票的简短行情、成交、换手、20 日表现和主要板块；适合快速扫关注池。 |
 | `/api/agent/auction-text` | 集合竞价分析文本 | `GetCallAuction`、`GetQuote`、近 5/20 日日 K | `code` 必填；`session=open\|close\|all` 可选；`limit` 可选 | 默认输出 09:20-09:25 开盘不可撤单竞价摘要，包括末笔价格、较昨收涨跌、匹配量、未匹配方向和竞价信号。 |
 | `/api/agent/intraday-alerts-text` | 盘中异动提醒文本 | `GetQuote`、`GetMinute`、交易日判断、本地分时窗口计算 | `codes` 或多个 `code` 必填；`windowMinutes` 可选，默认 30，范围 5-60 | 输出多只股票当前行情、短时涨跌、短时放量和异动信号；非交易日或分时不可用时明确降级为行情快照。 |
@@ -31,7 +32,7 @@
 | `codes` | 多股接口 | 多个 A 股代码 | 逗号、中文逗号、空格、换行分隔，如 `300499,603063` | 无 | 用于多股简讯、盘中异动、市场复盘关注股联动。 |
 | `mkt` | `stock-brief-text`、`f10-summary-text` | 手动指定市场 | 通常可省略；代码无法判断市场时再传 | 自动识别 | 日常 A 股分析不建议传，避免误设。 |
 | `limit` | 搜索、板块、热点等接口 | 控制返回条数 | 正整数，各接口上限不同 | 由接口决定 | Agent 默认少取，人工要求扩展时再调大。 |
-| `metric` | 板块/排序类接口 | 排序指标 | `changePct`、`chg5`、`chg20`、`chg60`、`peTtm`、`divYield`、`windowReturn` | 多数为 `chg20` | 热点扫描的标准周期按成分股平均排序并补同周期板块指数；上涨比例固定为最近完整交易日单日口径；历史板块指数区间排序使用 `windowReturn`。 |
+| `metric` | 板块/排序类接口 | 排序指标 | `dailyReturn`、`changePct`、`chg5`、`chg20`、`chg60`、`peTtm`、`divYield`、`windowReturn` | 多数为 `chg20` | 热点扫描中 `dailyReturn` 是板块指数最近完整交易日单日涨跌；`changePct` 是 TdxStat 成分股平均单日涨跌；历史板块指数区间排序使用 `windowReturn`。 |
 | `sectorType` | 板块接口 | 板块类别 | `concept`、`style_region`、`index` | 多数为 `concept` | 做题材和行业分析时优先 `concept`。 |
 
 ### 资产搜索
@@ -59,10 +60,10 @@
 
 | 参数 | 接口 | 含义 | 可选值/格式 | 默认值 | 使用建议 |
 |---|---|---|---|---|---|
-| `sectorName` | `stock-in-sector-text`、`sector-detail-text` | 指定板块名称 | 如 `液冷服务`、`光伏` | `stock-in-sector-text` 默认选该股第一个概念板块 | 用户关注某个题材时显式传入，避免默认板块不符合分析目标。 |
-| `indexCode` | `sector-detail-text` | 指定板块指数代码 | 如 `880685` | 无 | 板块名可能重复时使用指数代码更稳定。 |
-| `topStocks` | `sector-detail-text`、`hotspot-scan-text` | 每个板块展示股票数量 | 正整数，`sector-detail` 最大 30，`hotspot-scan` 最大 10 | 多数为 3 或 10 | 热点标准周期按所选 `metric` 返回强势/抗跌股；`windowReturn` 使用最近完整交易日单日涨跌。 |
-| `excludeNew` | `sector-detail-text`、`hotspot-scan-text` | 是否排除新股/异常涨幅样本 | `true`、`false` | `true` | 热点扫描排除名称以 N/C 开头及最近完整交易日涨幅超过100%的样本。 |
+| `sectorName` | `stock-in-sector-text`、`sector-detail-text`、`sector-realtime-text` | 指定板块名称 | 如 `液冷服务`、`光伏` | `stock-in-sector-text` 默认选该股第一个概念板块 | `sector-detail` 和 `sector-realtime` 要求与 TDX 板块名精确一致；名称不确定时使用 `indexCode`。 |
+| `indexCode` | `sector-detail-text`、`sector-realtime-text` | 指定板块指数代码 | 如 `880685` | 无 | 板块名可能重复时使用指数代码更稳定。 |
+| `topStocks` | `sector-detail-text`、`hotspot-scan-text` | 每个板块展示股票数量 | 正整数，`sector-detail` 最大 30，`hotspot-scan` 最大 10 | 多数为 3 或 10 | `sector-detail` 表示强势、中游、弱势各最多返回该数量；热点标准周期按所选 `metric` 返回强势/抗跌股。 |
+| `excludeNew` | `sector-detail-text`、`hotspot-scan-text` | 是否排除新股/异常涨幅样本 | `true`、`false` | `true` | 两者排除 N/C 新股及单日涨幅超过100%的样本；`sector-detail` 的涨跌类 metric 还排除对应排序值超过100%的样本。 |
 
 ### 热点扫描窗口
 
