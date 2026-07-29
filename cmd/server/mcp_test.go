@@ -83,7 +83,11 @@ func TestMCPToolSchemasDescribeHotspotParameters(t *testing.T) {
 	if hotspot.Description == "" {
 		t.Fatal("hotspot tool description missing")
 	}
-	for _, want := range []string{"指标数据日期", "最近完整交易日", "实际交易日区间"} {
+	for _, want := range []string{
+		"同周期板块指数",
+		"最近完整交易日上涨比例",
+		"实际交易日区间",
+	} {
 		if !strings.Contains(hotspot.Description, want) {
 			t.Fatalf("hotspot description missing %q: %s", want, hotspot.Description)
 		}
@@ -103,6 +107,11 @@ func TestMCPToolSchemasDescribeHotspotParameters(t *testing.T) {
 	if !strings.Contains(metric["description"].(string), "不是盘中实时值") {
 		t.Fatalf("metric description does not explain changePct timing: %+v", metric)
 	}
+	for _, want := range []string{"成分股平均", "板块指数", "上涨比例"} {
+		if !strings.Contains(metric["description"].(string), want) {
+			t.Fatalf("metric description missing %q: %+v", want, metric)
+		}
+	}
 	if metric["default"] != "chg20" {
 		t.Fatalf("metric default = %v, want chg20", metric["default"])
 	}
@@ -113,6 +122,21 @@ func TestMCPToolSchemasDescribeHotspotParameters(t *testing.T) {
 	startDate := properties["startDate"].(map[string]any)
 	if startDate["pattern"] != `^(\d{4}-\d{2}-\d{2}|\d{8})$` {
 		t.Fatalf("startDate pattern = %+v", startDate["pattern"])
+	}
+	if !strings.Contains(startDate["description"].(string), "必须同时提供") {
+		t.Fatalf("startDate pair constraint missing: %+v", startDate)
+	}
+	window := properties["window"].(map[string]any)
+	if window["default"] != 20 || window["minimum"] != 1 || window["maximum"] != 250 {
+		t.Fatalf("window schema = %+v", window)
+	}
+	offset := properties["offset"].(map[string]any)
+	if offset["default"] != 0 || offset["minimum"] != 0 || offset["maximum"] != 500 {
+		t.Fatalf("offset schema = %+v", offset)
+	}
+	excludeNew := properties["excludeNew"].(map[string]any)
+	if !strings.Contains(excludeNew["description"].(string), "N/C") {
+		t.Fatalf("excludeNew rules missing: %+v", excludeNew)
 	}
 }
 

@@ -14,7 +14,7 @@
 | `/api/agent/sector-membership-text` | 个股板块归属文本 | SQLite `block_memberships` | `code` 必填 | 输出该股所属概念、地域/风格、指数板块，用于后续选择板块分析入口。 |
 | `/api/agent/stock-in-sector-text` | 个股板块内位置文本 | SQLite 板块、`GetTdxStat` | `code` 必填；`sectorType`、`sectorName`、`metric`、`limit` 可选 | 输出个股在指定或默认所属板块中的相对排名、阶段表现和同板块比较。 |
 | `/api/agent/sector-detail-text` | 指定板块深度分析文本 | SQLite 板块、`GetTdxStat`、`GetIndexDayAll` | `sectorName` 或 `indexCode` 必填；`sectorType` 可选；`metric` 可选；`topStocks` 可选；`excludeNew` 可选 | 输出板块样本数、上涨比例、板块指数近 20/60 日表现、强势股、中游股和弱势股。 |
-| `/api/agent/hotspot-scan-text` | 热点扫描文本 | SQLite 板块、`GetTdxStat`、`GetIndexDayAll` | `sectorType`、`metric`、`startDate`、`endDate`、`window`、`offset`、`limit`、`topStocks`、`minMembers`、`excludeNew` 可选 | 输出生成时间、指标来源、最近完整交易日或板块指数实际交易日区间，以及强势/中游/弱势板块和代表股票。 |
+| `/api/agent/hotspot-scan-text` | 热点扫描文本 | SQLite 板块、`GetTdxStat`、`GetIndexDayAll` | `sectorType`、`metric`、`startDate`、`endDate`、`window`、`offset`、`limit`、`topStocks`、`minMembers`、`excludeNew` 可选 | 标准周期按成分股平均排序，同时输出同周期板块指数收益、最近完整交易日上涨比例和同周期强势/抗跌股；`windowReturn` 按板块指数区间排序。 |
 | `/api/agent/multi-brief-text` | 多股简讯文本 | 批量复用 `stock-brief` | `codes` 或多个 `code` 必填；最多 20 只 | 一次输出多只股票的简短行情、成交、换手、20 日表现和主要板块；适合快速扫关注池。 |
 | `/api/agent/auction-text` | 集合竞价分析文本 | `GetCallAuction`、`GetQuote`、近 5/20 日日 K | `code` 必填；`session=open\|close\|all` 可选；`limit` 可选 | 默认输出 09:20-09:25 开盘不可撤单竞价摘要，包括末笔价格、较昨收涨跌、匹配量、未匹配方向和竞价信号。 |
 | `/api/agent/intraday-alerts-text` | 盘中异动提醒文本 | `GetQuote`、`GetMinute`、交易日判断、本地分时窗口计算 | `codes` 或多个 `code` 必填；`windowMinutes` 可选，默认 30，范围 5-60 | 输出多只股票当前行情、短时涨跌、短时放量和异动信号；非交易日或分时不可用时明确降级为行情快照。 |
@@ -31,7 +31,7 @@
 | `codes` | 多股接口 | 多个 A 股代码 | 逗号、中文逗号、空格、换行分隔，如 `300499,603063` | 无 | 用于多股简讯、盘中异动、市场复盘关注股联动。 |
 | `mkt` | `stock-brief-text`、`f10-summary-text` | 手动指定市场 | 通常可省略；代码无法判断市场时再传 | 自动识别 | 日常 A 股分析不建议传，避免误设。 |
 | `limit` | 搜索、板块、热点等接口 | 控制返回条数 | 正整数，各接口上限不同 | 由接口决定 | Agent 默认少取，人工要求扩展时再调大。 |
-| `metric` | 板块/排序类接口 | 排序指标 | `changePct`、`chg5`、`chg20`、`chg60`、`peTtm`、`divYield`、`windowReturn` | 多数为 `chg20` | `changePct/chg5/chg20/chg60` 均为最近完整交易日 `TdxStat`，不是盘中实时；历史板块指数区间使用 `windowReturn`。 |
+| `metric` | 板块/排序类接口 | 排序指标 | `changePct`、`chg5`、`chg20`、`chg60`、`peTtm`、`divYield`、`windowReturn` | 多数为 `chg20` | 热点扫描的标准周期按成分股平均排序并补同周期板块指数；上涨比例固定为最近完整交易日单日口径；历史板块指数区间排序使用 `windowReturn`。 |
 | `sectorType` | 板块接口 | 板块类别 | `concept`、`style_region`、`index` | 多数为 `concept` | 做题材和行业分析时优先 `concept`。 |
 
 ### 资产搜索
@@ -61,18 +61,18 @@
 |---|---|---|---|---|---|
 | `sectorName` | `stock-in-sector-text`、`sector-detail-text` | 指定板块名称 | 如 `液冷服务`、`光伏` | `stock-in-sector-text` 默认选该股第一个概念板块 | 用户关注某个题材时显式传入，避免默认板块不符合分析目标。 |
 | `indexCode` | `sector-detail-text` | 指定板块指数代码 | 如 `880685` | 无 | 板块名可能重复时使用指数代码更稳定。 |
-| `topStocks` | `sector-detail-text`、`hotspot-scan-text` | 每个板块展示代表股票数量 | 正整数，`sector-detail` 最大 30，`hotspot-scan` 最大 10 | 多数为 3 或 10 | 人工检查板块时可调大；Agent 默认不要过大。 |
-| `excludeNew` | `sector-detail-text`、`hotspot-scan-text` | 是否排除新股/异常涨幅样本 | `true`、`false` | `true` | 默认保持 `true`，避免新股异常涨幅污染板块强弱判断。 |
+| `topStocks` | `sector-detail-text`、`hotspot-scan-text` | 每个板块展示股票数量 | 正整数，`sector-detail` 最大 30，`hotspot-scan` 最大 10 | 多数为 3 或 10 | 热点标准周期按所选 `metric` 返回强势/抗跌股；`windowReturn` 使用最近完整交易日单日涨跌。 |
+| `excludeNew` | `sector-detail-text`、`hotspot-scan-text` | 是否排除新股/异常涨幅样本 | `true`、`false` | `true` | 热点扫描排除名称以 N/C 开头及最近完整交易日涨幅超过100%的样本。 |
 
 ### 热点扫描窗口
 
 | 参数 | 接口 | 含义 | 可选值/格式 | 默认值 | 使用建议 |
 |---|---|---|---|---|---|
-| `startDate` | `hotspot-scan-text` | 请求窗口起始日期 | `YYYY-MM-DD` 或 `YYYYMMDD` | 无 | 与 `endDate` 同时使用；若为非交易日，输出会标明实际采用的首个交易日。 |
-| `endDate` | `hotspot-scan-text` | 请求窗口结束日期 | `YYYY-MM-DD` 或 `YYYYMMDD` | 无 | 与 `startDate` 同时使用并优先于 `window/offset`；输出会标明实际采用的末个交易日。 |
-| `window` | `hotspot-scan-text` | 历史窗口长度 | 交易日数量 | 无 | 兼容旧用法；新调用优先用日期区间。 |
-| `offset` | `hotspot-scan-text` | 从当前往前偏移的交易日数量 | 交易日数量 | 0 | 兼容旧用法；新调用优先用日期区间。 |
-| `minMembers` | `hotspot-scan-text` | 板块最小成分股数量 | 正整数 | 20 | 过滤过小板块，避免样本太少导致排序失真。 |
+| `startDate` | `hotspot-scan-text` | `windowReturn` 请求窗口起始日期 | `YYYY-MM-DD` 或 `YYYYMMDD` | 无 | 必须与 `endDate` 同时提供并优先于 `window/offset`；输出标明实际首个交易日。 |
+| `endDate` | `hotspot-scan-text` | `windowReturn` 请求窗口结束日期 | `YYYY-MM-DD` 或 `YYYYMMDD` | 无 | 必须与 `startDate` 同时提供且不得更早；输出标明实际末个交易日。 |
+| `window` | `hotspot-scan-text` | 未传日期时的指数窗口长度 | 1-250个交易日 | 20 | 仅用于 `windowReturn`。 |
+| `offset` | `hotspot-scan-text` | 从最新板块指数交易日向前偏移 | 0-500个交易日 | 0 | 仅用于未传日期的 `windowReturn`。 |
+| `minMembers` | `hotspot-scan-text` | 板块最小有效成分股数量 | 正整数 | 20 | 按最近完整交易日TdxStat匹配并执行异常过滤后，样本不足的板块不参与排序。 |
 
 ### 竞价、盘中和市场复盘
 

@@ -162,28 +162,28 @@ func mcpTools() []mcpTool {
 			requiredString("code", "股票代码，例如300499"),
 			optionalEnumDefault("sectorType", "板块类型：concept为概念板块，style_region为地域/风格板块，index为指数板块；默认concept。", "concept", "concept", "style_region", "index"),
 			optionalString("sectorName", "板块名称；留空时默认选择第一个概念板块"),
-			optionalEnumDefault("metric", "排序指标：changePct当日涨跌，chg5近5日，chg20近20日，chg60近60日，peTtm市盈率，divYield股息率。默认chg20。", "chg20", "changePct", "chg5", "chg20", "chg60", "peTtm", "divYield"),
+			optionalEnumDefault("metric", "排序指标：changePct为最近完整交易日单日涨跌（非盘中实时），chg5近5日，chg20近20日，chg60近60日，peTtm市盈率，divYield股息率。默认chg20。", "chg20", "changePct", "chg5", "chg20", "chg60", "peTtm", "divYield"),
 			optionalIntegerDefault("limit", "返回成分股数量，默认10，最大50。", 10, 1, 50),
 		),
 		newMCPTool("tdx_sector_detail_text", "指定板块深度分析。调用时 sectorName 和 indexCode 至少传一个；用于热点扫描后继续拆板块；输出板块近20/60日表现、上涨比例、强势股、中游股和弱势股。", "/api/agent/sector-detail-text", handleAgentSectorDetailText,
 			optionalString("sectorName", "板块名称；sectorName和indexCode至少传一个"),
 			optionalString("indexCode", "板块指数代码；sectorName和indexCode至少传一个"),
 			optionalEnumDefault("sectorType", "板块类型：concept概念，style_region地域/风格，index指数；默认concept。", "concept", "concept", "style_region", "index"),
-			optionalEnumDefault("metric", "排序指标：changePct当日涨跌，chg5近5日，chg20近20日，chg60近60日，peTtm市盈率，divYield股息率。默认chg20。", "chg20", "changePct", "chg5", "chg20", "chg60", "peTtm", "divYield"),
+			optionalEnumDefault("metric", "排序指标：changePct为最近完整交易日单日涨跌（非盘中实时），chg5近5日，chg20近20日，chg60近60日，peTtm市盈率，divYield股息率。默认chg20。", "chg20", "changePct", "chg5", "chg20", "chg60", "peTtm", "divYield"),
 			optionalIntegerDefault("topStocks", "强弱样本数量，默认10，最大30。", 10, 1, 30),
 			optionalBoolDefault("excludeNew", "是否排除新股/异常涨幅样本，默认true。", true),
 		),
-		newMCPTool("tdx_hotspot_scan_text", "板块冷热扫描。用于市场主线、补涨方向和弱势板块识别；输出接口生成时间、指标数据日期/实际交易日区间、强势/中游/弱势板块及代表股票。统计指标来自最近完整交易日TdxStat，windowReturn来自TDX板块指数日K。", "/api/agent/hotspot-scan-text", handleAgentHotspotScanText,
+		newMCPTool("tdx_hotspot_scan_text", "板块冷热扫描。用于识别市场主线、补涨方向和弱势板块；chg5/chg20/chg60/changePct按成分股平均值排序，并为入榜板块同时输出同周期板块指数收益、最近完整交易日上涨比例和同周期强势/抗跌股；windowReturn按指定板块指数区间排序。输出生成时间、统计日期和指数实际交易日区间。", "/api/agent/hotspot-scan-text", handleAgentHotspotScanText,
 			optionalEnumDefault("sectorType", "扫描板块类型：concept概念板块，style_region地域/风格板块，index指数板块；默认concept。", "concept", "concept", "style_region", "index"),
-			optionalEnumDefault("metric", "排序口径：chg5/chg20/chg60为截至最近完整交易日的成分股区间涨跌幅均值；changePct为最近完整交易日单日涨跌幅均值，不是盘中实时值；windowReturn为TDX板块指数日K区间收益。默认chg20。", "chg20", "chg5", "chg20", "chg60", "changePct", "windowReturn"),
-			optionalDateString("startDate", "请求窗口开始日期，YYYY-MM-DD或YYYYMMDD；仅metric=windowReturn时建议传。输出会另行标明实际采用的首个交易日。"),
-			optionalDateString("endDate", "请求窗口结束日期，YYYY-MM-DD或YYYYMMDD；仅metric=windowReturn时建议传。输出会另行标明实际采用的末个交易日。"),
-			optionalInteger("window", "兼容参数：窗口交易日数；新调用优先使用startDate/endDate。", map[string]any{"minimum": 1}),
-			optionalInteger("offset", "兼容参数：从当前往前偏移交易日数；新调用优先使用startDate/endDate。", map[string]any{"minimum": 0}),
-			optionalIntegerDefault("limit", "强/中/弱各返回数量，默认20，最大50。", 20, 1, 50),
-			optionalIntegerDefault("topStocks", "每个板块代表股票数量，默认3，最大10。", 3, 1, 10),
-			optionalIntegerDefault("minMembers", "最小成分股数量，默认20；低于该样本数的板块会被过滤。", 20, 1, 0),
-			optionalBoolDefault("excludeNew", "是否排除新股/异常涨幅样本，默认true。", true),
+			optionalEnumDefault("metric", "排序口径：chg5/chg20/chg60按最近完整交易日TdxStat成分股平均区间涨跌幅排序，并补充同周期板块指数收益；changePct按最近完整交易日成分股平均单日涨跌幅排序，不是盘中实时值；上涨比例始终是最近完整交易日单日口径；windowReturn按TDX板块指数日K区间收益排序，代表股使用最近完整交易日单日涨跌。默认chg20。", "chg20", "chg5", "chg20", "chg60", "changePct", "windowReturn"),
+			optionalDateString("startDate", "windowReturn请求窗口开始日期，YYYY-MM-DD或YYYYMMDD；startDate和endDate必须同时提供，且优先于window/offset。输出另行标明实际采用的首个交易日。"),
+			optionalDateString("endDate", "windowReturn请求窗口结束日期，YYYY-MM-DD或YYYYMMDD；startDate和endDate必须同时提供，且endDate不得早于startDate。输出另行标明实际采用的末个交易日。"),
+			optionalIntegerDefault("window", "仅用于未传startDate/endDate的windowReturn：区间交易日数，默认20，范围1-250。", 20, 1, 250),
+			optionalIntegerDefault("offset", "仅用于未传startDate/endDate的windowReturn：从最新板块指数交易日向前偏移的交易日数，默认0，范围0-500。", 0, 0, 500),
+			optionalIntegerDefault("limit", "强势/中游/弱势各返回数量，默认20，最大50；可排序板块不足时实际数量会减少并输出warning。", 20, 1, 50),
+			optionalIntegerDefault("topStocks", "每个板块返回的股票数量，默认3，最大10；标准周期按所选metric返回强势股，弱势板块同口径称抗跌股；windowReturn下使用最近完整交易日单日涨跌。", 3, 1, 10),
+			optionalIntegerDefault("minMembers", "板块最少有效成分股数量，默认20；按最近完整交易日TdxStat匹配并执行excludeNew过滤后，样本不足的板块不参与排序。", 20, 1, 0),
+			optionalBoolDefault("excludeNew", "是否排除名称以N/C开头的新股及最近完整交易日涨幅超过100%的异常样本，默认true。", true),
 		),
 		newMCPTool("tdx_multi_brief_text", "多股快速概览。用于同时检查关注池或多只对比股票；批量输出每只股票的brief摘要，每只股票的递推技术指标最多使用250根可用K线预热。", "/api/agent/multi-brief-text", handleAgentMultiBriefText,
 			requiredString("codes", "逗号分隔股票代码，最多20只，例如300499,603063"),
@@ -342,10 +342,7 @@ func optionalIntegerDefault(
 	minimum int,
 	maximum int,
 ) mcpToolParam {
-	schema := map[string]any{}
-	if minimum != 0 {
-		schema["minimum"] = minimum
-	}
+	schema := map[string]any{"minimum": minimum}
 	if maximum != 0 {
 		schema["maximum"] = maximum
 	}

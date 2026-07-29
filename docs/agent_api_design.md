@@ -82,8 +82,8 @@ MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text
 | `/api/agent/stock-in-sector-text` | 个股板块内位置文本 | 已完成 | 面向 Agent 的中文低噪音相对强弱摘要 |
 | `/api/agent/sector-detail` | 指定板块深度分析 JSON | 已完成 | 根据板块名称或指数代码返回板块阶段表现、成分股强弱、中游股和弱势股 |
 | `/api/agent/sector-detail-text` | 指定板块深度分析文本 | 已完成 | 面向 Agent 的中文低噪音板块拆解摘要 |
-| `/api/agent/hotspot-scan` | 热点扫描 JSON | 已完成 | 按概念/地域/指数板块扫描近20日或指定历史窗口涨跌；明确接口生成时间、TdxStat最近完整交易日和板块指数实际交易日区间 |
-| `/api/agent/hotspot-scan-text` | 热点扫描文本 | 已完成 | 面向 Agent 的中文低噪音强弱与中游板块摘要，明确请求日期与实际采用交易日 |
+| `/api/agent/hotspot-scan` | 热点扫描 JSON | 已完成 | 按概念/地域/指数板块扫描；标准周期同时返回成分股平均、同周期板块指数收益和最近完整交易日上涨比例 |
+| `/api/agent/hotspot-scan-text` | 热点扫描文本 | 已完成 | 面向 Agent 的中文低噪音强弱摘要，明确每项指标周期、统计日期和指数实际交易日区间 |
 | `/api/agent/multi-brief` | 多股简讯 JSON | 已完成 | 请求参数传入股票列表，批量复用 `stock-brief`；不作为分时监控接口 |
 | `/api/agent/multi-brief-text` | 多股简讯文本 | 已完成 | 面向 Agent 的中文多股 brief 列表摘要 |
 | `/api/agent/auction` | 集合竞价分析 JSON | 已完成 | 默认分析 09:20-09:25 开盘不可撤单竞价，返回末笔、相对昨收、未匹配方向和近 5/20 个交易日日K走势背景 |
@@ -118,8 +118,8 @@ MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text
 | `/api/agent/stock-in-sector-text` | 同 JSON 版 | 返回中文相对强弱摘要 |
 | `/api/agent/sector-detail` | `sectorName` 或 `indexCode` 必填；`sectorType` 可选；`metric` 可选；`topStocks` 可选；`excludeNew` 可选 | `sectorType=concept|style_region|index`，默认 `concept`；`metric=changePct|chg5|chg20|chg60|peTtm|divYield`，默认 `chg20`；`topStocks` 默认 10 最大 30；`excludeNew` 默认 true，过滤新股/异常涨幅样本；返回板块指数近20/60日收益、成分股上涨比例、强势股、中游股和弱势股 |
 | `/api/agent/sector-detail-text` | 同 JSON 版 | 返回中文板块深度摘要，适合在 `hotspot-scan` 找到板块后继续拆解 |
-| `/api/agent/hotspot-scan` | `sectorType` 可选；`metric` 可选；`startDate` 可选；`endDate` 可选；`window` 可选；`offset` 可选；`limit` 可选；`topStocks` 可选；`minMembers` 可选；`excludeNew` 可选 | `sectorType=concept|style_region|index`，默认 `concept`；`metric=chg20` 默认；`chg5/chg20/chg60/changePct` 均使用最近完整交易日 `TdxStat`，不是盘中实时值；`metric=windowReturn` 使用 `GetIndexDayAll` 板块指数日 K 计算历史窗口收益，推荐同时传 `startDate/endDate`；请求日期遇非交易日时输出 `metricStartDate/metricEndDate` 标明实际采用交易日；`window/offset` 保留兼容；`limit` 默认 20 最大 50；`topStocks` 默认 3 最大 10；`minMembers` 默认 20；`excludeNew` 默认 true |
-| `/api/agent/hotspot-scan-text` | 同 JSON 版 | 返回生成时间、指标来源、最近完整交易日或板块指数实际交易日区间，以及中文强弱与中游板块摘要 |
+| `/api/agent/hotspot-scan` | `sectorType` 可选；`metric` 可选；`startDate` 可选；`endDate` 可选；`window` 可选；`offset` 可选；`limit` 可选；`topStocks` 可选；`minMembers` 可选；`excludeNew` 可选 | `sectorType=concept|style_region|index`，默认 `concept`；`metric=chg20` 默认；`chg5/chg20/chg60/changePct` 按最近完整交易日 `TdxStat` 成分股平均值排序，并为最终入榜板块补充同周期板块指数收益；上涨比例固定为最近完整交易日单日口径；`windowReturn` 按 `GetIndexDayAll` 板块指数区间收益排序；`startDate/endDate` 必须成对且优先于 `window/offset`；`window` 默认20、范围1-250；`offset` 默认0、范围0-500；`limit` 默认20最大50；`topStocks` 默认3最大10；`minMembers` 默认20；`excludeNew` 默认true |
+| `/api/agent/hotspot-scan-text` | 同 JSON 版 | 每个板块依次返回同周期板块指数收益、同周期成分股平均、最近完整交易日上涨比例，以及同周期强势股或抗跌股 |
 | `/api/agent/multi-brief` | `codes` 或 `code` 必填 | `codes=603063,000001` 或多次传 `code=603063&code=000001`；最多 20 只；JSON 返回每只股票的 `stock-brief` 聚合结果 |
 | `/api/agent/multi-brief-text` | 同 JSON 版 | 返回中文多股简讯摘要，每只股票一行，包含价格、涨跌幅、成交额、换手率、20日表现和主要板块 |
 | `/api/agent/auction` | `code` 必填；`session` 可选；`limit` 可选 | `session=open|close|all`，默认 `open`；`open` 过滤 09:20-09:25 开盘不可撤单竞价，`close` 过滤 14:57-15:00，`all` 返回全天竞价记录；`limit` 默认 20 最大 100 |
@@ -475,9 +475,10 @@ Agent 聚合 API 建议保持统一外壳：
 `/api/agent/hotspot-scan` 和 `/api/agent/hotspot-scan-text`：
 
 - 默认：`sectorType=concept&metric=chg20&limit=20&topStocks=3&minMembers=20&excludeNew=true`。
-- `metric=chg20|chg60|chg5|changePct|peTtm|divYield` 使用 `GetTdxStat` 最近完整交易日统计字段排序，绝不表示盘中实时；JSON 的 `constituentDataDate` 和 `metricEndDate`、text 的“最近完整交易日”给出数据日期。
+- `metric=chg20|chg60|chg5|changePct` 使用 `GetTdxStat` 最近完整交易日统计字段排序，绝不表示盘中实时；最终入榜板块通过 `GetIndexDayAll` 补充同周期指数收益。JSON 使用 `boardIndexReturn/boardIndexStartDate/boardIndexEndDate`，text 逐项标明周期。
 - `metric=windowReturn` 使用板块指数日 K 线计算历史区间收益；推荐传 `startDate=YYYY-MM-DD&endDate=YYYY-MM-DD`，也兼容 `YYYYMMDD`。请求日期与实际交易日可能不同，JSON 使用 `metricStartDate/metricEndDate`、text 使用“实际交易日区间”明确标注。
-- `window`、`offset` 仍保留为兼容参数；若同时传 `startDate/endDate`，以日期区间为准，`window/offset` 不参与计算。
+- `window` 默认20、范围1-250；`offset` 默认0、范围0-500；仅用于未传日期区间的 `windowReturn`。若传日期，`startDate/endDate` 必须同时提供并优先于 `window/offset`。
+- 上涨家数/比例固定使用 `constituentDataDate` 对应的最近完整交易日单日 `changePct`；标准周期代表股使用所选 `metric`，`windowReturn` 代表股使用最近完整交易日单日涨跌。
 - `windowReturn` 依赖板块指数 K 线覆盖率；若可计算板块数不足 `limit * 3`，中游板块可能少于 `limit`，接口会在 `warnings` 中说明失败数量。若必须稳定返回每组 20，需要后续改为“板块成分股历史 K 线聚合”口径，而不是当前板块指数 K 线口径。
 - 2026-06-28 修正：`windowReturn` 已改用 `GetIndexDayAll` 读取板块指数 K 线，避免 `GetKlineDayAll` 按普通股票 K 线解码导致日期错位。
 - 本次人工检查输出：

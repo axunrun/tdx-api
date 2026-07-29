@@ -287,21 +287,25 @@ func TestBuildAgentHotspotScanDefaultsToTwentyDayRanking(t *testing.T) {
 }
 
 func TestBuildAgentHotspotScanTextIsCompactChinese(t *testing.T) {
+	indexReturn := 3.5
 	summary := AgentHotspotScan{
 		GeneratedAt:         "2026-07-29T10:30:00+08:00",
 		MetricSource:        "TdxStat成分股聚合",
 		MetricEndDate:       "2026-07-28",
 		ConstituentDataDate: "2026-07-28",
-		Metric:              "changePct",
+		BoardIndexStartDate: "2026-07-08",
+		BoardIndexEndDate:   "2026-07-28",
+		Metric:              "chg20",
 		ExcludeNew:          true,
 		ExcludedCount:       1,
 		Sectors: []AgentHotspotSector{
 			{
-				Name:         "风电",
-				TypeName:     "概念板块",
-				AverageValue: 4,
-				RisingCount:  2,
-				MemberCount:  2,
+				Name:             "风电",
+				TypeName:         "概念板块",
+				AverageValue:     4,
+				BoardIndexReturn: &indexReturn,
+				RisingCount:      2,
+				MemberCount:      2,
 				TopStocks: []AgentStockInSectorItem{
 					{Code: "000001", Name: "平安银行", Value: 5},
 				},
@@ -334,17 +338,20 @@ func TestBuildAgentHotspotScanTextIsCompactChinese(t *testing.T) {
 		"热点扫描：",
 		"生成时间：2026-07-29T10:30:00+08:00",
 		"指标数据：TdxStat成分股聚合，最近完整交易日2026-07-28",
+		"板块指数辅助数据：TDX板块指数日K，实际交易日区间2026-07-08至2026-07-28",
 		"最强板块：",
 		"中游板块：",
 		"最弱板块：",
 		"已排除新股/异常涨幅样本1条",
 		"风电",
-		"成分股平均+4.00%",
+		"板块指数近20日+3.50%",
+		"成分股近20日平均+4.00%",
+		"最近完整交易日2026-07-28上涨2/2",
 		"平安银行+5.00%",
 		"消费电子",
 		"煤炭",
-		"成分股平均-6.00%",
-		"抗跌股：抗跌样本-1.00%",
+		"成分股近20日平均-6.00%",
+		"近20日抗跌股：抗跌样本-1.00%",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("text missing %q: %s", want, text)
@@ -352,5 +359,80 @@ func TestBuildAgentHotspotScanTextIsCompactChinese(t *testing.T) {
 	}
 	if strings.Contains(text, "{") || strings.Contains(text, `"code"`) {
 		t.Fatalf("text should be plain Chinese: %s", text)
+	}
+}
+
+func TestHotspotMetricWindowMatchesTdxStatPeriod(t *testing.T) {
+	tests := []struct {
+		metric string
+		window int
+		ok     bool
+	}{
+		{metric: "changePct", window: 1, ok: true},
+		{metric: "chg5", window: 5, ok: true},
+		{metric: "chg20", window: 20, ok: true},
+		{metric: "chg60", window: 60, ok: true},
+		{metric: "windowReturn", ok: false},
+	}
+	for _, tt := range tests {
+		window, ok := hotspotMetricWindow(tt.metric)
+		if window != tt.window || ok != tt.ok {
+			t.Fatalf("%s window=%d ok=%v", tt.metric, window, ok)
+		}
+	}
+}
+
+func TestHotspotWindowReturnEndsAtCompletedDataDate(t *testing.T) {
+	klines := protocol.Klines{
+		{Time: time.Date(2026, 7, 27, 0, 0, 0, 0, time.Local), Close: 100000},
+		{Time: time.Date(2026, 7, 28, 0, 0, 0, 0, time.Local), Close: 110000},
+		{Time: time.Date(2026, 7, 29, 0, 0, 0, 0, time.Local), Close: 220000},
+	}
+
+	value, startDate, endDate, ok := hotspotWindowReturnUntilDateWithDates(
+		klines,
+		1,
+		"2026-07-28",
+	)
+
+	if !ok || value != 10 || startDate != "2026-07-27" || endDate != "2026-07-28" {
+		t.Fatalf(
+			"return=%.2f range=%s..%s ok=%v",
+			value,
+			startDate,
+			endDate,
+			ok,
+		)
+	}
+}
+
+func TestApplyHotspotIndexReturnsKeepsOnlyCommonRange(t *testing.T) {
+	sectors := []AgentHotspotSector{{Name: "板块A"}, {Name: "板块B"}}
+	results := map[string]hotspotIndexReturn{
+		"板块A": {
+			Value:     3.5,
+			StartDate: "2026-07-08",
+			EndDate:   "2026-07-28",
+		},
+		"板块B": {
+			Value:     2.5,
+			StartDate: "2026-07-09",
+			EndDate:   "2026-07-28",
+		},
+	}
+	mismatched := 0
+
+	applyHotspotIndexReturns(
+		sectors,
+		results,
+		"2026-07-08|2026-07-28",
+		&mismatched,
+	)
+
+	if sectors[0].BoardIndexReturn == nil || *sectors[0].BoardIndexReturn != 3.5 {
+		t.Fatalf("common-range result missing: %+v", sectors[0])
+	}
+	if sectors[1].BoardIndexReturn != nil || mismatched != 1 {
+		t.Fatalf("mismatched range should be omitted: %+v mismatched=%d", sectors[1], mismatched)
 	}
 }

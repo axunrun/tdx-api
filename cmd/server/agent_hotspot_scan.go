@@ -19,6 +19,8 @@ type AgentHotspotScan struct {
 	MetricStartDate     string               `json:"metricStartDate,omitempty"`
 	MetricEndDate       string               `json:"metricEndDate,omitempty"`
 	ConstituentDataDate string               `json:"constituentDataDate,omitempty"`
+	BoardIndexStartDate string               `json:"boardIndexStartDate,omitempty"`
+	BoardIndexEndDate   string               `json:"boardIndexEndDate,omitempty"`
 	SectorType          string               `json:"sectorType"`
 	Metric              string               `json:"metric"`
 	Window              int                  `json:"window,omitempty"`
@@ -37,18 +39,19 @@ type AgentHotspotScan struct {
 }
 
 type AgentHotspotSector struct {
-	Type          string                   `json:"type"`
-	TypeName      string                   `json:"typeName"`
-	Name          string                   `json:"name"`
-	IndexCode     string                   `json:"indexCode,omitempty"`
-	MemberCount   int                      `json:"memberCount"`
-	RisingCount   int                      `json:"risingCount"`
-	FallingCount  int                      `json:"fallingCount"`
-	RisingPct     float64                  `json:"risingPct"`
-	AverageValue  float64                  `json:"averageValue"`
-	ExcludedCount int                      `json:"excludedCount,omitempty"`
-	TopStocks     []AgentStockInSectorItem `json:"topStocks"`
-	BottomStocks  []AgentStockInSectorItem `json:"bottomStocks,omitempty"`
+	Type             string                   `json:"type"`
+	TypeName         string                   `json:"typeName"`
+	Name             string                   `json:"name"`
+	IndexCode        string                   `json:"indexCode,omitempty"`
+	MemberCount      int                      `json:"memberCount"`
+	RisingCount      int                      `json:"risingCount"`
+	FallingCount     int                      `json:"fallingCount"`
+	RisingPct        float64                  `json:"risingPct"`
+	AverageValue     float64                  `json:"averageValue"`
+	BoardIndexReturn *float64                 `json:"boardIndexReturn,omitempty"`
+	ExcludedCount    int                      `json:"excludedCount,omitempty"`
+	TopStocks        []AgentStockInSectorItem `json:"topStocks"`
+	BottomStocks     []AgentStockInSectorItem `json:"bottomStocks,omitempty"`
 }
 
 type AgentHotspotScanText struct {
@@ -59,6 +62,12 @@ type AgentHotspotScanText struct {
 type agentSectorMemberSet struct {
 	Block   AgentBriefBlock
 	Members []stockRow
+}
+
+type hotspotIndexReturn struct {
+	Value     float64
+	StartDate string
+	EndDate   string
 }
 
 func handleAgentHotspotScan(w http.ResponseWriter, r *http.Request) {
@@ -180,6 +189,16 @@ func loadAgentHotspotScan(w http.ResponseWriter, r *http.Request) (AgentHotspotS
 	if metric == "windowReturn" {
 		summary.MetricStartDate = metricStartDate
 		summary.MetricEndDate = metricEndDate
+	} else if metricWindow, ok := hotspotMetricWindow(metric); ok {
+		startDate, endDate, indexWarnings := loadSelectedHotspotIndexReturns(
+			c,
+			&summary,
+			metricWindow,
+			summary.ConstituentDataDate,
+		)
+		summary.BoardIndexStartDate = startDate
+		summary.BoardIndexEndDate = endDate
+		summary.Warnings = append(summary.Warnings, indexWarnings...)
 	}
 	return summary, true
 }
@@ -303,7 +322,7 @@ func buildAgentHotspotScanWithValues(
 		Sectors:             append([]AgentHotspotSector(nil), items[:actualLimit]...),
 		MiddleSectors:       middleSectors,
 		ColdSectors:         append([]AgentHotspotSector(nil), coldSectors[:coldLimit]...),
-		Note:                "统计指标来自最近完整交易日TdxStat；windowReturn来自TDX板块指数日K。上涨比例和代表股始终使用已标注日期的TdxStat成分股数据。",
+		Note:                "榜单按TdxStat成分股统计指标排序；入榜板块补充同周期TDX板块指数日K收益。上涨比例固定使用最近完整交易日单日涨跌，代表股使用榜单所选周期。",
 		Warnings:            warnings,
 	}
 }
@@ -413,18 +432,18 @@ func buildAgentHotspotScanText(summary AgentHotspotScan) string {
 	}
 	b.WriteString("\n\n最强板块：\n")
 	for i, sector := range summary.Sectors {
-		writeHotspotSectorLine(&b, i+1, sector, summary.Metric, "代表股")
+		writeHotspotSectorLine(&b, i+1, sector, summary, "强势股")
 	}
 	if len(summary.MiddleSectors) > 0 {
 		b.WriteString("\n中游板块：\n")
 		for i, sector := range summary.MiddleSectors {
-			writeHotspotSectorLine(&b, i+1, sector, summary.Metric, "代表股")
+			writeHotspotSectorLine(&b, i+1, sector, summary, "强势股")
 		}
 	}
 	if len(summary.ColdSectors) > 0 {
 		b.WriteString("\n最弱板块：\n")
 		for i, sector := range summary.ColdSectors {
-			writeHotspotSectorLine(&b, i+1, sector, summary.Metric, "抗跌股")
+			writeHotspotSectorLine(&b, i+1, sector, summary, "抗跌股")
 		}
 	}
 	b.WriteString("\n用途：该接口用于发现热点板块；单股在板块中的位置请使用stock-in-sector。")
@@ -462,25 +481,51 @@ func writeHotspotDataTime(b *strings.Builder, summary AgentHotspotScan) {
 			summary.MetricEndDate,
 		))
 	}
+	if summary.BoardIndexStartDate != "" && summary.BoardIndexEndDate != "" {
+		b.WriteString(fmt.Sprintf(
+			"板块指数辅助数据：TDX板块指数日K，实际交易日区间%s至%s。\n",
+			summary.BoardIndexStartDate,
+			summary.BoardIndexEndDate,
+		))
+	}
 }
 
 func writeHotspotSectorLine(
 	b *strings.Builder,
 	rank int,
 	sector AgentHotspotSector,
-	metric string,
+	summary AgentHotspotScan,
 	label string,
 ) {
-	valueLabel := "成分股平均"
-	if metric == "windowReturn" {
-		valueLabel = "板块指数"
+	period := hotspotMetricPeriodText(summary.Metric)
+	b.WriteString(fmt.Sprintf("%d. %s：", rank, sector.Name))
+	if summary.Metric == "windowReturn" {
+		b.WriteString(fmt.Sprintf(
+			"板块指数区间%s；",
+			formatPercentText(sector.AverageValue),
+		))
+		period = "最近完整交易日"
+	} else {
+		if sector.BoardIndexReturn != nil {
+			b.WriteString(fmt.Sprintf(
+				"板块指数%s%s；",
+				period,
+				formatPercentText(*sector.BoardIndexReturn),
+			))
+		}
+		b.WriteString(fmt.Sprintf(
+			"成分股%s平均%s；",
+			period,
+			formatPercentText(sector.AverageValue),
+		))
+	}
+	breadthDate := "最近完整交易日"
+	if summary.ConstituentDataDate != "" {
+		breadthDate += summary.ConstituentDataDate
 	}
 	b.WriteString(fmt.Sprintf(
-		"%d. %s：%s%s，上涨%d/%d（%s）。",
-		rank,
-		sector.Name,
-		valueLabel,
-		formatPercentText(sector.AverageValue),
+		"%s上涨%d/%d（%s）。",
+		breadthDate,
 		sector.RisingCount,
 		sector.MemberCount,
 		formatPercentText(sector.RisingPct),
@@ -498,9 +543,143 @@ func writeHotspotSectorLine(
 				formatPercentText(stock.Value),
 			))
 		}
-		b.WriteString(" " + label + "：" + strings.Join(parts, "、") + "。")
+		b.WriteString(" " + period + label + "：" + strings.Join(parts, "、") + "。")
 	}
 	b.WriteString("\n")
+}
+
+func hotspotMetricPeriodText(metric string) string {
+	switch metric {
+	case "chg5":
+		return "近5日"
+	case "chg20":
+		return "近20日"
+	case "chg60":
+		return "近60日"
+	default:
+		return "单日"
+	}
+}
+
+func hotspotMetricWindow(metric string) (int, bool) {
+	switch metric {
+	case "changePct":
+		return 1, true
+	case "chg5":
+		return 5, true
+	case "chg20":
+		return 20, true
+	case "chg60":
+		return 60, true
+	default:
+		return 0, false
+	}
+}
+
+func loadSelectedHotspotIndexReturns(
+	c *tdx.Client,
+	summary *AgentHotspotScan,
+	window int,
+	endDate string,
+) (string, string, []string) {
+	selected := selectedHotspotSectors(*summary)
+	results := make(map[string]hotspotIndexReturn, len(selected))
+	rangeCounts := make(map[string]int)
+	bestRange := ""
+	failed := 0
+	for _, sector := range selected {
+		klines, ok := loadHotspotIndexKlines(c, agentSectorMemberSet{
+			Block: AgentBriefBlock{Name: sector.Name, IndexCode: sector.IndexCode},
+		})
+		if !ok {
+			failed++
+			continue
+		}
+		value, startDate, actualEndDate, ok := hotspotWindowReturnUntilDateWithDates(
+			klines,
+			window,
+			endDate,
+		)
+		if !ok {
+			failed++
+			continue
+		}
+		result := hotspotIndexReturn{
+			Value:     value,
+			StartDate: startDate,
+			EndDate:   actualEndDate,
+		}
+		results[sector.Name] = result
+		rangeKey := startDate + "|" + actualEndDate
+		rangeCounts[rangeKey]++
+		if bestRange == "" || rangeCounts[rangeKey] > rangeCounts[bestRange] {
+			bestRange = rangeKey
+		}
+	}
+	if bestRange == "" {
+		return "", "", []string{"入榜板块均未能计算同周期板块指数收益"}
+	}
+
+	mismatched := 0
+	applyHotspotIndexReturns(summary.Sectors, results, bestRange, &mismatched)
+	applyHotspotIndexReturns(summary.MiddleSectors, results, bestRange, &mismatched)
+	applyHotspotIndexReturns(summary.ColdSectors, results, bestRange, &mismatched)
+
+	warnings := []string(nil)
+	if failed > 0 {
+		warnings = append(warnings, fmt.Sprintf(
+			"有%d个入榜板块未能计算同周期板块指数收益",
+			failed,
+		))
+	}
+	if mismatched > 0 {
+		warnings = append(warnings, fmt.Sprintf(
+			"有%d个入榜板块因指数实际交易日区间不一致未展示指数收益",
+			mismatched,
+		))
+	}
+	parts := strings.SplitN(bestRange, "|", 2)
+	return parts[0], parts[1], warnings
+}
+
+func selectedHotspotSectors(summary AgentHotspotScan) []AgentHotspotSector {
+	selected := make([]AgentHotspotSector, 0, len(summary.Sectors)+
+		len(summary.MiddleSectors)+len(summary.ColdSectors))
+	seen := make(map[string]struct{})
+	for _, sectors := range [][]AgentHotspotSector{
+		summary.Sectors,
+		summary.MiddleSectors,
+		summary.ColdSectors,
+	} {
+		for _, sector := range sectors {
+			if _, exists := seen[sector.Name]; exists {
+				continue
+			}
+			seen[sector.Name] = struct{}{}
+			selected = append(selected, sector)
+		}
+	}
+	return selected
+}
+
+func applyHotspotIndexReturns(
+	sectors []AgentHotspotSector,
+	results map[string]hotspotIndexReturn,
+	expectedRange string,
+	mismatched *int,
+) {
+	for i := range sectors {
+		result, exists := results[sectors[i].Name]
+		if !exists {
+			continue
+		}
+		if result.StartDate+"|"+result.EndDate != expectedRange {
+			*mismatched++
+			continue
+		}
+		value := result.Value
+		sectors[i].BoardIndexReturn = &value
+	}
 }
 
 func loadHotspotWindowReturns(
@@ -684,6 +863,27 @@ func hotspotWindowReturnWithDates(
 		klines[start].Time.Format(time.DateOnly),
 		klines[end].Time.Format(time.DateOnly),
 		true
+}
+
+func hotspotWindowReturnUntilDateWithDates(
+	klines protocol.Klines,
+	window int,
+	endDate string,
+) (float64, string, string, bool) {
+	if endDate == "" {
+		return hotspotWindowReturnWithDates(klines, window, 0)
+	}
+	target, err := time.ParseInLocation(time.DateOnly, endDate, time.Local)
+	if err != nil {
+		return 0, "", "", false
+	}
+	for i := len(klines) - 1; i >= 0; i-- {
+		if klines[i] == nil || dateOnly(klines[i].Time).After(target) {
+			continue
+		}
+		return hotspotWindowReturnWithDates(klines[:i+1], window, 0)
+	}
+	return 0, "", "", false
 }
 
 func hotspotDateWindowReturn(
