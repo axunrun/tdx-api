@@ -12,8 +12,8 @@
 
 1. Agent 优先调用 `/api/agent/*` 聚合接口，原子接口主要用于 WebUI、调试和补查。
 2. 聚合接口默认返回摘要和关键字段，不默认返回大数组、全市场明细或 F10 原文。
-3. 同一能力可以同时存在“子接口”和“聚合字段”，例如 `technical-summary` 可独立调用，也已并入
-   `stock-brief`。
+3. Agent可见文本接口按递进场景组合，避免重复输出：`stock-brief-text`负责基本快照，
+   `kline-summary-text`负责价格结构，`technical-score-text`负责技术指标。
 4. 底层 TDX 方法尽量保持上游兼容；清洗、中文化、限量、派生指标计算放在 Agent 聚合层。
 5. SQLite 负责维护 A 股字典和板块归属，TDX 负责行情与基础数据。
 6. WebUI 是辅助工具，不决定 Agent API 的边界。
@@ -63,14 +63,16 @@ MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text
 | API | 定位 | 状态 | 说明 |
 |---|---|---|---|
 | `/api/agent/stock-brief` | 个股简讯 JSON | 已完成 | 聚合行情、财务、F10 cat0、板块、估值、资金统计、技术指标 |
-| `/api/agent/stock-brief-text` | 个股简讯文本 | 已完成 | 面向 Agent 的中文低噪音输出 |
-| `/api/agent/technical-summary` | 技术指标摘要 | 已完成 | 日/周/月 MA、MACD、Wilder RSI、BOLL、Wilder ATR；各周期最多250根预热，也已并入 `stock-brief` |
+| `/api/agent/stock-brief-text` | 个股基本快照文本 | 已完成 | 当前行情、基本面、财报、板块、估值和数据质量；不含技术指标、周期涨跌和52周区间 |
+| `/api/agent/technical-summary` | 技术指标摘要 | 已完成 | 日/周/月 MA、MACD、Wilder RSI、BOLL、Wilder ATR；各周期最多250根预热；不并入 `stock-brief-text` |
 | SQLite 股票名称库 | A 股代码-名称字典 | 已完成 | 容器启动时刷新，避免只返回股票代码 |
 | SQLite 板块索引库 | 个股所属板块查询 | 已完成 | 容器启动时刷新，更新而非追加 |
 | `/api/agent/kline-summary` | K 线聚合 JSON | 已完成 | 日线按 level/dayCount 限量返回原始 K 线聚合数据；周线、月线全量返回 |
-| `/api/agent/kline-summary-text` | K 线形态与阶段走势文本 | 已完成 | 面向 Agent 的中文低噪音输出，包含 RSI6、OBV、ATR、趋势阶段和风险摘要 |
+| `/api/agent/kline-summary-text` | K 线价格结构文本 | 已完成 | 日/周/月区间涨跌、回撤、波动、位置、形态、连续涨跌、关键价位及日线近52周区间；不重复技术指标 |
 | `/api/agent/trade-flow-estimate` | 单日逐笔资金流估算 JSON | 已完成 | 支持 `date=YYYY-MM-DD`，优先按60个交易日逐笔成交额自适应阈值估算分档资金流；旧周期缓存自动失效 |
 | `/api/agent/trade-flow-estimate-text` | 单日逐笔资金流估算文本 | 已完成 | 面向 Agent 的中文低噪音输出，明确非外部 APP 官方口径 |
+| `/api/agent/margin-trading` | 个股融资融券 JSON | 已完成 | 直连上交所、深交所、北交所官方披露，返回最新 N 个实际交易日的逐日明细 |
+| `/api/agent/margin-trading-text` | 个股融资融券文本 | 已完成 | 面向 Agent 的中文表格，明确查询时间、最新披露日期、请求与实际交易日数量 |
 | `/api/agent/f10-summary` | F10 深度资料 JSON | 已完成 | 覆盖股本、股东、机构、分红、资金、资本、题材、公告、经营、行业、研报等低频资料 |
 | `/api/agent/f10-summary-text` | F10 深度资料文本 | 已完成 | 面向 Agent 的深度基本面补充输出 |
 | `/api/agent/assets/search` | A 股资产搜索 JSON | 已完成 | 模糊解析代码、名称、拼音输入；候选项返回与 `assets/detail` 同颗粒度详情 |
@@ -81,13 +83,13 @@ MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text
 | `/api/agent/stock-in-sector` | 个股板块内位置 JSON | 已完成 | 在指定或默认所属板块内按涨跌/估值等指标排序 |
 | `/api/agent/stock-in-sector-text` | 个股板块内位置文本 | 已完成 | 面向 Agent 的中文低噪音相对强弱摘要 |
 | `/api/agent/sector-detail` | 指定板块深度分析 JSON | 已完成 | 返回板块指数最近完整交易日单日涨跌及日期、截至该日的近20/60日收益，并分开标注成分股统计日期 |
-| `/api/agent/sector-detail-text` | 指定板块深度分析文本 | 已完成 | 面向 Agent 的中文低噪音板块拆解摘要，盘中不会混入未收盘日数据 |
+| `/api/agent/sector-detail-text` | 指定板块深度分析文本 | 已完成 | 在 `hotspot-scan-text` 发现候选板块后深入拆解；调用后无需重复解读热点扫描中的同板块简略数据，盘中不会混入未收盘日数据 |
 | `/api/agent/sector-realtime` | 指定板块盘中实时涨跌 JSON | 已完成 | 仅连续交易时段返回 TDX 板块指数当日日K实时涨跌、交易日期和查询时点 |
 | `/api/agent/sector-realtime-text` | 指定板块盘中实时涨跌文本 | 已完成 | 盘外明确返回无实时数据且不回退历史值 |
 | `/api/agent/hotspot-scan` | 热点扫描 JSON | 已完成 | `dailyReturn` 可按完整日指数涨跌排序；20/60日等标准口径也固定附带最近完整交易日板块指数单日涨跌 |
 | `/api/agent/hotspot-scan-text` | 热点扫描文本 | 已完成 | 面向 Agent 的中文低噪音强弱摘要，同时明确固定单日指数日期、所选周期和实际交易日区间 |
 | `/api/agent/multi-brief` | 多股简讯 JSON | 已完成 | 请求参数传入股票列表，批量复用 `stock-brief`；不作为分时监控接口 |
-| `/api/agent/multi-brief-text` | 多股简讯文本 | 已完成 | 面向 Agent 的中文多股 brief 列表摘要 |
+| `/api/agent/multi-brief-text` | 多股简讯文本 | 已完成 | 多股筛选的批量替代路径；每只股票包含日线10类统一技术指标及日期、盘中状态和复权方式，调用后不再对同批股票逐只重复调用 `stock-brief-text` 与 `technical-score-text` |
 | `/api/agent/auction` | 集合竞价分析 JSON | 已完成 | 默认分析 09:20-09:25 开盘不可撤单竞价，返回末笔、相对昨收、未匹配方向和近 5/20 个交易日日K走势背景 |
 | `/api/agent/auction-text` | 集合竞价分析文本 | 已完成 | 面向 Agent 的中文低噪音竞价摘要 |
 | `/api/agent/market-review` | 市场级复盘 JSON | 已完成 | 按查询时间自动识别非交易日、盘前、09:20-09:25集合竞价、竞价结束、盘中、午休或收盘视角；分开输出带日期和时点的当前实时广度与最近完整盘后广度，并聚合上证、深成、创业板、科创50、北证50、热点板块和可选关注股 |
@@ -102,13 +104,15 @@ MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text
 | API | 参数 | 说明 |
 |---|---|---|
 | `/api/agent/stock-brief` | `code` 必填；`mkt` 可选 | `code` 为股票代码；`mkt` 用于覆盖市场，通常可省略 |
-| `/api/agent/stock-brief-text` | `code` 必填；`mkt` 可选 | 与 JSON 版一致，返回中文低噪音文本 |
-| `/api/agent/technical-summary` | `code` 必填 | 返回日/周/月技术指标摘要 |
-| `/api/agent/technical-score-text` | `code` 必填；`dayCount`、`includeWeeklyMonthly`、`adjust`、`level` 可选 | `dayCount=60..500`，默认250，小于250仍按250根预热；`includeWeeklyMonthly=true|false`，默认true；`adjust=qfq|none`，默认qfq；`level` 仅作信息标记 |
-| `/api/agent/kline-summary` | `code` 必填；`level` 可选；`dayCount` 可选 | `level=brief|normal|deep`；`dayCount` 控制日线展示与阶段统计数量，最大500；递推指标至少使用250根预热 |
-| `/api/agent/kline-summary-text` | `code` 必填；`level` 可选；`dayCount` 可选 | 与 JSON 版一致，但只返回中文清洗摘要 |
+| `/api/agent/stock-brief-text` | `code` 必填；`mkt` 可选 | 返回中文低噪音基本快照；明确行情查询时间、数据日期和状态，财务及估值保留各自报告或统计日期 |
+| `/api/agent/technical-summary` | `code` 必填 | 返回日/周/月未复权技术指标摘要 |
+| `/api/agent/technical-score-text` | `code` 必填；`dayCount`、`includeWeeklyMonthly`、`adjust`、`level` 可选 | `dayCount=60..500`，默认250，小于250仍按250根预热；`includeWeeklyMonthly=true|false`，默认true；`adjust=qfq|none`，默认qfq；输出10类指标，ATR/OBV固定0分；盘中按当前未完成日K动态计算 |
+| `/api/agent/kline-summary` | `code` 必填；`level` 可选；`dayCount` 可选 | `level=brief|normal|deep`；`dayCount` 控制日线展示与阶段统计数量，最大500；近52周区间独立使用最近250根日K计算 |
+| `/api/agent/kline-summary-text` | `code` 必填；`level`、`dayCount`、`adjust` 可选 | `adjust=qfq|none`，默认qfq；近N日收益使用当前收盘与N个交易日前收盘；日线近52周区间使用最近250根日K |
 | `/api/agent/trade-flow-estimate` | `code` 必填；`date` 可选 | `date=YYYY-MM-DD` 或 `YYYYMMDD`；不传默认今天 |
 | `/api/agent/trade-flow-estimate-text` | `code` 必填；`date` 可选 | 与 JSON 版一致，返回中文资金流估算摘要 |
+| `/api/agent/margin-trading` | `code` 必填；`days` 可选 | `days=1..120`，默认30；从交易所最新已披露记录向前取 N 个实际交易日，不按自然日计数，不提供 `start/end` 参数；接口可联通但无该证券明细时返回 `isMarginEligible=false`、`eligibilityStatus=not_eligible` |
+| `/api/agent/margin-trading-text` | 同 JSON 版 | MCP 工具名 `tdx_margin_trading_text`；输出融资余额、融资买入/偿还、融券卖出/余量及交易所可提供的融券或两融余额 |
 | `/api/agent/f10-summary` | `code` 必填；`mkt` 可选 | 返回低频深度 F10 分类裁剪摘要 |
 | `/api/agent/f10-summary-text` | `code` 必填；`mkt` 可选 | 与 JSON 版一致，返回中文低噪音文本 |
 | `/api/agent/assets/search` | `keyword` 必填，也支持 `q`；`limit` 可选 | 搜索 A 股资产，默认最多 20 条，最大 50 条；每个候选项包含 `assets/detail` 同颗粒度字段；查无结果返回 `count=0` 和空 `items`，不作为接口错误 |
@@ -124,7 +128,7 @@ MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text
 | `/api/agent/hotspot-scan` | `sectorType` 可选；`metric` 可选；`startDate` 可选；`endDate` 可选；`window` 可选；`offset` 可选；`limit` 可选；`topStocks` 可选；`minMembers` 可选；`excludeNew` 可选 | `metric` 默认 `chg20`；`dailyReturn` 按板块指数最近完整交易日单日涨跌排序；`chg5/chg20/chg60/changePct` 按最新完整 TdxStat 成分股平均值排序，但每个入榜板块固定附带最近完整交易日指数单日涨跌，20/60日等口径同时保留同周期指数收益；`windowReturn` 按板块指数区间收益排序 |
 | `/api/agent/hotspot-scan-text` | 同 JSON 版 | 每个板块依次返回同周期板块指数收益、同周期成分股平均、最近完整交易日上涨比例，以及同周期强势股或抗跌股 |
 | `/api/agent/multi-brief` | `codes` 或 `code` 必填 | `codes=603063,000001` 或多次传 `code=603063&code=000001`；最多 20 只；JSON 返回每只股票的 `stock-brief` 聚合结果 |
-| `/api/agent/multi-brief-text` | 同 JSON 版 | 返回中文多股简讯摘要，每只股票一行，包含价格、涨跌幅、成交额、换手率、20日表现和主要板块 |
+| `/api/agent/multi-brief-text` | `codes` 必填；`adjust` 可选 | `codes` 为最多20只逗号分隔代码；`adjust=qfq|none`，默认qfq；每只股票输出价格、涨跌幅、20日表现、板块、日线10类统一技术指标和日期状态 |
 | `/api/agent/auction` | `code` 必填；`session` 可选；`limit` 可选 | `session=open|close|all`，默认 `open`；`open` 过滤 09:20-09:25 开盘不可撤单竞价，`close` 过滤 14:57-15:00，`all` 返回全天竞价记录；`limit` 默认 20 最大 100 |
 | `/api/agent/auction-text` | 同 JSON 版 | 返回中文竞价摘要，包含末笔价格、较昨收涨跌、匹配量、未匹配方向、近 5/20 个交易日日K累计涨跌背景和信号 |
 | `/api/agent/market-review` | `session` 可选；`codes` 可选；`top` 可选 | `session=auto|current|morning|full`，默认 `auto`；`auto` 按系统时间判断非交易日、盘前、09:20-09:25集合竞价、竞价结束、盘中、午休和收盘；非 `auto` 值只调整复盘文字视角，不改变数据真实日期；`codes` 传关注股列表；`top` 默认 10 最大 20，控制强/中/弱板块数量 |
@@ -134,8 +138,32 @@ MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text
 | `/api/agent/global-market-brief` | 无参数 | 返回外围权重资产池；分组包括 `risk`、`apac`、`commodity`、`fx`、`bond`、`leader`；每项包含 `price`、`changePct`、`range20`、`range60`，其中区间字段包含涨跌幅、区间最高、区间最低和当前区间位置；TDX 未验证到 Sensex30、俄罗斯RTS 本体稳定直连代码，暂不硬塞无效项 |
 | `/api/agent/global-market-brief-text` | 无参数 | 返回中文摘要；保留每项现价、当日涨跌、20/60 日涨跌幅、区间高低点和观察意义 |
 
+## 行情数据统一时效口径
+
+- 交易时段：当前行情、日K及其派生结果必须纳入查询时点的实时行情；今日K线标记为未完成动态值。
+- 午间休市：使用上午收盘时的最后行情和未完成日K，并明确截止上午收盘。
+- 盘后：使用当日最终收盘行情和完整日K。
+- 盘前、周末及其他非交易时间：使用最近完整交易日行情，不用历史统计值冒充当前实时值。
+- 每个文本接口必须输出查询时间、行情或K线数据日期及状态；周线、月线等独立周期同时标注各自截止日期。
+- 财务、F10、估值统计等低频数据不做实时推演，必须保留报告期、更新日期或统计日期。
+- 近N日涨跌统一定义为“最新收盘价 / N个交易日前收盘价 - 1”，需要N+1根K线，禁止只用N根K线形成N-1个涨跌间隔。
+
 ## 技术指标统一口径
 
+- 技术指标只由 `technical-score-text` 和独立批量场景 `multi-brief-text` 输出：
+
+| 接口 | 周期 | 统一指标 | 接口特有内容 |
+|---|---|---|---|
+| `technical-score-text` | 日/周/月 | MA、MACD、RSI、BOLL、KDJ、BIAS、ATR、OBV、量价；日线多空比 | 日线方向评分；ATR、OBV固定0分，仅作观察 |
+| `multi-brief-text` | 日线 | MA、MACD、RSI、BOLL、KDJ、BIAS、ATR、OBV、量价、多空比 | 多股行情、20日表现和板块对比 |
+
+- 统一颗粒度：MA5/10/20/60/120；MACD DIF/DEA/柱值；RSI6/12/24；
+  BOLL上轨/中轨/下轨/价格位置；KDJ K/D/J及交叉状态；BIAS5/10；
+  ATR14及占收盘价比例；OBV近5/20根变化及量价背离；量比、涨跌幅及量价信号；
+  多空比使用日线数据日期对应的逐笔成交估算。
+- 多空比只在日线输出，周线和月线不将逐笔成交强行聚合为周期方向。
+- ATR衡量波动、OBV用于量价确认，两者不直接代表涨跌方向；在
+  `technical-score-text` 中固定为0分，不改变原有技术总分区间。
 - RSI6/12/24 使用 Wilder 平滑：以前 `n` 个涨跌初始化平均涨幅和平均跌幅，随后按
   `1/n` 逐根递推。
 - KDJ 使用标准 KDJ(9,3,3)：RSV 取近 9 根最高价和最低价，`K0=D0=50`，K、D
@@ -144,9 +172,9 @@ MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text
 - “金叉/死叉”必须比较前一周期与当前周期的 K、D 关系；只有位置发生穿越才输出交叉，
   否则仅输出“K在D上方/下方”。
 - 日/周/月递推指标最多使用250根可用K线预热；上市历史不足时使用全部可得数据。
-  `kline-summary-text` 的 `level/dayCount` 只控制展示和阶段统计，不缩短指标预热序列。
-- 指标复算必须同时对齐K线周期、截止日期和复权方式。`technical-score-text`日线默认前复权，
-  `kline-summary-text`和`stock-brief-text`日线使用未复权数据。
+- 指标复算必须同时对齐K线周期、截止日期和复权方式。`technical-score-text` 与
+  `multi-brief-text` 日线默认前复权，可通过 `adjust=none` 改为未复权；共同指标复用
+  相同K线获取与本地计算方法。
 
 ## 已确认的 stock-brief 边界
 
@@ -159,8 +187,9 @@ MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text
 - 基本面摘要：总股本、流通股本、总市值、流通市值、总资产、净资产、收入、利润、经营现金流、股东人数。
 - F10 cat0 最新财报提示：报告期、每股净资产、每股经营现金流、加权 ROE、营收同比、净利润同比。
 - 所属板块摘要：概念、地域/风格、指数板块。
-- 估值与表现：PE、PB、股息率、5/20/60 日和年初至今涨跌幅、52 周区间。
-- 技术指标摘要：来自 `technical-summary` 的日/周/月指标。
+- 估值摘要：PE、PB、股息率，并明确估值统计日期。
+- 不包含技术指标、5/20/60日涨跌和52周价格区间；分别交由
+  `technical-score-text` 与 `kline-summary-text` 提供。
 
 明确不放入：
 
@@ -180,11 +209,11 @@ MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text
 | API | 用途 | 优先级 | 组合方法/数据源 | 备注 |
 |---|---|---:|---|---|
 | `/api/agent/stock-brief` | 个股简讯 | 已完成 | `GetQuote`、`GetFinanceInfo`、F10 cat0、SQLite 板块、`GetTdxStat`、`GetTdxStat2`、`technical-summary` | 主入口之一 |
-| `/api/agent/stock-brief-text` | 个股简讯文本 | 已完成 | 同上 | 给 Agent 低上下文阅读 |
-| `/api/agent/technical-summary` | 技术指标摘要 | 已完成 | 日/周/月 K 线本地计算 | 可独立调用，也并入 brief |
-| `/api/agent/technical-score-text` | 统一技术评分文本 | 已完成 | Wilder RSI、递推 KDJ(9,3,3)、MA、MACD、BOLL、BIAS、量价和多空比 | 金叉/死叉必须比较前后两个周期，避免把静态 K/D 位置误报为交叉 |
-| `/api/agent/kline-summary` | K 线摘要 | 已完成 | `GetKlineDay`、`GetKlineWeekAll`、`GetKlineMonthAll` | 输出 RSI6、OBV、ATR、阶段涨跌、量能、关键价位、均线结构、趋势阶段和风险等级，不返回原始数组 |
-| `/api/agent/kline-summary-text` | K 线摘要文本 | 已完成 | 同上 | 给 Agent 低上下文阅读 |
+| `/api/agent/stock-brief-text` | 个股基本快照文本 | 已完成 | 行情、财务、F10 cat0、SQLite板块、估值 | 不含技术指标和历史价格结构 |
+| `/api/agent/technical-summary` | 技术指标摘要 | 已完成 | 日/周/月 K 线本地计算 | 独立原始摘要，不并入 `stock-brief-text` |
+| `/api/agent/technical-score-text` | 统一技术评分文本 | 已完成 | 10类统一技术指标；Wilder RSI/ATR、递推 KDJ(9,3,3) | ATR/OBV固定0分；明确数据日期和盘中状态；日线缺失时总分不可用 |
+| `/api/agent/kline-summary` | K 线摘要 | 已完成 | `GetKlineDay`、`GetKlineWeekAll`、`GetKlineMonthAll` | JSON返回原始K线聚合数据；文本版只做价格结构摘要 |
+| `/api/agent/kline-summary-text` | K 线价格结构文本 | 已完成 | 同上 | 不含技术指标；提供近N日收益、回撤、形态、关键价位和近52周区间 |
 | `/api/agent/trade-flow-estimate` | 单日资金流估算 | 已完成 | `GetMinuteTradeAll`、`GetHistoryMinuteTradeDay` | 支持指定日期；按超大/大/中/小单分档估算 |
 | `/api/agent/trade-flow-estimate-text` | 单日资金流估算文本 | 已完成 | 同上 | 给 Agent 低上下文阅读 |
 | `/api/agent/f10-summary` | F10深度资料 JSON | 已完成 | F10 cat3-cat6、cat8-cat11、cat13-cat15 | 低频深度资料，不重复 `stock-brief` 的最新提示和财务字段 |
@@ -448,8 +477,8 @@ Agent 聚合 API 建议保持统一外壳：
 - `candle`：最后一根 K 线的实体、上影线、下影线、振幅和形态。
 - `volatility`：ATR、ATR 占比、5/20 根平均振幅和波动风险。
 - `streak`：最近连续上涨、下跌或平盘方向、持续根数和区间涨跌幅。
-- `signals`：继续保留均线与风险信号，并追加 `gap_up`、`gap_down`、
-  `long_upper_shadow`、`long_lower_shadow`、连续涨跌等关键形态信号。
+- `signals`：保留回撤、波动等价格风险信号，并追加 `gap_up`、`gap_down`、
+  `long_upper_shadow`、`long_lower_shadow`、连续涨跌等关键形态信号；不输出均线等技术指标信号。
 
 边界保持不变：日线按 `level/dayCount` 限量，周线和月线全量取数后只输出
 摘要，不返回原始 K 线数组。
@@ -626,15 +655,25 @@ WebUI 只读展示，不提供人工下单按钮，不直接读取 SQLite，也�
 
 | MCP 工具 | 作用 | 关键参数 |
 |---|---|---|
-| `tdx_paper_account` | 创建、查询、校正持仓、永久删除模拟账户 | `action=create|list|get|set_position|delete|close|recreate`；`accountId`；`position={code,securityName,assetType,quantity,costPrice}`；`quantity=0` 删除持仓；`reason`；副作用操作必须传 `confirm=true` |
-| `tdx_paper_order` | 按指定价格立即记录买卖并查询历史记录 | `action=place|cancel|list|get`；`accountId`；`code`；`side=buy|sell`；`price` 必填成交价；`quantity`；`orderId`；`reason` 交易理由；`place/cancel` 必须传 `confirm=true` |
-| `tdx_paper_portfolio` | 查询资金、持仓、成交、收益和清仓表现 | `accountId`；`view=summary|cash|positions|trades|orders|performance|closed_positions|actions`；`from`；`to`；`limit`；`code` |
+| `tdx_paper_account` | 创建、列出、校正持仓、永久删除模拟账户 | `action=create|list|set_position|delete`；`list`只返回账户ID、名称、状态；`accountId`；`position={code,securityName,assetType,quantity,costPrice}`；`quantity=0`删除持仓；副作用操作必须传`confirm=true`；重建使用`delete`后再`create` |
+| `tdx_paper_order` | 按指定价格立即记录买卖；查询或撤销单笔遗留委托 | `action=place|cancel|get`；`accountId`；`code`；`side=buy|sell`；`price`必填成交价；`quantity`；`orderId`；`reason`只写入数据库和WebUI时间线；`place/cancel`必须传`confirm=true` |
+| `tdx_paper_portfolio` | 固定输出账户、现金、成本、总资产及按股票归类的成交历史 | `accountId`必填；`from`、`to`过滤成交日期；`limit`为每只股票最多成交数，默认20最大200；`code`可选筛选股票；无`view`参数 |
 | `tdx_paper_rules` | 返回模拟交易规则说明 | 无必填参数 |
 
-当前第一版已实现账户创建/查询/永久删除、当前持仓账务校正、立即记录买卖、历史委托查询、持仓查询、成交查询、清仓查询和规则说明。
+`tdx_paper_portfolio`的`stocks[]`以股票代码独立归类，每只股票只出现一条：当前持仓输出数量、
+可卖数量、冻结数量、平均成本、总成本、最新价格、市值和未实现盈亏；该股票成交历史放在同一条的
+`trades[]`中。已清仓但在所选历史范围内有成交的股票以`positionStatus=closed`保留。成交历史不输出
+交易理由，理由仍保存在SQLite和WebUI行为时间线中。
+
+账户总资产按`可用现金 + 冻结现金 + 当前持仓市值`计算。portfolio调用时按统一行情时效口径向TDX
+查询持仓最新价格；任一持仓行情缺失时，持仓市值和总资产返回`null`并附带warning，不用持仓成本
+冒充当前市值。`code`只筛选`stocks[]`，账户级资产汇总始终按完整账户计算。
+
+当前已实现账户创建/列表/永久删除、当前持仓账务校正、立即记录买卖、单笔遗留委托查询与撤销、
+固定账户快照和规则说明。
 账户 `delete` 会在共享 SQLite 内永久删除指定账户及其持仓、委托、成交、资金流水、持仓流水、
 资产快照、清仓跟踪和 Agent 行为记录，不删除数据库文件，也不影响其他账户。
-账户 `close/recreate` 保留 schema，后续在需要销户重建审计流程时再打开。
+不提供含义重叠且未实现的 `close/recreate`；用户明确要求重建时依次调用 `delete` 和 `create`。
 
 ### Paper HTTP API
 
@@ -653,7 +692,8 @@ WebUI 只读展示，不提供人工下单按钮，不直接读取 SQLite，也�
 - 买卖方向：`buy`、`sell`。
 - 数量必须为 100 的整数倍。
 - `place` 必须由 Agent 提供正数 `price`，服务端按该价格立即整笔成交并自动记账。
-- 模拟交易不读取 TDX 实时行情、不判断交易日期或交易时段，也不启动定时撮合任务。
+- 下单记账不读取TDX实时行情、不判断交易日期或交易时段，也不启动定时撮合任务；
+  `tdx_paper_portfolio`只在查询时读取TDX最新行情用于当前持仓估值。
 - 买入后持仓立即可卖；卖出时校验当前可卖数量，不执行 T+1 限制。
 - 每次成交自动更新现金、持仓、费用、成交、清仓表现和账面资产快照。
 - `set_position` 直接新增或覆盖绝对持仓，`quantity=0` 删除持仓；不改变现金、不生成成交记录。

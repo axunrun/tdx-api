@@ -146,6 +146,21 @@ func TestBuildAgentKlinePeriodSummaryUsesCompactSignals(t *testing.T) {
 	}
 }
 
+func TestKlineReturnPctUsesNTradingIntervals(t *testing.T) {
+	klines := protocol.Klines{
+		{Close: protocol.Yuan(100)},
+		{Close: protocol.Yuan(110)},
+		{Close: protocol.Yuan(120)},
+		{Close: protocol.Yuan(130)},
+		{Close: protocol.Yuan(140)},
+		{Close: protocol.Yuan(150)},
+	}
+
+	if got := klineReturnPct(klines, 5); math.Abs(got-50) > 1e-9 {
+		t.Fatalf("5-day return = %.4f, want 50.0000", got)
+	}
+}
+
 func TestKlineSummaryUsesFullSeriesForRecursiveIndicators(t *testing.T) {
 	klines := make(protocol.Klines, 0, 250)
 	start := time.Date(2025, 1, 1, 0, 0, 0, 0, time.Local)
@@ -171,6 +186,26 @@ func TestKlineSummaryUsesFullSeriesForRecursiveIndicators(t *testing.T) {
 	}
 	if math.Abs(period.Volatility.Atr-klines.ATRFloat(14)) > 1e-9 {
 		t.Fatalf("ATR14 = %.12f, want full-series %.12f", period.Volatility.Atr, klines.ATRFloat(14))
+	}
+	technical := buildAgentTechnicalPeriod("day", "日线", klines)
+	technicalRSI, ok := metricValue(technical.RSI["rsi6"])
+	if !ok || math.Abs(*period.RSI6-technicalRSI) > 1e-9 {
+		t.Fatalf("RSI6 differs from technical-score period: %.12f vs %.12f", *period.RSI6, technicalRSI)
+	}
+	technicalMA20, ok := metricValue(technical.MA["ma20"])
+	if !ok || period.MA20 == nil || math.Abs(*period.MA20-technicalMA20) > 1e-9 {
+		t.Fatalf("MA20 differs from technical-score period: %v vs %.12f", period.MA20, technicalMA20)
+	}
+	if technical.ATR.ATR14 == nil ||
+		math.Abs(period.Volatility.Atr-*technical.ATR.ATR14) > 1e-9 {
+		t.Fatalf(
+			"ATR14 differs from technical-score period: %.12f vs %v",
+			period.Volatility.Atr,
+			technical.ATR.ATR14,
+		)
+	}
+	if period.OBV.Signal != technical.OBV.Signal {
+		t.Fatalf("OBV differs from technical-score period: %q vs %q", period.OBV.Signal, technical.OBV.Signal)
 	}
 }
 
@@ -214,9 +249,20 @@ func TestBuildAgentKlinePeriodSummaryAddsSecondBatchKlineDetails(t *testing.T) {
 }
 
 func TestBuildAgentKlineSummaryTextIsChineseAndCompact(t *testing.T) {
+	technical := buildAgentTechnicalPeriod(
+		"day",
+		"日线",
+		protocol.Klines(testKlineResp(250).List),
+	)
 	summary := AgentKlineSummary{
 		Code: "603063",
 		Name: "禾望电气",
+		dayData: agentDayDataContext{
+			QueryTime: time.Date(2026, 7, 31, 12, 0, 0, 0, time.Local),
+			DataDate:  "2026-07-31",
+			Status:    "午间休市动态值，当前日K尚未收盘",
+			Adjust:    "qfq",
+		},
 		analysisPeriods: []AgentKlinePeriodSummary{
 			{
 				Period:         "day",
@@ -272,9 +318,26 @@ func TestBuildAgentKlineSummaryTextIsChineseAndCompact(t *testing.T) {
 					Count:     3,
 					ChangePct: 5.6,
 				},
-				Summary: "中期趋势保持上行，短线仍需观察量能延续。",
-				Signals: []string{"收盘高于MA20", "收盘高于MA60"},
+				Summary:   "中期趋势保持上行，短线仍需观察量能延续。",
+				Signals:   []string{"区间最大回撤较大"},
+				Technical: technical,
+				YearRange: AgentKlineYearRange{
+					Available:         true,
+					StartDate:         "2025-07-31",
+					EndDate:           "2026-07-31",
+					High:              66.80,
+					Low:               28.50,
+					DistanceToHighPct: -24.93,
+					DistanceToLowPct:  75.96,
+				},
 			},
+		},
+		bullBear: technicalScoreRow{
+			Period: "日线",
+			Item:   "多空比",
+			Value:  "买/卖 1.25",
+			Signal: "主动买入估算占优",
+			Score:  1,
 		},
 	}
 
@@ -283,6 +346,10 @@ func TestBuildAgentKlineSummaryTextIsChineseAndCompact(t *testing.T) {
 	mustContain := []string{
 		"股票：禾望电气（603063）",
 		"K线摘要：",
+		"查询时间：2026-07-31T12:00:00",
+		"日线数据日期：2026-07-31",
+		"日线数据状态：午间休市动态值，当前日K尚未收盘",
+		"日线复权口径：前复权（qfq）",
 		"日线：样本 120/250",
 		"区间 2026-01-01 至 2026-06-24",
 		"涨跌幅 +12.34%",
@@ -291,11 +358,17 @@ func TestBuildAgentKlineSummaryTextIsChineseAndCompact(t *testing.T) {
 		"阶段：上升趋势中的回调",
 		"风险：中",
 		"近5/20/60涨跌：+1.20%/-3.40%/+12.34%",
-		"量能：温和放量",
-		"RSI6 20.46",
-		"均线：多头排列",
+		"近52周区间 28.50-66.80",
 		"距20日高点 -16.42%",
-		"收盘高于MA20",
+		"区间最大回撤较大",
+	}
+	for _, unwanted := range []string{
+		"技术指标：", "MACD：", "RSI：", "BOLL：", "KDJ：",
+		"BIAS：", "ATR：", "OBV：", "量价：", "多空比：",
+	} {
+		if strings.Contains(content, unwanted) {
+			t.Fatalf("content should not contain %q:\n%s", unwanted, content)
+		}
 	}
 	for _, want := range mustContain {
 		if !strings.Contains(content, want) {

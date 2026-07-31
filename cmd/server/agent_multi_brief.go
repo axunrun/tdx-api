@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/injoyai/tdx"
 )
@@ -60,17 +61,26 @@ func loadAgentMultiBrief(w http.ResponseWriter, r *http.Request) (AgentMultiBrie
 		jsonErr(w, "TDX客户端未连接")
 		return AgentMultiBrief{}, false
 	}
-	return buildAgentMultiBrief(c, codes), true
+	adjust, err := normalizeTechnicalAdjust(r.URL.Query().Get("adjust"))
+	if err != nil {
+		jsonErr(w, err.Error())
+		return AgentMultiBrief{}, false
+	}
+	return buildAgentMultiBrief(c, codes, adjust), true
 }
 
-func buildAgentMultiBrief(c *tdx.Client, codes []string) AgentMultiBrief {
+func buildAgentMultiBrief(c *tdx.Client, codes []string, adjust string) AgentMultiBrief {
 	items := make([]AgentMultiBriefItem, 0, len(codes))
 	warnings := make([]string, 0)
+	now := time.Now()
 	for _, code := range codes {
-		brief, err := buildAgentStockBrief(c, code, "")
+		brief, err := buildAgentStockBriefAt(c, code, "", adjust, now, true)
 		if err != nil {
 			warnings = append(warnings, fmt.Sprintf("%s失败: %v", code, err))
 			continue
+		}
+		if warning := attachAgentBullBear(c, code, brief.Technical); warning != "" {
+			brief.Warnings = append(brief.Warnings, warning)
 		}
 		items = append(items, AgentMultiBriefItem{
 			Code:  code,
@@ -111,11 +121,49 @@ func parseAgentCodeList(r *http.Request) []string {
 func buildAgentMultiBriefText(summary AgentMultiBrief) string {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("多股简讯：共%d只。\n", summary.Count))
+	if len(summary.Items) > 0 && summary.Items[0].Brief.Technical != nil {
+		queryTime := summary.Items[0].Brief.Technical.dayData.QueryTime
+		if !queryTime.IsZero() {
+			b.WriteString(fmt.Sprintf("查询时间：%s\n", queryTime.Format(time.RFC3339)))
+		}
+	}
 	for i, item := range summary.Items {
 		b.WriteString(fmt.Sprintf("%d. %s\n", i+1, multiBriefLine(item.Brief)))
+		if technical := multiBriefDayTechnicalText(item.Brief.Technical); technical != "" {
+			b.WriteString("   " + technical + "\n")
+		}
 	}
 	appendWarningsText(&b, summary.Warnings)
 	return strings.TrimSpace(b.String())
+}
+
+func multiBriefDayTechnicalText(summary *AgentTechnicalSummary) string {
+	if summary == nil {
+		return ""
+	}
+	var day *AgentTechnicalPeriod
+	for i := range summary.Periods {
+		if summary.Periods[i].Period == "day" {
+			day = &summary.Periods[i]
+			break
+		}
+	}
+	context := summary.dayData
+	if day == nil {
+		return fmt.Sprintf(
+			"日线技术：数据日期%s；%s；%s；指标不可用。",
+			context.DataDate,
+			context.Status,
+			agentDayAdjustText(context.Adjust),
+		)
+	}
+	parts := []string{
+		fmt.Sprintf("数据日期%s", context.DataDate),
+		context.Status,
+		agentDayAdjustText(context.Adjust),
+	}
+	parts = append(parts, formatAgentTechnicalPeriod(*day, &summary.bullBear))
+	return "日线技术：" + strings.Join(parts, "；") + "。"
 }
 
 func multiBriefLine(brief AgentStockBrief) string {
@@ -134,9 +182,14 @@ func multiBriefLine(brief AgentStockBrief) string {
 		if brief.Quote.TurnoverRate > 0 {
 			parts = append(parts, "换手率"+formatPercentText(brief.Quote.TurnoverRate))
 		}
+		parts = append(parts, fmt.Sprintf(
+			"行情日期%s，%s",
+			valueOrDash(brief.Quote.DataDate),
+			valueOrDash(brief.Quote.DataStatus),
+		))
 	}
-	if brief.Stat != nil {
-		parts = append(parts, "20日"+formatPercentText(brief.Stat.Chg20))
+	if value, ok := multiBriefReturn20(brief.Technical); ok {
+		parts = append(parts, "20日"+formatPercentText(value))
 	}
 	if len(brief.Blocks) > 0 {
 		parts = append(parts, "板块："+multiBriefBlockNames(brief.Blocks, 3))
@@ -145,6 +198,18 @@ func multiBriefLine(brief AgentStockBrief) string {
 		parts = append(parts, "提示："+strings.Join(brief.Warnings, "；"))
 	}
 	return strings.Join(parts, "；")
+}
+
+func multiBriefReturn20(summary *AgentTechnicalSummary) (float64, bool) {
+	if summary == nil {
+		return 0, false
+	}
+	for _, period := range summary.Periods {
+		if period.Period == "day" {
+			return period.Return20, true
+		}
+	}
+	return 0, false
 }
 
 func multiBriefBlockNames(blocks []AgentBriefBlock, limit int) string {

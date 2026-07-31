@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/injoyai/tdx"
 	"github.com/injoyai/tdx/protocol"
@@ -246,15 +247,56 @@ func TestTechnicalScoreKlineHeaderDescribesAdjust(t *testing.T) {
 	}
 }
 
+func TestTechnicalScoreDayDataStatus(t *testing.T) {
+	location := time.FixedZone("CST", 8*60*60)
+	latest := time.Date(2026, 7, 31, 0, 0, 0, 0, location)
+	tests := []struct {
+		name string
+		now  time.Time
+		want string
+	}{
+		{
+			name: "trading",
+			now:  time.Date(2026, 7, 31, 10, 30, 0, 0, location),
+			want: "盘中动态值，当前日K尚未收盘",
+		},
+		{
+			name: "lunch break",
+			now:  time.Date(2026, 7, 31, 12, 0, 0, 0, location),
+			want: "午间休市动态值，当前日K尚未收盘",
+		},
+		{
+			name: "after close",
+			now:  time.Date(2026, 7, 31, 15, 1, 0, 0, location),
+			want: "当日收盘值，日K已完成",
+		},
+		{
+			name: "preopen uses previous close",
+			now:  time.Date(2026, 8, 3, 8, 30, 0, 0, location),
+			want: "最近完整交易日收盘值",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := technicalScoreDayDataStatus(latest, tt.now); got != tt.want {
+				t.Fatalf("status = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestScoreTechnicalPeriodCalculatesFormerMissingRows(t *testing.T) {
-	klines := testTechnicalScoreKlines()
-	rows := scoreTechnicalPeriod(AgentTechnicalPeriod{Name: "日线", Period: "day"}, klines)
+	klines := testTechnicalScoreLongKlines()
+	period := buildAgentTechnicalPeriod("day", "日线", klines)
+	rows := scoreTechnicalPeriod(period, klines)
 
 	seen := map[string]technicalScoreRow{}
 	for _, row := range rows {
 		seen[row.Item] = row
 	}
-	for _, item := range []string{"KDJ", "BIAS", "量价"} {
+	for _, item := range []string{
+		"MA", "MACD", "RSI", "BOLL", "KDJ", "BIAS", "ATR", "OBV", "量价",
+	} {
 		row, ok := seen[item]
 		if !ok {
 			t.Fatalf("%s row missing: %+v", item, rows)
@@ -263,6 +305,27 @@ func TestScoreTechnicalPeriodCalculatesFormerMissingRows(t *testing.T) {
 			t.Fatalf("%s row not calculated: %+v", item, row)
 		}
 	}
+	if seen["ATR"].Score != 0 || seen["OBV"].Score != 0 {
+		t.Fatalf("ATR/OBV must remain observation-only: ATR=%+v OBV=%+v", seen["ATR"], seen["OBV"])
+	}
+}
+
+func testTechnicalScoreLongKlines() protocol.Klines {
+	out := make(protocol.Klines, 0, 250)
+	last := protocol.Yuan(10)
+	for i := 0; i < 250; i++ {
+		close := protocol.Yuan(float64(10+i/20) + float64(i%7)/10)
+		out = append(out, &protocol.Kline{
+			Last:   last,
+			Open:   protocol.Yuan(close.Float64() - 0.1),
+			High:   protocol.Yuan(close.Float64() + 0.2),
+			Low:    protocol.Yuan(close.Float64() - 0.3),
+			Close:  close,
+			Volume: int64(1000 + i*10),
+		})
+		last = close
+	}
+	return out
 }
 
 func TestScoreKDJUsesRecursiveValuesAndRealCrossingState(t *testing.T) {

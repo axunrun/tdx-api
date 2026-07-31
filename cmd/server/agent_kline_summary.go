@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/injoyai/tdx"
 	"github.com/injoyai/tdx/protocol"
@@ -41,6 +42,8 @@ type AgentKlineSummary struct {
 	Note            string                `json:"note"`
 	Warnings        []string              `json:"warnings,omitempty"`
 	analysisPeriods []AgentKlinePeriodSummary
+	dayData         agentDayDataContext
+	bullBear        technicalScoreRow
 }
 
 type AgentKlinePeriodRaw struct {
@@ -93,6 +96,18 @@ type AgentKlinePeriodSummary struct {
 	Streak         AgentKlineStreak
 	Signals        []string
 	Summary        string
+	Technical      AgentTechnicalPeriod `json:"-"`
+	YearRange      AgentKlineYearRange
+}
+
+type AgentKlineYearRange struct {
+	Available         bool
+	StartDate         string
+	EndDate           string
+	High              float64
+	Low               float64
+	DistanceToHighPct float64
+	DistanceToLowPct  float64
 }
 
 type AgentKlineVolumeSummary struct {
@@ -162,6 +177,7 @@ func handleAgentKlineSummary(w http.ResponseWriter, r *http.Request) {
 		code,
 		r.URL.Query().Get("level"),
 		r.URL.Query().Get("dayCount"),
+		"none",
 	)
 	if err != nil {
 		jsonErr(w, err.Error())
@@ -186,6 +202,7 @@ func handleAgentKlineSummaryText(w http.ResponseWriter, r *http.Request) {
 		code,
 		r.URL.Query().Get("level"),
 		r.URL.Query().Get("dayCount"),
+		r.URL.Query().Get("adjust"),
 	)
 	if err != nil {
 		jsonErr(w, err.Error())
@@ -203,7 +220,13 @@ func buildAgentKlineSummary(
 	code string,
 	level string,
 	rawDayCount string,
+	rawAdjust string,
 ) (AgentKlineSummary, error) {
+	adjust, err := normalizeTechnicalAdjust(rawAdjust)
+	if err != nil {
+		return AgentKlineSummary{}, err
+	}
+	now := time.Now()
 	dayCount := 0
 	if rawDayCount != "" {
 		dayCount, _ = strconv.Atoi(rawDayCount)
@@ -224,7 +247,12 @@ func buildAgentKlineSummary(
 		))
 	}
 
-	if resp, err := c.GetKlineDay(code, 0, uint16(indicatorWarmupCount(limits.Day))); err != nil {
+	if resp, err := fetchTechnicalDayKlines(
+		c,
+		code,
+		uint16(indicatorWarmupCount(limits.Day)),
+		adjust,
+	); err != nil {
 		warnings = append(warnings, agentKlinePeriodFailMessage("day", err))
 	} else if resp != nil && len(resp.List) > 0 {
 		appendPeriod("day", protocol.Klines(resp.List), limits.Day)
@@ -246,6 +274,17 @@ func buildAgentKlineSummary(
 		}
 		return AgentKlineSummary{}, fmt.Errorf("K线数据不足")
 	}
+	technicalPeriods := make([]AgentTechnicalPeriod, 0, 1)
+	for _, period := range analysisPeriods {
+		if period.Period != "day" {
+			continue
+		}
+		technicalPeriods = append(technicalPeriods, AgentTechnicalPeriod{
+			Period:     "day",
+			LatestDate: period.EndDate,
+		})
+		break
+	}
 	return AgentKlineSummary{
 		Code:            code,
 		Name:            queryStockName(code),
@@ -256,6 +295,7 @@ func buildAgentKlineSummary(
 		Note:            "JSON返回原始K线聚合数据：日线按level/dayCount限量，周线和月线全量返回；Agent分析请使用kline-summary-text。",
 		Warnings:        warnings,
 		analysisPeriods: analysisPeriods,
+		dayData:         buildAgentDayDataContext(technicalPeriods, adjust, now),
 	}, nil
 }
 
@@ -375,6 +415,7 @@ func buildAgentKlinePeriodSummary(
 	}
 	ma20 := optionalKlineMA(used, 20)
 	ma60 := optionalKlineMA(used, 60)
+	stageReturns := klineStageReturns(used)
 	summary := AgentKlinePeriodSummary{
 		Period:         period,
 		Name:           name,
@@ -389,12 +430,12 @@ func buildAgentKlinePeriodSummary(
 		ChangePct:      changePct,
 		MaxDrawdownPct: klineMaxDrawdownPct(used),
 		VolatilityPct:  volatilityPct,
-		Trend:          klineTrend(changePct, close, ma20, ma60),
+		Trend:          klinePriceTrend(stageReturns),
 		Position:       klineRangePosition(close, high, low),
 		RSI6:           optionalKlineRSI(klines, 6),
 		MA20:           ma20,
 		MA60:           ma60,
-		StageReturns:   klineStageReturns(used),
+		StageReturns:   stageReturns,
 		Volume:         klineVolumeSummary(used),
 		OBV:            buildOBV(klines),
 		KeyLevels:      klineKeyLevels(used, close),
@@ -402,6 +443,10 @@ func buildAgentKlinePeriodSummary(
 		Candle:         klineCandleSummary(last),
 		Volatility:     klineVolatilitySummary(klines),
 		Streak:         klineStreakSummary(used),
+		Technical:      buildAgentTechnicalPeriod(period, name, klines),
+	}
+	if period == "day" {
+		summary.YearRange = klineYearRange(klines, close)
 	}
 	summary.TrendStage = klineTrendStage(summary)
 	summary.RiskLevel = klineRiskLevel(summary)
@@ -452,7 +497,7 @@ func klineReturnPct(klines protocol.Klines, days int) float64 {
 	if len(klines) < 2 {
 		return 0
 	}
-	start := len(klines) - days
+	start := len(klines) - days - 1
 	if start < 0 {
 		start = 0
 	}
@@ -462,6 +507,33 @@ func klineReturnPct(klines protocol.Klines, days int) float64 {
 		return 0
 	}
 	return (latest - base) / base * 100
+}
+
+func klineYearRange(klines protocol.Klines, close float64) AgentKlineYearRange {
+	used := limitKlines(klines, agentIndicatorWarmupBars)
+	if len(used) == 0 {
+		return AgentKlineYearRange{}
+	}
+	high := used[0].High.Float64()
+	low := used[0].Low.Float64()
+	for _, item := range used[1:] {
+		high = math.Max(high, item.High.Float64())
+		low = math.Min(low, item.Low.Float64())
+	}
+	result := AgentKlineYearRange{
+		Available: true,
+		StartDate: used[0].Time.Format(time.DateOnly),
+		EndDate:   used[len(used)-1].Time.Format(time.DateOnly),
+		High:      high,
+		Low:       low,
+	}
+	if high > 0 {
+		result.DistanceToHighPct = (close/high - 1) * 100
+	}
+	if low > 0 {
+		result.DistanceToLowPct = (close/low - 1) * 100
+	}
+	return result
 }
 
 func klineVolumeSummary(klines protocol.Klines) AgentKlineVolumeSummary {
@@ -745,19 +817,13 @@ func klineMaxDrawdownPct(klines protocol.Klines) float64 {
 	return maxDrawdown
 }
 
-func klineTrend(changePct, close float64, ma20, ma60 *float64) string {
-	if ma20 != nil && ma60 != nil {
-		switch {
-		case close >= *ma20 && *ma20 >= *ma60:
-			return "上行"
-		case close <= *ma20 && *ma20 <= *ma60:
-			return "下行"
-		}
-	}
+func klinePriceTrend(returns map[string]float64) string {
+	ret20 := returns["ret20"]
+	ret60 := returns["ret60"]
 	switch {
-	case changePct >= 8:
+	case ret20 >= 3 && ret60 >= 0:
 		return "上行"
-	case changePct <= -8:
+	case ret20 <= -3 && ret60 <= 0:
 		return "下行"
 	default:
 		return "震荡"
@@ -781,32 +847,11 @@ func klineRangePosition(close, high, low float64) string {
 
 func klineSummarySignals(summary AgentKlinePeriodSummary, klines protocol.Klines) []string {
 	signals := make([]string, 0)
-	if summary.MA20 != nil {
-		if summary.Close >= *summary.MA20 {
-			signals = append(signals, "收盘高于MA20")
-		} else {
-			signals = append(signals, "收盘低于MA20")
-		}
-	}
-	if summary.MA60 != nil {
-		if summary.Close >= *summary.MA60 {
-			signals = append(signals, "收盘高于MA60")
-		} else {
-			signals = append(signals, "收盘低于MA60")
-		}
-	}
 	if summary.MaxDrawdownPct <= -20 {
 		signals = append(signals, "区间最大回撤较大")
 	}
 	if summary.VolatilityPct >= 40 {
 		signals = append(signals, "区间波动较大")
-	}
-	if summary.RSI6 != nil {
-		if *summary.RSI6 >= 70 {
-			signals = append(signals, "RSI6超买")
-		} else if *summary.RSI6 <= 30 {
-			signals = append(signals, "RSI6超卖")
-		}
 	}
 	signals = append(signals, klinePatternSignals(summary, klines)...)
 	return signals
@@ -886,12 +931,6 @@ func klineRiskLevel(summary AgentKlinePeriodSummary) string {
 	} else if summary.VolatilityPct >= 40 {
 		score++
 	}
-	if summary.MovingAverages.Alignment == "空头排列" {
-		score += 2
-	}
-	if summary.Volume.VolumeRatio >= 2 && summary.StageReturns["ret5"] < 0 {
-		score++
-	}
 	switch {
 	case score >= 4:
 		return "高"
@@ -904,27 +943,12 @@ func klineRiskLevel(summary AgentKlinePeriodSummary) string {
 
 func klineNarrativeSummary(summary AgentKlinePeriodSummary) string {
 	return fmt.Sprintf(
-		"%s，%s，近20日涨跌幅%s，当前%s，%s",
+		"%s，%s，近20日涨跌幅%s，最大回撤%s",
 		summary.TrendStage,
 		summary.Position,
 		formatPercentText(summary.StageReturns["ret20"]),
-		summary.MovingAverages.Alignment,
-		summary.Volume.Signal,
+		formatPercentText(summary.MaxDrawdownPct),
 	)
-}
-
-func klineOBVText(obv AgentOBV) string {
-	if !obv.Available || obv.Signal == "" {
-		return "OBV：样本不足"
-	}
-	return obv.Signal
-}
-
-func klineRSIText(rsi *float64) string {
-	if rsi == nil {
-		return "样本不足"
-	}
-	return fmt.Sprintf("%.2f", *rsi)
 }
 
 func buildAgentKlineSummaryText(summary AgentKlineSummary) string {
@@ -935,7 +959,8 @@ func buildAgentKlineSummaryText(summary AgentKlineSummary) string {
 		b.WriteString(fmt.Sprintf("股票代码：%s\n\n", summary.Code))
 	}
 	b.WriteString("K线摘要：\n")
-	b.WriteString("说明：展示区间由level/dayCount控制；RSI和ATR使用至少250根可用K线预热并采用Wilder平滑；OBV反映量价确认。\n")
+	appendAgentDayDataContextText(&b, summary.dayData)
+	b.WriteString("说明：展示区间由level/dayCount控制；仅输出K线价格结构，不重复技术评分接口的指标。\n")
 	for _, period := range summary.analysisPeriods {
 		b.WriteString(fmt.Sprintf(
 			"%s：样本 %d/%d，区间 %s 至 %s，收盘 %.2f，涨跌幅 %s，最高 %.2f，最低 %.2f，最大回撤 %s，波动区间 %s，趋势 %s，位置 %s",
@@ -957,28 +982,32 @@ func buildAgentKlineSummaryText(summary AgentKlineSummary) string {
 			b.WriteString("；信号：" + strings.Join(period.Signals, "、"))
 		}
 		b.WriteString(fmt.Sprintf(
-			"；阶段：%s；风险：%s；近5/20/60涨跌：%s/%s/%s；量能：%s，量比 %.2f；RSI6 %s；%s；均线：%s，收盘相对MA20 %s；形态：%s，上影线 %s，ATR %s；连续：%s%d日，区间涨跌 %s；距20日高点 %s，距20日低点 %s；摘要：%s。\n",
+			"；阶段：%s；风险：%s；近5/20/60涨跌：%s/%s/%s；形态：%s，上影线 %s；连续：%s%d日，区间涨跌 %s；距20日高点 %s，距20日低点 %s",
 			period.TrendStage,
 			period.RiskLevel,
 			formatPercentText(period.StageReturns["ret5"]),
 			formatPercentText(period.StageReturns["ret20"]),
 			formatPercentText(period.StageReturns["ret60"]),
-			period.Volume.Signal,
-			period.Volume.VolumeRatio,
-			klineRSIText(period.RSI6),
-			klineOBVText(period.OBV),
-			period.MovingAverages.Alignment,
-			formatPercentText(period.MovingAverages.PriceVsMA20Pct),
 			klineCandleShapeText(period.Candle.Shape),
 			formatPercentText(period.Candle.UpperShadowPct),
-			formatPercentText(period.Volatility.AtrPct),
 			klineStreakDirectionText(period.Streak.Direction),
 			period.Streak.Count,
 			formatPercentText(period.Streak.ChangePct),
 			formatPercentText(period.KeyLevels.DistanceToHigh20Pct),
 			formatPercentText(period.KeyLevels.DistanceToLow20Pct),
-			period.Summary,
 		))
+		if period.YearRange.Available {
+			b.WriteString(fmt.Sprintf(
+				"；近52周区间 %.2f-%.2f（%s至%s），距高点 %s，距低点 %s",
+				period.YearRange.Low,
+				period.YearRange.High,
+				period.YearRange.StartDate,
+				period.YearRange.EndDate,
+				formatPercentText(period.YearRange.DistanceToHighPct),
+				formatPercentText(period.YearRange.DistanceToLowPct),
+			))
+		}
+		b.WriteString("；摘要：" + period.Summary + "。\n")
 	}
 	if len(summary.Warnings) > 0 {
 		b.WriteString("\n数据提示：\n")

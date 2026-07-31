@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 )
 
 type AgentStockBriefText struct {
@@ -24,9 +25,8 @@ func buildAgentStockBriefText(brief AgentStockBrief) string {
 	appendFinanceText(&b, brief.Finance)
 	appendLatestReportText(&b, brief.LatestReport)
 	appendBlocksText(&b, brief.Blocks)
-	appendStatText(&b, brief.Stat, brief.Moneyflow)
+	appendStatText(&b, brief.Stat)
 	appendValuationDisciplineText(&b, brief.Quote, brief.Finance, brief.Stat, brief.LatestReport)
-	appendTechnicalText(&b, brief.Technical)
 	appendWarningsText(&b, brief.Warnings)
 
 	return strings.TrimSpace(b.String())
@@ -37,6 +37,9 @@ func appendQuoteText(b *strings.Builder, quote *AgentBriefQuote, moneyflow *Agen
 		return
 	}
 	b.WriteString("行情摘要：\n")
+	b.WriteString(fmt.Sprintf("查询时间：%s\n", valueOrDash(quote.QueryTime)))
+	b.WriteString(fmt.Sprintf("行情数据日期：%s\n", valueOrDash(quote.DataDate)))
+	b.WriteString(fmt.Sprintf("行情数据状态：%s。\n", valueOrDash(quote.DataStatus)))
 	b.WriteString(fmt.Sprintf(
 		"%s，当前价格 %.2f 元，涨跌幅 %s。日内区间 %.2f-%.2f 元，振幅 %s，开盘 %.2f 元，昨收 %.2f 元，成交额 %s，成交量 %d 手",
 		quote.Market,
@@ -68,6 +71,9 @@ func appendFinanceText(b *strings.Builder, finance *AgentBriefFinance) {
 		return
 	}
 	b.WriteString("基本面摘要：\n")
+	if finance.UpdatedDate != "" {
+		b.WriteString(fmt.Sprintf("财务数据更新日期：%s。\n", finance.UpdatedDate))
+	}
 	if finance.IPODate != "" {
 		b.WriteString(fmt.Sprintf("上市日期：%s。\n", finance.IPODate))
 	}
@@ -151,27 +157,19 @@ func appendBlocksText(b *strings.Builder, blocks []AgentBriefBlock) {
 	b.WriteString("\n")
 }
 
-func appendStatText(b *strings.Builder, stat *AgentBriefStat, moneyflow *AgentBriefMoneyflow) {
-	if stat == nil && moneyflow == nil {
+func appendStatText(b *strings.Builder, stat *AgentBriefStat) {
+	if stat == nil {
 		return
 	}
-	b.WriteString("估值与表现：\n")
-	if stat != nil {
-		b.WriteString(fmt.Sprintf(
-			"PE_TTM %.2f，静态PE %.2f，市净率PB %s，股息率 %s。阶段涨跌幅：近5日 %s，近20日 %s，近60日 %s，今年以来 %s。\n",
-			stat.PETTM,
-			stat.PEStatic,
-			formatOptionalRatioText(stat.PB),
-			formatPercentText(stat.DivYield),
-			formatPercentText(stat.Chg5),
-			formatPercentText(stat.Chg20),
-			formatPercentText(stat.Chg60),
-			formatPercentText(stat.ChgYTD),
-		))
-	}
-	if moneyflow != nil && (moneyflow.Low52W != 0 || moneyflow.High52W != 0) {
-		b.WriteString(fmt.Sprintf("52周价格区间：%.2f-%.2f 元。\n", moneyflow.Low52W, moneyflow.High52W))
-	}
+	b.WriteString("估值摘要：\n")
+	b.WriteString(fmt.Sprintf("估值统计日期：%s。\n", formatTdxStatDate(stat.Date)))
+	b.WriteString(fmt.Sprintf(
+		"PE_TTM %.2f，静态PE %.2f，市净率PB %s，股息率 %s。\n",
+		stat.PETTM,
+		stat.PEStatic,
+		formatOptionalRatioText(stat.PB),
+		formatPercentText(stat.DivYield),
+	))
 	b.WriteString("\n")
 }
 
@@ -285,39 +283,53 @@ func appendTechnicalText(b *strings.Builder, summary *AgentTechnicalSummary) {
 		return
 	}
 	b.WriteString("技术指标：\n")
-	b.WriteString("说明：各周期技术指标最多使用250根可用K线预热；RSI和ATR使用Wilder平滑，OBV反映量价确认。\n")
+	appendAgentDayDataContextText(b, summary.dayData)
+	b.WriteString("说明：各周期技术指标最多使用250根可用K线预热；RSI和ATR使用Wilder平滑；ATR和OBV只作观察，不直接代表方向。\n")
 	for _, period := range summary.Periods {
-		parts := []string{fmt.Sprintf("%s：收盘%.2f", period.Name, period.Close)}
-		if ma20, ok := metricValue(period.MA["ma20"]); ok {
-			parts = append(parts, fmt.Sprintf("MA20=%.2f", ma20))
+		var bullBear *technicalScoreRow
+		if period.Period == "day" {
+			bullBear = &summary.bullBear
 		}
-		if ma60, ok := metricValue(period.MA["ma60"]); ok {
-			parts = append(parts, fmt.Sprintf("MA60=%.2f", ma60))
-		}
-		if period.MACD.Available {
-			if period.MACD.Hist != nil {
-				parts = append(parts, fmt.Sprintf("MACD柱=%.2f", *period.MACD.Hist))
-			}
-			if period.MACD.Signal != "" {
-				parts = append(parts, period.MACD.Signal)
-			}
-		}
-		if rsi6, ok := metricValue(period.RSI["rsi6"]); ok {
-			parts = append(parts, fmt.Sprintf("RSI6=%.2f", rsi6))
-		}
-		if period.BOLL.Available && period.BOLL.Position != "" {
-			parts = append(parts, "布林线："+period.BOLL.Position)
-		}
-		if period.ATR.Available && period.ATR.ATR14 != nil {
-			parts = append(parts, fmt.Sprintf("ATR14=%.2f", *period.ATR.ATR14))
-		}
-		if period.OBV.Available && period.OBV.Signal != "" {
-			parts = append(parts, period.OBV.Signal)
-		}
-		b.WriteString(strings.Join(parts, "；"))
-		b.WriteString("。\n")
+		b.WriteString(fmt.Sprintf(
+			"%s：%s。\n",
+			period.Name,
+			formatAgentTechnicalPeriod(period, bullBear),
+		))
 	}
 	b.WriteString("\n")
+}
+
+func formatAgentTechnicalPeriod(
+	period AgentTechnicalPeriod,
+	bullBear *technicalScoreRow,
+) string {
+	rows := scoreTechnicalPeriod(period, nil)
+	if bullBear != nil {
+		rows = append(rows, *bullBear)
+	}
+	parts := make([]string, 0, len(rows))
+	for _, row := range rows {
+		value := row.Value
+		if strings.TrimSpace(value) == "" {
+			value = "-"
+		}
+		part := fmt.Sprintf("%s：%s", row.Item, value)
+		if strings.TrimSpace(row.Signal) != "" {
+			part += "，" + row.Signal
+		}
+		parts = append(parts, part)
+	}
+	return strings.Join(parts, "；")
+}
+
+func appendAgentDayDataContextText(b *strings.Builder, context agentDayDataContext) {
+	if context.QueryTime.IsZero() {
+		return
+	}
+	b.WriteString(fmt.Sprintf("查询时间：%s\n", context.QueryTime.Format(time.RFC3339)))
+	b.WriteString(fmt.Sprintf("日线数据日期：%s\n", context.DataDate))
+	b.WriteString(fmt.Sprintf("日线数据状态：%s。\n", context.Status))
+	b.WriteString(fmt.Sprintf("日线复权口径：%s。\n", agentDayAdjustText(context.Adjust)))
 }
 
 func appendWarningsText(b *strings.Builder, warnings []string) {

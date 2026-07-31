@@ -191,7 +191,8 @@ func TestMCPToolSchemasDescribeAgentReadableConstraints(t *testing.T) {
 		!strings.Contains(dayCount["description"].(string), "brief=60") ||
 		!strings.Contains(dayCount["description"].(string), "normal=120") ||
 		!strings.Contains(dayCount["description"].(string), "deep=250") ||
-		!strings.Contains(dayCount["description"].(string), "250根") {
+		!strings.Contains(dayCount["description"].(string), "近52周") ||
+		strings.Contains(dayCount["description"].(string), "递推指标") {
 		t.Fatalf("dayCount dynamic default description = %+v", dayCount)
 	}
 
@@ -336,6 +337,11 @@ func TestMCPToolSchemasDescribeCalculationTools(t *testing.T) {
 	}
 
 	technical := findMCPTool(t, "tdx_technical_score_text")
+	for _, want := range []string{"查询时间", "各周期数据日期", "交易时段"} {
+		if !strings.Contains(technical.Description, want) {
+			t.Fatalf("technical description missing %q: %s", want, technical.Description)
+		}
+	}
 	technicalProperties := technical.InputSchema["properties"].(map[string]any)
 	dayCount := technicalProperties["dayCount"].(map[string]any)
 	if dayCount["minimum"] != 60 || dayCount["maximum"] != 500 {
@@ -348,14 +354,76 @@ func TestMCPToolSchemasDescribeCalculationTools(t *testing.T) {
 	}
 
 	kline := findMCPTool(t, "tdx_kline_summary_text")
-	for _, want := range []string{"RSI6", "Wilder ATR", "250根"} {
+	for _, want := range []string{"250根", "查询时间", "数据日期", "N个交易日前"} {
 		if !strings.Contains(kline.Description, want) {
 			t.Fatalf("kline summary description missing %q: %s", want, kline.Description)
 		}
 	}
 	multiBrief := findMCPTool(t, "tdx_multi_brief_text")
-	if !strings.Contains(multiBrief.Description, "250根") {
-		t.Fatalf("multi brief description missing warmup: %s", multiBrief.Description)
+	for _, tool := range []mcpTool{
+		multiBrief,
+		technical,
+	} {
+		for _, want := range []string{
+			"MA", "MACD", "RSI", "BOLL", "KDJ", "BIAS",
+			"ATR", "OBV", "量价", "多空比",
+		} {
+			if !strings.Contains(tool.Description, want) {
+				t.Fatalf("%s description missing %q: %s", tool.Name, want, tool.Description)
+			}
+		}
+	}
+	brief := findMCPTool(t, "tdx_stock_brief_text")
+	for _, want := range []string{
+		"不包含技术指标", "5/20/60日", "52周区间", "行情数据日期", "财务及估值",
+	} {
+		if !strings.Contains(brief.Description, want) {
+			t.Fatalf("brief description missing %q: %s", want, brief.Description)
+		}
+	}
+	briefProperties := brief.InputSchema["properties"].(map[string]any)
+	if briefProperties["adjust"] != nil {
+		t.Fatalf("stock brief should not expose unused adjust: %+v", briefProperties)
+	}
+	for _, unwanted := range []string{"MACD", "RSI", "KDJ", "ATR", "OBV"} {
+		if strings.Contains(kline.Description, unwanted) {
+			t.Fatalf("kline description should not contain %q: %s", unwanted, kline.Description)
+		}
+	}
+	for _, tool := range []mcpTool{
+		kline,
+		multiBrief,
+	} {
+		properties := tool.InputSchema["properties"].(map[string]any)
+		if properties["adjust"] == nil {
+			t.Fatalf("%s schema missing adjust: %+v", tool.Name, properties)
+		}
+		for _, want := range []string{"250根", "数据日期", "交易时段"} {
+			if !strings.Contains(tool.Description, want) {
+				t.Fatalf("%s description missing %q: %s", tool.Name, want, tool.Description)
+			}
+		}
+	}
+	for _, want := range []string{"ATR和OBV", "观察项", "固定0分"} {
+		if !strings.Contains(technical.Description, want) {
+			t.Fatalf("technical description missing %q: %s", want, technical.Description)
+		}
+	}
+}
+
+func TestMCPDescriptionsAvoidDuplicateAnalysisCalls(t *testing.T) {
+	multiBrief := findMCPTool(t, "tdx_multi_brief_text")
+	for _, want := range []string{"批量替代路径", "不要再对同一批股票", "重点个股"} {
+		if !strings.Contains(multiBrief.Description, want) {
+			t.Fatalf("multi brief description missing %q: %s", want, multiBrief.Description)
+		}
+	}
+
+	sectorDetail := findMCPTool(t, "tdx_sector_detail_text")
+	for _, want := range []string{"先用tdx_hotspot_scan_text", "深入指定板块", "无需"} {
+		if !strings.Contains(sectorDetail.Description, want) {
+			t.Fatalf("sector detail description missing %q: %s", want, sectorDetail.Description)
+		}
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestPaperMCPToolsAreListed(t *testing.T) {
@@ -31,7 +32,10 @@ func TestPaperOrderMCPSchemaDescribesImmediateExecution(t *testing.T) {
 	tool := findPaperMCPTool(t, "tdx_paper_order")
 	properties := tool.InputSchema["properties"].(map[string]any)
 
-	assertMCPEnum(t, properties, "action", "place", "cancel", "list", "get")
+	assertMCPEnum(t, properties, "action", "place", "cancel", "get")
+	if hasString(properties["action"].(map[string]any)["enum"].([]string), "list") {
+		t.Fatal("paper order list should be handled by the fixed portfolio query")
+	}
 	assertMCPEnum(t, properties, "side", "buy", "sell")
 	for _, name := range []string{"orderType", "timeInForce"} {
 		if _, ok := properties[name]; ok {
@@ -89,12 +93,18 @@ func TestPaperAccountMCPSchemaRequiresConfirmForSideEffects(t *testing.T) {
 		"action",
 		"create",
 		"list",
-		"get",
 		"set_position",
 		"delete",
-		"close",
-		"recreate",
 	)
+	actions := properties["action"].(map[string]any)["enum"].([]string)
+	for _, removed := range []string{"close", "recreate"} {
+		if hasString(actions, removed) {
+			t.Fatalf("removed account action %s is still exposed", removed)
+		}
+	}
+	if hasString(properties["action"].(map[string]any)["enum"].([]string), "get") {
+		t.Fatal("paper account get should be handled by the fixed portfolio query")
+	}
 	confirm := properties["confirm"].(map[string]any)
 	if confirm["type"] != "boolean" {
 		t.Fatalf("confirm schema = %+v", confirm)
@@ -138,30 +148,211 @@ func TestPaperAccountMCPSchemaRequiresConfirmForSideEffects(t *testing.T) {
 func TestPaperPortfolioMCPSchemaDescriptions(t *testing.T) {
 	tool := findPaperMCPTool(t, "tdx_paper_portfolio")
 	properties := tool.InputSchema["properties"].(map[string]any)
-	if !strings.Contains(tool.Description, "交易决策前") ||
-		!strings.Contains(tool.Description, "positions") ||
-		!strings.Contains(tool.Description, "orders") {
+	if !strings.Contains(tool.Description, "固定输出") ||
+		!strings.Contains(tool.Description, "按股票独立归类") ||
+		!strings.Contains(tool.Description, "不返回交易理由") {
 		t.Fatalf("portfolio description = %q", tool.Description)
 	}
 
 	accountID := properties["accountId"].(map[string]any)
-	if !strings.Contains(accountID["description"].(string), "查询账户视图时必填") {
+	if !strings.Contains(accountID["description"].(string), "账户快照") {
 		t.Fatalf("accountId schema = %+v", accountID)
 	}
-	view := properties["view"].(map[string]any)
-	if !strings.Contains(view["description"].(string), "summary/cash/positions") {
-		t.Fatalf("view schema = %+v", view)
+	if _, ok := properties["view"]; ok {
+		t.Fatalf("portfolio view should be removed: %+v", properties["view"])
 	}
 	code := properties["code"].(map[string]any)
-	if !strings.Contains(code["description"].(string), "仅返回该证券相关记录") {
+	if !strings.Contains(code["description"].(string), "仅筛选stocks") {
 		t.Fatalf("code schema = %+v", code)
 	}
 	for _, name := range []string{"from", "to"} {
 		property := properties[name].(map[string]any)
 		if property["pattern"] != `^(\d{4}-\d{2}-\d{2}|\d{8})$` ||
-			!strings.Contains(property["description"].(string), "按字符串日期过滤") {
+			!strings.Contains(property["description"].(string), "成交历史") {
 			t.Fatalf("%s schema = %+v", name, property)
 		}
+	}
+	limit := properties["limit"].(map[string]any)
+	if limit["default"] != 20 ||
+		!strings.Contains(limit["description"].(string), "每只股票") {
+		t.Fatalf("limit schema = %+v", limit)
+	}
+	if tool.OutputSchema == nil {
+		t.Fatal("portfolio output schema missing")
+	}
+}
+
+func TestPaperPortfolioReturnsFixedStockGroupedSnapshot(t *testing.T) {
+	store := newTestPaperStore(t)
+	withPaperMCPStore(t, store)
+	account, err := store.CreateAccount(PaperCreateAccountRequest{
+		Name:        "grouped portfolio",
+		InitialCash: 50000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, order := range []map[string]any{
+		{
+			"code": "600000", "name": "浦发银行", "side": "buy",
+			"price": 10.0, "quantity": 100, "reason": "不得出现在查询结果",
+		},
+		{
+			"code": "000001", "name": "平安银行", "side": "buy",
+			"price": 12.0, "quantity": 100, "reason": "不得出现在查询结果",
+		},
+		{
+			"code": "000001", "name": "平安银行", "side": "sell",
+			"price": 13.0, "quantity": 100, "reason": "不得出现在查询结果",
+		},
+	} {
+		order["action"] = "place"
+		order["accountId"] = account.ID
+		order["confirm"] = true
+		if _, err := callMCPTool(mustMCPParams(t, "tdx_paper_order", order)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	withPaperPortfolioQuoteLoader(t, func(
+		codes []string,
+		_ time.Time,
+	) (map[string]PaperPortfolioQuote, error) {
+		if len(codes) != 1 || codes[0] != "600000" {
+			t.Fatalf("quote codes = %+v, want current holding only", codes)
+		}
+		return map[string]PaperPortfolioQuote{
+			"600000": {
+				Price:      11,
+				DataDate:   "2026-07-31",
+				DataStatus: "盘中实时行情",
+			},
+		}, nil
+	})
+
+	result, err := callMCPTool(mustMCPParams(t, "tdx_paper_portfolio", map[string]any{
+		"accountId": account.ID,
+		"limit":     20,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := result["structuredContent"].(PaperPortfolioSnapshot)
+	if len(data.Stocks) != 2 {
+		t.Fatalf("stocks = %+v", data.Stocks)
+	}
+	holding := findPaperPortfolioStock(t, data.Stocks, "600000")
+	if holding.PositionStatus != "holding" || holding.Quantity != 100 ||
+		holding.LatestPrice == nil || *holding.LatestPrice != 11 ||
+		len(holding.Trades) != 1 {
+		t.Fatalf("holding = %+v", holding)
+	}
+	closed := findPaperPortfolioStock(t, data.Stocks, "000001")
+	if closed.PositionStatus != "closed" || closed.Quantity != 0 ||
+		len(closed.Trades) != 2 {
+		t.Fatalf("closed = %+v", closed)
+	}
+	if data.Assets.TotalAssets == nil || data.Assets.PositionMarketValue == nil {
+		t.Fatalf("assets = %+v", data.Assets)
+	}
+	encoded, err := json.Marshal(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "reason") ||
+		strings.Contains(string(encoded), "不得出现在查询结果") {
+		t.Fatalf("portfolio leaked trade reason: %s", encoded)
+	}
+}
+
+func TestPaperPortfolioDoesNotUseCostWhenQuoteIsMissing(t *testing.T) {
+	store := newTestPaperStore(t)
+	withPaperMCPStore(t, store)
+	account, err := store.CreateAccount(PaperCreateAccountRequest{
+		Name: "missing quote",
+		InitialPositions: []PaperInitialPosition{
+			{Code: "600000", Quantity: 100, CostPrice: 10},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	withPaperPortfolioQuoteLoader(t, func(
+		_ []string,
+		_ time.Time,
+	) (map[string]PaperPortfolioQuote, error) {
+		return map[string]PaperPortfolioQuote{}, nil
+	})
+
+	result, err := callMCPTool(mustMCPParams(t, "tdx_paper_portfolio", map[string]any{
+		"accountId": account.ID,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := result["structuredContent"].(PaperPortfolioSnapshot)
+	if snapshot.Assets.PositionMarketValue != nil || snapshot.Assets.TotalAssets != nil {
+		t.Fatalf("missing quote must not fall back to cost: %+v", snapshot.Assets)
+	}
+	if !strings.Contains(snapshot.Freshness.MarketDataStatus, "不可计算") ||
+		len(snapshot.Warnings) == 0 {
+		t.Fatalf("freshness = %+v warnings = %+v", snapshot.Freshness, snapshot.Warnings)
+	}
+}
+
+func TestPaperAccountListOnlyReturnsAccountIdentity(t *testing.T) {
+	store := newTestPaperStore(t)
+	withPaperMCPStore(t, store)
+	if _, err := store.CreateAccount(PaperCreateAccountRequest{
+		Name:        "identity only",
+		InitialCash: 12345,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	result, err := callMCPTool(mustMCPParams(t, "tdx_paper_account", map[string]any{
+		"action": "list",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := result["structuredContent"].(map[string]any)["items"].([]PaperAccountRef)
+	if len(items) != 1 || items[0].Name != "identity only" {
+		t.Fatalf("items = %+v", items)
+	}
+	encoded, err := json.Marshal(items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "availableCash") ||
+		strings.Contains(string(encoded), "initialCash") {
+		t.Fatalf("account list leaked portfolio data: %s", encoded)
+	}
+}
+
+func TestPaperPortfolioRejectsRemovedView(t *testing.T) {
+	store := newTestPaperStore(t)
+	withPaperMCPStore(t, store)
+	account, err := store.CreateAccount(PaperCreateAccountRequest{Name: "no view"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = callMCPTool(mustMCPParams(t, "tdx_paper_portfolio", map[string]any{
+		"accountId": account.ID,
+		"view":      "summary",
+	}))
+	if err == nil || !strings.Contains(err.Error(), "view has been removed") {
+		t.Fatalf("removed view error = %v", err)
+	}
+}
+
+func TestPaperTimeInRangeIncludesWholeEndDate(t *testing.T) {
+	if !paperTimeInRange(
+		"2026-07-31T14:59:59+08:00",
+		"2026-07-31",
+		"2026-07-31",
+	) {
+		t.Fatal("same-day trade should be included by date filter")
 	}
 }
 
@@ -779,4 +970,31 @@ func withPaperMCPStore(t *testing.T, store *PaperStore) {
 	t.Cleanup(func() {
 		paperStore = old
 	})
+}
+
+func withPaperPortfolioQuoteLoader(
+	t *testing.T,
+	loader func([]string, time.Time) (map[string]PaperPortfolioQuote, error),
+) {
+	t.Helper()
+	old := paperPortfolioQuoteLoader
+	paperPortfolioQuoteLoader = loader
+	t.Cleanup(func() {
+		paperPortfolioQuoteLoader = old
+	})
+}
+
+func findPaperPortfolioStock(
+	t *testing.T,
+	stocks []PaperPortfolioStock,
+	code string,
+) PaperPortfolioStock {
+	t.Helper()
+	for _, stock := range stocks {
+		if stock.Code == code {
+			return stock
+		}
+	}
+	t.Fatalf("stock %s missing: %+v", code, stocks)
+	return PaperPortfolioStock{}
 }

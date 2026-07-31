@@ -281,7 +281,21 @@ func buildTechnicalScoreSummary(
 		}
 		return "", fmt.Errorf("无K线数据")
 	}
-	bullBearRow, bullBearWarning := scoreBullBearFromTrades(c, code)
+	dayKline := latestTechnicalScoreDayKline(periods)
+	bullBearRow := technicalScoreRow{
+		Period: "日线",
+		Item:   "多空比",
+		Value:  "-",
+		Signal: "日线数据日期不可用",
+	}
+	bullBearWarning := ""
+	if dayKline != nil {
+		bullBearRow, bullBearWarning = scoreBullBearFromTradesForDate(
+			c,
+			code,
+			dayKline.Time.Format(time.DateOnly),
+		)
+	}
 	if bullBearWarning != "" {
 		warnings = append(warnings, bullBearWarning)
 	}
@@ -308,11 +322,38 @@ func buildTechnicalScoreSummary(
 			rows = append(rows, row)
 		}
 	}
+	now := time.Now()
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("股票代码：%s\n", code))
+	b.WriteString(fmt.Sprintf("查询时间：%s\n", now.Format(time.RFC3339)))
 	b.WriteString(technicalScoreKlineHeader(adjust, dayCount, includeWeeklyMonthly))
-	b.WriteString(fmt.Sprintf("技术总分：%d（日线，范围约 -12 到 +12）。\n", total))
-	b.WriteString(fmt.Sprintf("趋势结论：%s。\n", technicalScoreLevel(total)))
+	for _, period := range periods {
+		if period.Summary.Period == "day" {
+			continue
+		}
+		b.WriteString(fmt.Sprintf(
+			"%s数据日期：%s\n",
+			period.Summary.Name,
+			period.Summary.LatestDate,
+		))
+	}
+	if dayKline == nil {
+		b.WriteString("日线数据日期：不可用\n")
+		b.WriteString("日线数据状态：日线K线不可用，技术总分不具备参考意义。\n")
+		b.WriteString("技术总分：不可用（日线K线缺失）。\n")
+		b.WriteString("趋势结论：不可用。\n")
+	} else {
+		b.WriteString(fmt.Sprintf(
+			"日线数据日期：%s\n",
+			dayKline.Time.Format(time.DateOnly),
+		))
+		b.WriteString(fmt.Sprintf(
+			"日线数据状态：%s。\n",
+			technicalScoreDayDataStatus(dayKline.Time, now),
+		))
+		b.WriteString(fmt.Sprintf("技术总分：%d（日线，范围约 -12 到 +12）。\n", total))
+		b.WriteString(fmt.Sprintf("趋势结论：%s。\n", technicalScoreLevel(total)))
+	}
 	b.WriteString("评分明细：\n")
 	b.WriteString("周期 | 指标 | 当前值 | 信号 | 分数\n")
 	for _, row := range rows {
@@ -325,6 +366,44 @@ func buildTechnicalScoreSummary(
 	}
 	b.WriteString("数据口径与限制：递推指标至少使用250根K线预热；RSI使用Wilder平滑；KDJ(9,3,3)逐根递推，金叉/死叉比较前后周期；BIAS/量价由K线公式计算；多空比由TDX逐笔成交估算，仅日线计分，不等同官方资金流。\n")
 	return strings.TrimSpace(b.String()), nil
+}
+
+func latestTechnicalScoreDayKline(periods []technicalScorePeriod) *protocol.Kline {
+	for _, period := range periods {
+		if period.Summary.Period != "day" {
+			continue
+		}
+		for i := len(period.Klines) - 1; i >= 0; i-- {
+			if period.Klines[i] != nil {
+				return period.Klines[i]
+			}
+		}
+	}
+	return nil
+}
+
+func technicalScoreDayDataStatus(latest time.Time, now time.Time) string {
+	latestDate := dateOnly(latest)
+	today := dateOnly(now)
+	if latestDate.Before(today) {
+		if resolveSectorRealtimeSession(now).status == "trading" {
+			return "当前交易日K线尚未返回，使用最近完整交易日收盘值"
+		}
+		return "最近完整交易日收盘值"
+	}
+	if latestDate.After(today) {
+		return "数据日期晚于系统日期，请检查服务器时间"
+	}
+	switch resolveSectorRealtimeSession(now).status {
+	case "trading":
+		return "盘中动态值，当前日K尚未收盘"
+	case "break":
+		return "午间休市动态值，当前日K尚未收盘"
+	case "preopen":
+		return "盘前动态值，当前日K尚未收盘"
+	default:
+		return "当日收盘值，日K已完成"
+	}
 }
 
 func normalizeTechnicalAdjust(raw string) (string, error) {
@@ -387,14 +466,28 @@ type technicalScorePeriod struct {
 }
 
 func scoreTechnicalPeriod(period AgentTechnicalPeriod, klines protocol.Klines) []technicalScoreRow {
+	kdj := period.KDJ
+	if !kdj.Available && kdj.Reason == "" {
+		kdj = buildKDJ(klines)
+	}
+	bias := period.BIAS
+	if !bias.Available && bias.Reason == "" {
+		bias = buildBIAS(klines)
+	}
+	volumePrice := period.VolumePrice
+	if !volumePrice.Available && volumePrice.Reason == "" {
+		volumePrice = buildVolumePrice(klines)
+	}
 	rows := []technicalScoreRow{
 		scoreMA(period),
 		scoreMACD(period),
 		scoreRSI(period),
 		scoreBOLL(period),
-		scoreKDJ(period.Name, klines),
-		scoreBIAS(period.Name, klines),
-		scoreVolumePrice(period.Name, klines),
+		scoreAgentKDJ(period.Name, kdj),
+		scoreAgentBIAS(period.Name, bias),
+		scoreATR(period),
+		scoreOBV(period),
+		scoreAgentVolumePrice(period.Name, volumePrice),
 	}
 	return rows
 }
@@ -402,6 +495,13 @@ func scoreTechnicalPeriod(period AgentTechnicalPeriod, klines protocol.Klines) [
 func scoreMA(period AgentTechnicalPeriod) technicalScoreRow {
 	score := 0
 	signals := make([]string, 0, 3)
+	values := make([]string, 0, 5)
+	for _, name := range []string{"ma5", "ma10", "ma20", "ma60", "ma120"} {
+		value, ok := metricValue(period.MA[name])
+		if ok {
+			values = append(values, fmt.Sprintf("%s=%.2f", strings.ToUpper(name), value))
+		}
+	}
 	for _, name := range []string{"ma20", "ma60", "ma120"} {
 		value, ok := metricValue(period.MA[name])
 		if !ok {
@@ -409,16 +509,26 @@ func scoreMA(period AgentTechnicalPeriod) technicalScoreRow {
 		}
 		if period.Close >= value {
 			score++
-			signals = append(signals, name+"上方")
+			signals = append(signals, strings.ToUpper(name)+"上方")
 		} else {
 			score--
-			signals = append(signals, name+"下方")
+			signals = append(signals, strings.ToUpper(name)+"下方")
 		}
 	}
 	if len(signals) == 0 {
 		return technicalScoreRow{Period: period.Name, Item: "MA", Value: "-", Signal: "均线不足", Score: 0}
 	}
-	return technicalScoreRow{Period: period.Name, Item: "MA", Value: fmt.Sprintf("收盘 %.2f", period.Close), Signal: strings.Join(signals, "、"), Score: score}
+	return technicalScoreRow{
+		Period: period.Name,
+		Item:   "MA",
+		Value: fmt.Sprintf(
+			"收盘 %.2f %s",
+			period.Close,
+			strings.Join(values, " "),
+		),
+		Signal: strings.Join(signals, "、"),
+		Score:  score,
+	}
 }
 
 func scoreMACD(period AgentTechnicalPeriod) technicalScoreRow {
@@ -431,7 +541,22 @@ func scoreMACD(period AgentTechnicalPeriod) technicalScoreRow {
 	} else if *period.MACD.Hist < 0 {
 		score = -2
 	}
-	return technicalScoreRow{Period: period.Name, Item: "MACD", Value: fmt.Sprintf("%.2f", *period.MACD.Hist), Signal: period.MACD.Signal, Score: score}
+	value := fmt.Sprintf("MACD柱=%.2f", *period.MACD.Hist)
+	if period.MACD.DIF != nil && period.MACD.DEA != nil {
+		value = fmt.Sprintf(
+			"DIF=%.2f DEA=%.2f MACD柱=%.2f",
+			*period.MACD.DIF,
+			*period.MACD.DEA,
+			*period.MACD.Hist,
+		)
+	}
+	return technicalScoreRow{
+		Period: period.Name,
+		Item:   "MACD",
+		Value:  value,
+		Signal: period.MACD.Signal,
+		Score:  score,
+	}
 }
 
 func scoreRSI(period AgentTechnicalPeriod) technicalScoreRow {
@@ -455,7 +580,19 @@ func scoreRSI(period AgentTechnicalPeriod) technicalScoreRow {
 		score = -1
 		signal = "偏弱"
 	}
-	return technicalScoreRow{Period: period.Name, Item: "RSI", Value: fmt.Sprintf("%.2f", rsi), Signal: signal, Score: score}
+	values := []string{fmt.Sprintf("RSI6=%.2f", rsi)}
+	for _, name := range []string{"rsi12", "rsi24"} {
+		if value, available := metricValue(period.RSI[name]); available {
+			values = append(values, fmt.Sprintf("%s=%.2f", strings.ToUpper(name), value))
+		}
+	}
+	return technicalScoreRow{
+		Period: period.Name,
+		Item:   "RSI",
+		Value:  strings.Join(values, " "),
+		Signal: signal,
+		Score:  score,
+	}
 }
 
 func scoreBOLL(period AgentTechnicalPeriod) technicalScoreRow {
@@ -468,24 +605,44 @@ func scoreBOLL(period AgentTechnicalPeriod) technicalScoreRow {
 	} else if strings.Contains(period.BOLL.Position, "下轨") {
 		score = -1
 	}
-	return technicalScoreRow{Period: period.Name, Item: "BOLL", Value: period.BOLL.Position, Signal: period.BOLL.Position, Score: score}
+	value := period.BOLL.Position
+	if period.BOLL.Upper != nil && period.BOLL.Middle != nil && period.BOLL.Lower != nil {
+		value = fmt.Sprintf(
+			"上轨=%.2f 中轨=%.2f 下轨=%.2f",
+			*period.BOLL.Upper,
+			*period.BOLL.Middle,
+			*period.BOLL.Lower,
+		)
+	}
+	return technicalScoreRow{
+		Period: period.Name,
+		Item:   "BOLL",
+		Value:  value,
+		Signal: period.BOLL.Position,
+		Score:  score,
+	}
 }
 
 func scoreKDJ(periodName string, klines protocol.Klines) technicalScoreRow {
-	k, d, j, ok := klines.KDJ(9)
-	if !ok {
-		return technicalScoreRow{Period: periodName, Item: "KDJ", Value: "-", Signal: "K线不足9根", Score: 0}
-	}
-	signal, score := kdjSignal(k, d, k, d)
-	if previousK, previousD, _, available := klines[:len(klines)-1].KDJ(9); available {
-		signal, score = kdjSignal(previousK, previousD, k, d)
+	return scoreAgentKDJ(periodName, buildKDJ(klines))
+}
+
+func scoreAgentKDJ(periodName string, kdj AgentKDJ) technicalScoreRow {
+	if !kdj.Available {
+		return technicalScoreRow{
+			Period: periodName,
+			Item:   "KDJ",
+			Value:  "-",
+			Signal: valueOrDefault(kdj.Reason, "KDJ不可得"),
+			Score:  0,
+		}
 	}
 	return technicalScoreRow{
 		Period: periodName,
 		Item:   "KDJ",
-		Value:  fmt.Sprintf("K=%.2f D=%.2f J=%.2f", k, d, j),
-		Signal: signal,
-		Score:  score,
+		Value:  fmt.Sprintf("K=%.2f D=%.2f J=%.2f", kdj.K, kdj.D, kdj.J),
+		Signal: kdj.Signal,
+		Score:  kdj.Score,
 	}
 }
 
@@ -504,69 +661,111 @@ func kdjSignal(previousK, previousD, currentK, currentD float64) (string, int) {
 	}
 }
 
-func scoreBIAS(periodName string, klines protocol.Klines) technicalScoreRow {
-	if len(klines) < 10 {
-		return technicalScoreRow{Period: periodName, Item: "BIAS", Value: "-", Signal: "K线不足10根", Score: 0}
-	}
-	close := klines[len(klines)-1].Close.Float64()
-	ma5 := klines.MA(5).Float64()
-	ma10 := klines.MA(10).Float64()
-	if ma5 == 0 || ma10 == 0 {
-		return technicalScoreRow{Period: periodName, Item: "BIAS", Value: "-", Signal: "均线不足", Score: 0}
-	}
-	bias5 := (close/ma5 - 1) * 100
-	bias10 := (close/ma10 - 1) * 100
-	score := 0
-	signal := "正常"
-	if bias5 < -5 && bias10 < -8 {
-		score = 1
-		signal = "负乖离过大"
-	} else if bias5 > 5 && bias10 > 8 {
-		score = -1
-		signal = "正乖离过大"
+func scoreAgentBIAS(periodName string, bias AgentBIAS) technicalScoreRow {
+	if !bias.Available {
+		return technicalScoreRow{
+			Period: periodName,
+			Item:   "BIAS",
+			Value:  "-",
+			Signal: valueOrDefault(bias.Reason, "BIAS不可得"),
+			Score:  0,
+		}
 	}
 	return technicalScoreRow{
 		Period: periodName,
 		Item:   "BIAS",
-		Value:  fmt.Sprintf("BIAS5=%.2f%% BIAS10=%.2f%%", bias5, bias10),
-		Signal: signal,
-		Score:  score,
+		Value:  fmt.Sprintf("BIAS5=%.2f%% BIAS10=%.2f%%", bias.BIAS5, bias.BIAS10),
+		Signal: bias.Signal,
+		Score:  bias.Score,
 	}
 }
 
-func scoreVolumePrice(periodName string, klines protocol.Klines) technicalScoreRow {
-	if len(klines) < 5 {
-		return technicalScoreRow{Period: periodName, Item: "量价", Value: "-", Signal: "K线不足5根", Score: 0}
-	}
-	latest := klines[len(klines)-1]
-	avg5 := averageKlineVolume(klines, 5)
-	if avg5 <= 0 {
-		return technicalScoreRow{Period: periodName, Item: "量价", Value: "-", Signal: "量能不足", Score: 0}
-	}
-	ratio := float64(latest.Volume) / avg5
-	changePct := latest.RiseRate()
-	score := 0
-	signal := "平量"
-	if ratio > 1.5 && changePct > 0 {
-		score = 1
-		signal = "放量上涨"
-	} else if ratio > 1.5 && changePct < 0 {
-		score = -1
-		signal = "放量下跌"
-	} else if ratio < 0.7 {
-		signal = "缩量"
+func scoreAgentVolumePrice(
+	periodName string,
+	volumePrice AgentVolumePrice,
+) technicalScoreRow {
+	if !volumePrice.Available {
+		return technicalScoreRow{
+			Period: periodName,
+			Item:   "量价",
+			Value:  "-",
+			Signal: valueOrDefault(volumePrice.Reason, "量价不可得"),
+			Score:  0,
+		}
 	}
 	return technicalScoreRow{
 		Period: periodName,
 		Item:   "量价",
-		Value:  fmt.Sprintf("量比 %.2f 涨跌幅 %s", ratio, formatPercentText(changePct)),
-		Signal: signal,
-		Score:  score,
+		Value: fmt.Sprintf(
+			"量比 %.2f 涨跌幅 %s",
+			volumePrice.VolumeRatio,
+			formatPercentText(volumePrice.ChangePct),
+		),
+		Signal: volumePrice.Signal,
+		Score:  volumePrice.Score,
 	}
 }
 
-func scoreBullBearFromTrades(c *tdx.Client, code string) (technicalScoreRow, string) {
-	date := time.Now().Format("2006-01-02")
+func scoreATR(period AgentTechnicalPeriod) technicalScoreRow {
+	if !period.ATR.Available || period.ATR.ATR14 == nil {
+		return technicalScoreRow{
+			Period: period.Name,
+			Item:   "ATR",
+			Value:  "-",
+			Signal: valueOrDefault(period.ATR.Reason, "ATR不可得"),
+		}
+	}
+	atrPct := 0.0
+	if period.Close > 0 {
+		atrPct = *period.ATR.ATR14 / period.Close * 100
+	}
+	return technicalScoreRow{
+		Period: period.Name,
+		Item:   "ATR",
+		Value: fmt.Sprintf(
+			"ATR14=%.2f ATR占价格%s",
+			*period.ATR.ATR14,
+			formatPercentText(atrPct),
+		),
+		Signal: "波动观察项，不直接代表方向",
+		Score:  0,
+	}
+}
+
+func scoreOBV(period AgentTechnicalPeriod) technicalScoreRow {
+	if !period.OBV.Available {
+		return technicalScoreRow{
+			Period: period.Name,
+			Item:   "OBV",
+			Value:  "-",
+			Signal: valueOrDefault(period.OBV.Reason, "OBV不可得"),
+		}
+	}
+	return technicalScoreRow{
+		Period: period.Name,
+		Item:   "OBV",
+		Value: fmt.Sprintf(
+			"OBV20=%s OBV5=%s",
+			formatPercentText(period.OBV.Change20Pct),
+			formatPercentText(period.OBV.Change5Pct),
+		),
+		Signal: period.OBV.Signal,
+		Score:  0,
+	}
+}
+
+func valueOrDefault(value, fallback string) string {
+	if strings.TrimSpace(value) != "" {
+		return value
+	}
+	return fallback
+}
+
+func scoreBullBearFromTradesForDate(
+	c *tdx.Client,
+	code string,
+	date string,
+) (technicalScoreRow, string) {
 	row := technicalScoreRow{Period: "日线", Item: "多空比", Value: "-", Signal: "逐笔成交不可得", Score: 0}
 	trades, err := fetchTradeFlowTrades(c, code, date)
 	if err != nil {
@@ -597,6 +796,29 @@ func scoreBullBearFromTrades(c *tdx.Client, code string) (technicalScoreRow, str
 		row.Score = -1
 	}
 	return row, ""
+}
+
+func attachAgentBullBear(
+	c *tdx.Client,
+	code string,
+	summary *AgentTechnicalSummary,
+) string {
+	if summary == nil {
+		return ""
+	}
+	date := summary.dayData.DataDate
+	if date == "" || date == "不可用" {
+		summary.bullBear = technicalScoreRow{
+			Period: "日线",
+			Item:   "多空比",
+			Value:  "-",
+			Signal: "日线数据日期不可用",
+		}
+		return ""
+	}
+	row, warning := scoreBullBearFromTradesForDate(c, code, date)
+	summary.bullBear = row
+	return warning
 }
 
 func buildScenarioRow(name string, price, eps float64, years int, growthPct, pe float64) scenarioRow {

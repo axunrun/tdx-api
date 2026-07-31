@@ -17,21 +17,55 @@ type AgentTechnicalSummary struct {
 	Limits   map[string]int         `json:"limits"`
 	Note     string                 `json:"note"`
 	Warnings []string               `json:"warnings,omitempty"`
+	dayData  agentDayDataContext
+	bullBear technicalScoreRow
 }
 
 type AgentTechnicalPeriod struct {
-	Period     string            `json:"period"`
-	Name       string            `json:"name"`
-	KlineCount int               `json:"klineCount"`
-	LatestDate string            `json:"latestDate"`
-	Close      float64           `json:"close"`
-	MA         map[string]Metric `json:"ma"`
-	MACD       AgentMACD         `json:"macd"`
-	RSI        map[string]Metric `json:"rsi"`
-	BOLL       AgentBOLL         `json:"boll"`
-	ATR        AgentATR          `json:"atr"`
-	OBV        AgentOBV          `json:"obv"`
-	Signals    []string          `json:"signals"`
+	Period      string            `json:"period"`
+	Name        string            `json:"name"`
+	KlineCount  int               `json:"klineCount"`
+	LatestDate  string            `json:"latestDate"`
+	Close       float64           `json:"close"`
+	MA          map[string]Metric `json:"ma"`
+	MACD        AgentMACD         `json:"macd"`
+	RSI         map[string]Metric `json:"rsi"`
+	BOLL        AgentBOLL         `json:"boll"`
+	ATR         AgentATR          `json:"atr"`
+	OBV         AgentOBV          `json:"obv"`
+	Signals     []string          `json:"signals"`
+	KDJ         AgentKDJ          `json:"-"`
+	BIAS        AgentBIAS         `json:"-"`
+	VolumePrice AgentVolumePrice  `json:"-"`
+	Return20    float64           `json:"-"`
+}
+
+type AgentKDJ struct {
+	Available bool
+	K         float64
+	D         float64
+	J         float64
+	Signal    string
+	Score     int
+	Reason    string
+}
+
+type AgentBIAS struct {
+	Available bool
+	BIAS5     float64
+	BIAS10    float64
+	Signal    string
+	Score     int
+	Reason    string
+}
+
+type AgentVolumePrice struct {
+	Available   bool
+	VolumeRatio float64
+	ChangePct   float64
+	Signal      string
+	Score       int
+	Reason      string
 }
 
 type Metric struct {
@@ -86,8 +120,49 @@ type agentTechnicalSpec struct {
 
 const agentIndicatorWarmupBars = 250
 
+type agentDayDataContext struct {
+	QueryTime time.Time
+	DataDate  string
+	Status    string
+	Adjust    string
+}
+
 func indicatorWarmupCount(requested int) int {
 	return max(requested, agentIndicatorWarmupBars)
+}
+
+func buildAgentDayDataContext(
+	periods []AgentTechnicalPeriod,
+	adjust string,
+	now time.Time,
+) agentDayDataContext {
+	context := agentDayDataContext{
+		QueryTime: now,
+		DataDate:  "不可用",
+		Status:    "日线K线不可用",
+		Adjust:    adjust,
+	}
+	for _, period := range periods {
+		if period.Period != "day" || period.LatestDate == "" {
+			continue
+		}
+		latest, err := time.ParseInLocation(time.DateOnly, period.LatestDate, now.Location())
+		if err != nil {
+			context.Status = "日线数据日期无法解析"
+			return context
+		}
+		context.DataDate = period.LatestDate
+		context.Status = technicalScoreDayDataStatus(latest, now)
+		return context
+	}
+	return context
+}
+
+func agentDayAdjustText(adjust string) string {
+	if adjust == "qfq" {
+		return "前复权（qfq）"
+	}
+	return "未复权（none）"
 }
 
 type AgentStockBrief struct {
@@ -121,6 +196,9 @@ type AgentBriefQuote struct {
 	Amount       float64 `json:"amount"`
 	AmountText   string  `json:"amountText"`
 	Text         string  `json:"text"`
+	QueryTime    string  `json:"queryTime"`
+	DataDate     string  `json:"dataDate"`
+	DataStatus   string  `json:"dataStatus"`
 }
 
 type AgentBriefFinance struct {
@@ -247,7 +325,11 @@ func handleAgentStockBriefText(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	brief, err := buildAgentStockBrief(c, code, r.URL.Query().Get("mkt"))
+	brief, err := buildAgentStockBriefTextData(
+		c,
+		code,
+		r.URL.Query().Get("mkt"),
+	)
 	if err != nil {
 		jsonErr(w, err.Error())
 		return
@@ -260,6 +342,25 @@ func handleAgentStockBriefText(w http.ResponseWriter, r *http.Request) {
 }
 
 func buildAgentStockBrief(c *tdx.Client, code, rawMarket string) (AgentStockBrief, error) {
+	return buildAgentStockBriefAt(c, code, rawMarket, "none", time.Now(), true)
+}
+
+func buildAgentStockBriefTextData(
+	c *tdx.Client,
+	code string,
+	rawMarket string,
+) (AgentStockBrief, error) {
+	return buildAgentStockBriefAt(c, code, rawMarket, "none", time.Now(), false)
+}
+
+func buildAgentStockBriefAt(
+	c *tdx.Client,
+	code string,
+	rawMarket string,
+	adjust string,
+	now time.Time,
+	includeTechnical bool,
+) (AgentStockBrief, error) {
 	warnings := make([]string, 0)
 	brief := AgentStockBrief{
 		Code:   code,
@@ -274,7 +375,7 @@ func buildAgentStockBrief(c *tdx.Client, code, rawMarket string) (AgentStockBrie
 		Note: "面向Agent的单股概览聚合接口；板块返回该股完整所属板块摘要；技术指标使用各周期最多250根可用K线预热并只返回最新有效值。RSI和ATR使用Wilder平滑；OBV反映量价确认。",
 	}
 
-	if quote, err := buildAgentBriefQuote(c, code); err != nil {
+	if quote, err := buildAgentBriefQuote(c, code, now); err != nil {
 		warnings = append(warnings, "GetQuote失败: "+err.Error())
 	} else {
 		brief.Quote = quote
@@ -303,23 +404,47 @@ func buildAgentStockBrief(c *tdx.Client, code, rawMarket string) (AgentStockBrie
 	} else {
 		brief.Moneyflow = moneyflow
 	}
-	if technical, err := buildAgentTechnicalSummary(c, code); err != nil {
-		warnings = append(warnings, "technical-summary失败: "+err.Error())
-	} else {
-		brief.Technical = &technical
+	if includeTechnical {
+		if technical, err := buildAgentTechnicalSummaryAt(c, code, adjust, now); err != nil {
+			warnings = append(warnings, "technical-summary失败: "+err.Error())
+		} else {
+			brief.Technical = &technical
+		}
 	}
 	enrichAgentStockBriefMetrics(&brief)
 
-	if brief.Quote == nil && brief.Technical == nil {
+	if brief.Quote == nil && brief.Finance == nil && brief.LatestReport == nil &&
+		brief.Stat == nil {
 		return brief, fmt.Errorf(strings.Join(warnings, "; "))
 	}
 	brief.Warnings = warnings
 	return brief, nil
 }
 func buildAgentTechnicalSummary(c *tdx.Client, code string) (AgentTechnicalSummary, error) {
+	return buildAgentTechnicalSummaryAt(c, code, "none", time.Now())
+}
+
+func buildAgentTechnicalSummaryWithAdjust(
+	c *tdx.Client,
+	code string,
+	rawAdjust string,
+) (AgentTechnicalSummary, error) {
+	adjust, err := normalizeTechnicalAdjust(rawAdjust)
+	if err != nil {
+		return AgentTechnicalSummary{}, err
+	}
+	return buildAgentTechnicalSummaryAt(c, code, adjust, time.Now())
+}
+
+func buildAgentTechnicalSummaryAt(
+	c *tdx.Client,
+	code string,
+	adjust string,
+	now time.Time,
+) (AgentTechnicalSummary, error) {
 	specs := []agentTechnicalSpec{
 		{"day", "日线", 250, func(code string, count uint16) (*protocol.KlineResp, error) {
-			return fetchDayKlines(c, code, count)
+			return fetchTechnicalDayKlines(c, code, count, adjust)
 		}},
 		{"week", "周线", agentIndicatorWarmupBars, func(code string, count uint16) (*protocol.KlineResp, error) {
 			return fetchWeekKlines(c, code, count)
@@ -344,6 +469,7 @@ func buildAgentTechnicalSummary(c *tdx.Client, code string) (AgentTechnicalSumma
 		},
 		Note:     "技术指标由tdx K线在本地计算，各周期最多使用250根可用K线预热，仅返回最后一个有效值；available=false表示K线不足。RSI和ATR使用Wilder平滑；OBV反映量价确认。",
 		Warnings: warnings,
+		dayData:  buildAgentDayDataContext(periods, adjust, now),
 	}, nil
 }
 
@@ -378,7 +504,11 @@ func buildAgentTechnicalSummaryFromSpecs(
 	return periods, warnings, nil
 }
 
-func buildAgentBriefQuote(c *tdx.Client, code string) (*AgentBriefQuote, error) {
+func buildAgentBriefQuote(c *tdx.Client, code string, queryTimes ...time.Time) (*AgentBriefQuote, error) {
+	now := time.Now()
+	if len(queryTimes) > 0 {
+		now = queryTimes[0]
+	}
 	quotes, err := c.GetQuote(code)
 	if err != nil {
 		return nil, err
@@ -410,7 +540,41 @@ func buildAgentBriefQuote(c *tdx.Client, code string) (*AgentBriefQuote, error) 
 		Amount:       kline.Amount.Float64(),
 		AmountText:   formatCNYText(kline.Amount.Float64()),
 		Text:         fmt.Sprintf("现价%.2f，涨跌幅%.2f%%，成交额%s", price, changePct, formatCNYText(kline.Amount.Float64())),
+		QueryTime:    now.Format(time.RFC3339),
+		DataDate:     quoteKlineDataDate(kline),
+		DataStatus:   quoteKlineDataStatus(kline, now),
 	}, nil
+}
+
+func quoteKlineDataDate(kline *protocol.Kline) string {
+	if kline == nil || kline.Time.IsZero() {
+		return "不可用"
+	}
+	return kline.Time.Format(time.DateOnly)
+}
+
+func quoteKlineDataStatus(kline *protocol.Kline, now time.Time) string {
+	if kline == nil || kline.Time.IsZero() {
+		return "最新可得行情，数据日期不可用"
+	}
+	latestDate := dateOnly(kline.Time)
+	today := dateOnly(now)
+	if latestDate.Before(today) {
+		return "最近完整交易日收盘行情"
+	}
+	if latestDate.After(today) {
+		return "数据日期晚于系统日期，请检查服务器时间"
+	}
+	switch resolveSectorRealtimeSession(now).status {
+	case "trading":
+		return "盘中实时行情，数据随交易更新"
+	case "break":
+		return "午间休市最后行情，截止上午收盘"
+	case "preopen":
+		return "盘前最新行情，若含集合竞价则为动态值"
+	default:
+		return "当日收盘行情"
+	}
 }
 func buildAgentBriefFinance(c *tdx.Client, code, rawMarket string) (*AgentBriefFinance, error) {
 	finance, err := c.GetFinanceInfo(exchangeForCode(code, rawMarket), code)
@@ -758,6 +922,9 @@ func buildAgentTechnicalPeriod(period, name string, ks protocol.Klines) AgentTec
 	boll := buildBOLL(ks, latest.Close)
 	atr := buildATR(ks)
 	obv := buildOBV(ks)
+	kdj := buildKDJ(ks)
+	bias := buildBIAS(ks)
+	volumePrice := buildVolumePrice(ks)
 
 	return AgentTechnicalPeriod{
 		Period:     period,
@@ -772,10 +939,99 @@ func buildAgentTechnicalPeriod(period, name string, ks protocol.Klines) AgentTec
 			"rsi12": rsiMetric(ks, 12, "RSI12"),
 			"rsi24": rsiMetric(ks, 24, "RSI24"),
 		},
-		BOLL:    boll,
-		ATR:     atr,
-		OBV:     obv,
-		Signals: technicalSignals(latest.Close, ma, macd, boll, obv),
+		BOLL:        boll,
+		ATR:         atr,
+		OBV:         obv,
+		KDJ:         kdj,
+		BIAS:        bias,
+		VolumePrice: volumePrice,
+		Return20:    klineReturnPct(ks, 20),
+		Signals:     technicalSignals(latest.Close, ma, macd, boll, obv),
+	}
+}
+
+func buildKDJ(ks protocol.Klines) AgentKDJ {
+	if len(ks) < 9 {
+		return AgentKDJ{Reason: "K线不足9根"}
+	}
+	k, d, j, ok := ks.KDJ(9)
+	if !ok {
+		return AgentKDJ{Reason: "K线不足9根"}
+	}
+	signal, score := kdjSignal(k, d, k, d)
+	if len(ks) > 1 {
+		if previousK, previousD, _, available := ks[:len(ks)-1].KDJ(9); available {
+			signal, score = kdjSignal(previousK, previousD, k, d)
+		}
+	}
+	return AgentKDJ{
+		Available: true,
+		K:         k,
+		D:         d,
+		J:         j,
+		Signal:    signal,
+		Score:     score,
+	}
+}
+
+func buildBIAS(ks protocol.Klines) AgentBIAS {
+	if len(ks) < 10 {
+		return AgentBIAS{Reason: "K线不足10根"}
+	}
+	closePrice := ks[len(ks)-1].Close.Float64()
+	ma5 := ks.MA(5).Float64()
+	ma10 := ks.MA(10).Float64()
+	if ma5 == 0 || ma10 == 0 {
+		return AgentBIAS{Reason: "均线不足"}
+	}
+	bias5 := (closePrice/ma5 - 1) * 100
+	bias10 := (closePrice/ma10 - 1) * 100
+	score := 0
+	signal := "正常"
+	if bias5 < -5 && bias10 < -8 {
+		score = 1
+		signal = "负乖离过大"
+	} else if bias5 > 5 && bias10 > 8 {
+		score = -1
+		signal = "正乖离过大"
+	}
+	return AgentBIAS{
+		Available: true,
+		BIAS5:     bias5,
+		BIAS10:    bias10,
+		Signal:    signal,
+		Score:     score,
+	}
+}
+
+func buildVolumePrice(ks protocol.Klines) AgentVolumePrice {
+	if len(ks) < 5 {
+		return AgentVolumePrice{Reason: "K线不足5根"}
+	}
+	latest := ks[len(ks)-1]
+	avg5 := averageKlineVolume(ks, 5)
+	if avg5 <= 0 {
+		return AgentVolumePrice{Reason: "量能不足"}
+	}
+	ratio := float64(latest.Volume) / avg5
+	changePct := latest.RiseRate()
+	score := 0
+	signal := "平量"
+	if ratio > 1.5 && changePct > 0 {
+		score = 1
+		signal = "放量上涨"
+	} else if ratio > 1.5 && changePct < 0 {
+		score = -1
+		signal = "放量下跌"
+	} else if ratio < 0.7 {
+		signal = "缩量"
+	}
+	return AgentVolumePrice{
+		Available:   true,
+		VolumeRatio: ratio,
+		ChangePct:   changePct,
+		Signal:      signal,
+		Score:       score,
 	}
 }
 

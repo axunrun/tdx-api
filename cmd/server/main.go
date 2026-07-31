@@ -113,6 +113,8 @@ func main() {
 	mux.HandleFunc("/api/agent/kline-summary-text", handleAgentKlineSummaryText)
 	mux.HandleFunc("/api/agent/trade-flow-estimate", handleAgentTradeFlowEstimate)
 	mux.HandleFunc("/api/agent/trade-flow-estimate-text", handleAgentTradeFlowEstimateText)
+	mux.HandleFunc("/api/agent/margin-trading", handleAgentMarginTrading)
+	mux.HandleFunc("/api/agent/margin-trading-text", handleAgentMarginTradingText)
 	mux.HandleFunc("/api/agent/scenario-valuation-text", handleAgentScenarioValuationText)
 	mux.HandleFunc("/api/agent/implied-expectation-text", handleAgentImpliedExpectationText)
 	mux.HandleFunc("/api/agent/technical-score-text", handleAgentTechnicalScoreText)
@@ -146,7 +148,7 @@ func main() {
 	if p := os.Getenv("PORT"); p != "" {
 		port = p
 	}
-	nEndpoints := 56
+	nEndpoints := 58
 	log.Printf("TDX API Server v2.1 准备监听 :%s (%d endpoints)", port, nEndpoints)
 
 	startBackgroundInitializers(
