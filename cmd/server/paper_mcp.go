@@ -889,7 +889,7 @@ func loadPaperPortfolioQuotes(
 		}
 		result[normalizeStockCode(quote.Code)] = PaperPortfolioQuote{
 			Price:      quote.Kline.Close.Float64(),
-			DataDate:   quoteKlineDataDate(quote.Kline),
+			DataDate:   quoteKlineDataDate(quote.Kline, now),
 			DataStatus: quoteKlineDataStatus(quote.Kline, now),
 		}
 	}

@@ -541,14 +541,23 @@ func buildAgentBriefQuote(c *tdx.Client, code string, queryTimes ...time.Time) (
 		AmountText:   formatCNYText(kline.Amount.Float64()),
 		Text:         fmt.Sprintf("现价%.2f，涨跌幅%.2f%%，成交额%s", price, changePct, formatCNYText(kline.Amount.Float64())),
 		QueryTime:    now.Format(time.RFC3339),
-		DataDate:     quoteKlineDataDate(kline),
+		DataDate:     quoteKlineDataDate(kline, now),
 		DataStatus:   quoteKlineDataStatus(kline, now),
 	}, nil
 }
 
-func quoteKlineDataDate(kline *protocol.Kline) string {
+func quoteKlineDataDate(kline *protocol.Kline, now time.Time) string {
 	if kline == nil || kline.Time.IsZero() {
 		return "不可用"
+	}
+	if resolveSectorRealtimeSession(now).text == "非交易日" {
+		t := kline.Time
+		for i := 0; i < 7; i++ {
+			t = t.AddDate(0, 0, -1)
+			if resolveSectorRealtimeSession(t).text != "非交易日" {
+				return t.Format(time.DateOnly)
+			}
+		}
 	}
 	return kline.Time.Format(time.DateOnly)
 }
@@ -564,6 +573,9 @@ func quoteKlineDataStatus(kline *protocol.Kline, now time.Time) string {
 	}
 	if latestDate.After(today) {
 		return "数据日期晚于系统日期，请检查服务器时间"
+	}
+	if resolveSectorRealtimeSession(now).text == "非交易日" {
+		return "最近完整交易日收盘行情"
 	}
 	switch resolveSectorRealtimeSession(now).status {
 	case "trading":

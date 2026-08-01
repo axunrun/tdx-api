@@ -26,6 +26,16 @@ func TestQuoteKlineDataStatusFollowsUnifiedFreshnessPolicy(t *testing.T) {
 			time.Date(2026, 8, 3, 8, 30, 0, 0, location),
 			"最近完整交易日收盘行情",
 		},
+		{"weekend saturday",
+			time.Date(2026, 8, 1, 0, 0, 0, 0, location),
+			time.Date(2026, 8, 1, 10, 30, 0, 0, location),
+			"最近完整交易日收盘行情",
+		},
+		{"weekend sunday",
+			time.Date(2026, 8, 2, 0, 0, 0, 0, location),
+			time.Date(2026, 8, 2, 15, 0, 0, 0, location),
+			"最近完整交易日收盘行情",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -215,5 +225,27 @@ func TestBuildAgentStockBriefTextUsesChineseSummaryAndFiltersDebugFields(t *test
 		if strings.Contains(content, noise) {
 			t.Fatalf("expected content not to contain %q\ncontent:\n%s", noise, content)
 		}
+	}
+}
+
+func TestQuoteKlineDataDateUsesLastTradingDayOnWeekend(t *testing.T) {
+	location := time.FixedZone("Asia/Shanghai", 8*60*60)
+	tests := []struct {
+		name      string
+		klineTime time.Time
+		now       time.Time
+		want      string
+	}{
+		{"friday trading", time.Date(2026, 7, 31, 15, 0, 0, 0, location), time.Date(2026, 7, 31, 15, 0, 0, 0, location), "2026-07-31"},
+		{"saturday", time.Date(2026, 8, 1, 10, 0, 0, 0, location), time.Date(2026, 8, 1, 10, 0, 0, 0, location), "2026-07-31"},
+		{"sunday", time.Date(2026, 8, 2, 15, 0, 0, 0, location), time.Date(2026, 8, 2, 15, 0, 0, 0, location), "2026-07-31"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := quoteKlineDataDate(&protocol.Kline{Time: tt.klineTime}, tt.now)
+			if got != tt.want {
+				t.Fatalf("DataDate = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
