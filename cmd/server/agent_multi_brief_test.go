@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -14,6 +15,25 @@ func TestParseAgentCodeListDeduplicatesCodes(t *testing.T) {
 
 	if strings.Join(got, ",") != "603063,000001" {
 		t.Fatalf("codes = %+v", got)
+	}
+}
+
+func TestMultiBriefRejectsMoreThanTwentyCodes(t *testing.T) {
+	codes := make([]string, 21)
+	for i := range codes {
+		codes[i] = fmt.Sprintf("%06d", i+1)
+	}
+	req := httptest.NewRequest(
+		"GET",
+		"/api/agent/multi-brief-text?codes="+strings.Join(codes, ","),
+		nil,
+	)
+	rec := httptest.NewRecorder()
+
+	handleAgentMultiBriefText(rec, req)
+
+	if !strings.Contains(rec.Body.String(), "最多支持20只") {
+		t.Fatalf("body = %s", rec.Body.String())
 	}
 }
 
@@ -61,7 +81,7 @@ func TestBuildAgentMultiBriefTextIsCompact(t *testing.T) {
 							},
 							OBV: AgentOBV{
 								Available: true,
-								Signal:    "OBV量能方向偏强",
+								Signal:    "OBV：量能方向偏强；未见背离。（OBV20净变化重复值）",
 							},
 						}},
 						bullBear: technicalScoreRow{
@@ -95,14 +115,14 @@ func TestBuildAgentMultiBriefTextIsCompact(t *testing.T) {
 	for _, want := range []string{
 		"多股简讯：共1只",
 		"查询时间：2026-07-31T10:30:00",
-		"禾望电气（603063）",
-		"涨跌幅+2.30%",
-		"行情日期2026-07-31，盘中实时行情，数据随交易更新",
-		"20日+12.30%",
+		"口径：前复权（qfq）",
+		"【603063 禾望电气】",
+		"行情：现价10.50；涨跌幅+2.30%",
+		"周期：近20日+12.30%",
 		"板块：风电、储能",
-		"日线技术：数据日期2026-07-31",
+		"数据：行情日期2026-07-31",
+		"技术日期2026-07-31",
 		"盘中动态值，当前日K尚未收盘",
-		"前复权（qfq）",
 		"MA：收盘 10.50",
 		"MA20=10.10",
 		"MA60=9.80",
@@ -110,7 +130,7 @@ func TestBuildAgentMultiBriefTextIsCompact(t *testing.T) {
 		"RSI6=55.20",
 		"BOLL：价格位于布林线中轨上方",
 		"ATR14=0.80",
-		"OBV量能方向偏强",
+		"量能方向偏强；未见背离",
 		"KDJ：",
 		"BIAS：",
 		"量价：",
@@ -118,6 +138,13 @@ func TestBuildAgentMultiBriefTextIsCompact(t *testing.T) {
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("text missing %q: %s", want, text)
+		}
+	}
+	for _, unwanted := range []string{
+		"1. 禾望电气", "日线技术：", "；MACD：", "OBV20净变化重复值",
+	} {
+		if strings.Contains(text, unwanted) {
+			t.Fatalf("text should use grouped cards, found %q: %s", unwanted, text)
 		}
 	}
 }

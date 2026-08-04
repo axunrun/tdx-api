@@ -450,6 +450,37 @@ func TestMCPCallUnknownToolReturnsError(t *testing.T) {
 	}
 }
 
+func TestTextMCPResultContainsLongTextOnlyOnce(t *testing.T) {
+	tool := newMCPTool(
+		"test_text",
+		"test",
+		"/api/test-text",
+		func(w http.ResponseWriter, _ *http.Request) {
+			jsonResp(w, AgentMultiBriefText{
+				Format:  "text/plain; charset=utf-8",
+				Content: "唯一正文",
+			})
+		},
+	)
+
+	result, err := callAgentHandlerAsMCP(tool, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := result["content"].([]map[string]string)
+	if len(content) != 1 || content[0]["text"] != "唯一正文" {
+		t.Fatalf("content = %+v", content)
+	}
+	structured := result["structuredContent"].(map[string]any)
+	if len(structured) != 1 || structured["endpoint"] != "/api/test-text" {
+		t.Fatalf("structuredContent duplicated text payload: %+v", structured)
+	}
+	properties := tool.OutputSchema["properties"].(map[string]any)
+	if len(properties) != 1 || properties["endpoint"] == nil {
+		t.Fatalf("text output schema = %+v", tool.OutputSchema)
+	}
+}
+
 func findMCPTool(t *testing.T, name string) mcpTool {
 	t.Helper()
 

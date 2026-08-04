@@ -54,7 +54,8 @@ func loadAgentMultiBrief(w http.ResponseWriter, r *http.Request) (AgentMultiBrie
 		return AgentMultiBrief{}, false
 	}
 	if len(codes) > 20 {
-		codes = codes[:20]
+		jsonErr(w, "最多支持20只股票，请分批调用")
+		return AgentMultiBrief{}, false
 	}
 	c := cli()
 	if c == nil {
@@ -121,25 +122,87 @@ func parseAgentCodeList(r *http.Request) []string {
 func buildAgentMultiBriefText(summary AgentMultiBrief) string {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("多股简讯：共%d只。\n", summary.Count))
-	if len(summary.Items) > 0 && summary.Items[0].Brief.Technical != nil {
-		queryTime := summary.Items[0].Brief.Technical.dayData.QueryTime
-		if !queryTime.IsZero() {
-			b.WriteString(fmt.Sprintf("查询时间：%s\n", queryTime.Format(time.RFC3339)))
+	if technical := firstMultiBriefTechnical(summary.Items); technical != nil {
+		context := technical.dayData
+		if !context.QueryTime.IsZero() {
+			b.WriteString(fmt.Sprintf("查询时间：%s\n", context.QueryTime.Format(time.RFC3339)))
 		}
+		b.WriteString(fmt.Sprintf(
+			"口径：%s；日线指标至少250根K线预热；ATR和OBV只作观察，不直接代表方向。\n",
+			agentDayAdjustText(context.Adjust),
+		))
 	}
-	for i, item := range summary.Items {
-		b.WriteString(fmt.Sprintf("%d. %s\n", i+1, multiBriefLine(item.Brief)))
-		if technical := multiBriefDayTechnicalText(item.Brief.Technical); technical != "" {
-			b.WriteString("   " + technical + "\n")
+	for _, item := range summary.Items {
+		brief := item.Brief
+		name := valueOrDash(brief.Name)
+		b.WriteString(fmt.Sprintf("\n【%s %s】\n", brief.Code, name))
+		b.WriteString(multiBriefQuoteCardText(brief) + "\n")
+		if value, ok := multiBriefReturn20(brief.Technical); ok {
+			b.WriteString("周期：近20日" + formatPercentText(value) + "\n")
+		}
+		if len(brief.Blocks) > 0 {
+			b.WriteString("板块：" + multiBriefBlockNames(brief.Blocks, 3) + "\n")
+		}
+		b.WriteString(multiBriefDataCardText(brief) + "\n")
+		for _, line := range multiBriefTechnicalCardLines(brief.Technical) {
+			b.WriteString(line + "\n")
+		}
+		if len(brief.Warnings) > 0 {
+			b.WriteString("提示：" + strings.Join(brief.Warnings, "；") + "\n")
 		}
 	}
 	appendWarningsText(&b, summary.Warnings)
 	return strings.TrimSpace(b.String())
 }
 
-func multiBriefDayTechnicalText(summary *AgentTechnicalSummary) string {
+func firstMultiBriefTechnical(items []AgentMultiBriefItem) *AgentTechnicalSummary {
+	for _, item := range items {
+		if item.Brief.Technical != nil {
+			return item.Brief.Technical
+		}
+	}
+	return nil
+}
+
+func multiBriefQuoteCardText(brief AgentStockBrief) string {
+	if brief.Quote == nil {
+		return "行情：不可用"
+	}
+	parts := []string{
+		fmt.Sprintf("现价%.2f", brief.Quote.Price),
+		"涨跌幅" + formatPercentText(brief.Quote.ChangePct),
+		"成交额" + brief.Quote.AmountText,
+	}
+	if brief.Quote.TurnoverRate > 0 {
+		parts = append(parts, "换手率"+formatPercentText(brief.Quote.TurnoverRate))
+	}
+	return "行情：" + strings.Join(parts, "；")
+}
+
+func multiBriefDataCardText(brief AgentStockBrief) string {
+	parts := make([]string, 0, 4)
+	if brief.Quote != nil {
+		parts = append(parts,
+			"行情日期"+valueOrDash(brief.Quote.DataDate),
+			valueOrDash(brief.Quote.DataStatus),
+		)
+	}
+	if brief.Technical != nil {
+		context := brief.Technical.dayData
+		parts = append(parts,
+			"技术日期"+valueOrDash(context.DataDate),
+			valueOrDash(context.Status),
+		)
+	}
+	if len(parts) == 0 {
+		return "数据：不可用"
+	}
+	return "数据：" + strings.Join(parts, "；")
+}
+
+func multiBriefTechnicalCardLines(summary *AgentTechnicalSummary) []string {
 	if summary == nil {
-		return ""
+		return []string{"技术指标：不可用"}
 	}
 	var day *AgentTechnicalPeriod
 	for i := range summary.Periods {
@@ -148,56 +211,32 @@ func multiBriefDayTechnicalText(summary *AgentTechnicalSummary) string {
 			break
 		}
 	}
-	context := summary.dayData
 	if day == nil {
-		return fmt.Sprintf(
-			"日线技术：数据日期%s；%s；%s；指标不可用。",
-			context.DataDate,
-			context.Status,
-			agentDayAdjustText(context.Adjust),
-		)
+		return []string{"技术指标：不可用"}
 	}
-	parts := []string{
-		fmt.Sprintf("数据日期%s", context.DataDate),
-		context.Status,
-		agentDayAdjustText(context.Adjust),
-	}
-	parts = append(parts, formatAgentTechnicalPeriod(*day, &summary.bullBear))
-	return "日线技术：" + strings.Join(parts, "；") + "。"
-}
-
-func multiBriefLine(brief AgentStockBrief) string {
-	name := brief.Name
-	if name == "" {
-		name = brief.Code
-	}
-	parts := []string{fmt.Sprintf("%s（%s）", name, brief.Code)}
-	if brief.Quote != nil {
-		parts = append(parts, fmt.Sprintf(
-			"现价%.2f，涨跌幅%s，成交额%s",
-			brief.Quote.Price,
-			formatPercentText(brief.Quote.ChangePct),
-			brief.Quote.AmountText,
-		))
-		if brief.Quote.TurnoverRate > 0 {
-			parts = append(parts, "换手率"+formatPercentText(brief.Quote.TurnoverRate))
+	rows := scoreTechnicalPeriod(*day, nil)
+	rows = append(rows, summary.bullBear)
+	lines := make([]string, 0, len(rows))
+	for _, row := range rows {
+		value := valueOrDash(row.Value)
+		line := row.Item + "：" + value
+		signal := strings.TrimSpace(row.Signal)
+		if row.Item == "ATR" && day.ATR.Available {
+			signal = ""
 		}
-		parts = append(parts, fmt.Sprintf(
-			"行情日期%s，%s",
-			valueOrDash(brief.Quote.DataDate),
-			valueOrDash(brief.Quote.DataStatus),
-		))
+		if row.Item == "OBV" && day.OBV.Available {
+			signal = strings.TrimSpace(strings.TrimPrefix(row.Signal, "OBV："))
+			if index := strings.Index(signal, "（"); index >= 0 {
+				signal = strings.TrimSpace(signal[:index])
+			}
+			signal = strings.TrimRight(signal, "。； ")
+		}
+		if signal != "" && signal != value {
+			line += "；" + signal
+		}
+		lines = append(lines, line)
 	}
-	if value, ok := multiBriefReturn20(brief.Technical); ok {
-		parts = append(parts, "20日"+formatPercentText(value))
-	}
-	if len(brief.Blocks) > 0 {
-		parts = append(parts, "板块："+multiBriefBlockNames(brief.Blocks, 3))
-	}
-	if len(brief.Warnings) > 0 {
-		parts = append(parts, "提示："+strings.Join(brief.Warnings, "；"))
-	}
-	return strings.Join(parts, "；")
+	return lines
 }
 
 func multiBriefReturn20(summary *AgentTechnicalSummary) (float64, bool) {

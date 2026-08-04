@@ -57,6 +57,8 @@ MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text
 `tdx_stock_brief_text`、`tdx_kline_summary_text`、`tdx_market_review_text`。另外提供
 `tdx_kline` 结构化工具，用于按参数获取精确的日/周/月/季/年 K 线及逐期收盘价；常规趋势判断
 仍优先使用 `tdx_kline_summary_text`，避免原始数组占用过多上下文。
+文本工具的长正文只放在 MCP `content[0].text`；`structuredContent`只保留内部HTTP路径，不再重复
+正文或透传REST文本响应。直接调用REST文本接口时，正文仍位于响应`data.content`。
 
 ## 当前进度
 
@@ -89,7 +91,7 @@ MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text
 | `/api/agent/hotspot-scan` | 热点扫描 JSON | 已完成 | `dailyReturn` 可按完整日指数涨跌排序；20/60日等标准口径也固定附带最近完整交易日板块指数单日涨跌 |
 | `/api/agent/hotspot-scan-text` | 热点扫描文本 | 已完成 | 面向 Agent 的中文低噪音强弱摘要，同时明确固定单日指数日期、所选周期和实际交易日区间 |
 | `/api/agent/multi-brief` | 多股简讯 JSON | 已完成 | 请求参数传入股票列表，批量复用 `stock-brief`；不作为分时监控接口 |
-| `/api/agent/multi-brief-text` | 多股简讯文本 | 已完成 | 多股筛选的批量替代路径；每只股票包含日线10类统一技术指标及日期、盘中状态和复权方式，调用后不再对同批股票逐只重复调用 `stock-brief-text` 与 `technical-score-text` |
+| `/api/agent/multi-brief-text` | 多股简讯文本 | 已完成 | 多股筛选的批量替代路径；采用全局口径加逐股分组卡片，每只股票包含日线10类统一技术指标及日期、盘中状态和复权方式，调用后不再对同批股票逐只重复调用 `stock-brief-text` 与 `technical-score-text` |
 | `/api/agent/auction` | 集合竞价分析 JSON | 已完成 | 默认分析 09:20-09:25 开盘不可撤单竞价，返回末笔、相对昨收、未匹配方向和近 5/20 个交易日日K走势背景 |
 | `/api/agent/auction-text` | 集合竞价分析文本 | 已完成 | 面向 Agent 的中文低噪音竞价摘要 |
 | `/api/agent/market-review` | 市场级复盘 JSON | 已完成 | 按查询时间自动识别非交易日、盘前、09:20-09:25集合竞价、竞价结束、盘中、午休或收盘视角；分开输出带日期和时点的当前实时广度与最近完整盘后广度，并聚合上证、深成、创业板、科创50、北证50、热点板块和可选关注股 |
@@ -128,7 +130,7 @@ MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text
 | `/api/agent/hotspot-scan` | `sectorType` 可选；`metric` 可选；`startDate` 可选；`endDate` 可选；`window` 可选；`offset` 可选；`limit` 可选；`topStocks` 可选；`minMembers` 可选；`excludeNew` 可选 | `metric` 默认 `chg20`；`dailyReturn` 按板块指数最近完整交易日单日涨跌排序；`chg5/chg20/chg60/changePct` 按最新完整 TdxStat 成分股平均值排序，但每个入榜板块固定附带最近完整交易日指数单日涨跌，20/60日等口径同时保留同周期指数收益；`windowReturn` 按板块指数区间收益排序 |
 | `/api/agent/hotspot-scan-text` | 同 JSON 版 | 每个板块依次返回同周期板块指数收益、同周期成分股平均、最近完整交易日上涨比例，以及同周期强势股或抗跌股 |
 | `/api/agent/multi-brief` | `codes` 或 `code` 必填 | `codes=603063,000001` 或多次传 `code=603063&code=000001`；最多 20 只；JSON 返回每只股票的 `stock-brief` 聚合结果 |
-| `/api/agent/multi-brief-text` | `codes` 必填；`adjust` 可选 | `codes` 为最多20只逗号分隔代码；`adjust=qfq|none`，默认qfq；每只股票输出价格、涨跌幅、20日表现、板块、日线10类统一技术指标和日期状态 |
+| `/api/agent/multi-brief-text` | `codes` 必填；`adjust` 可选 | `codes` 为最多20只逗号分隔代码，超过20只明确报错并要求分批调用；`adjust=qfq|none`，默认qfq；全局口径只输出一次，每只股票用独立卡片输出价格、涨跌幅、20日表现、板块、日线10类统一技术指标和日期状态 |
 | `/api/agent/auction` | `code` 必填；`session` 可选；`limit` 可选 | `session=open|close|all`，默认 `open`；`open` 过滤 09:20-09:25 开盘不可撤单竞价，`close` 过滤 14:57-15:00，`all` 返回全天竞价记录；`limit` 默认 20 最大 100 |
 | `/api/agent/auction-text` | 同 JSON 版 | 返回中文竞价摘要，包含末笔价格、较昨收涨跌、匹配量、未匹配方向、近 5/20 个交易日日K累计涨跌背景和信号 |
 | `/api/agent/market-review` | `session` 可选；`codes` 可选；`top` 可选 | `session=auto|current|morning|full`，默认 `auto`；`auto` 按系统时间判断非交易日、盘前、09:20-09:25集合竞价、竞价结束、盘中、午休和收盘；非 `auto` 值只调整复盘文字视角，不改变数据真实日期；`codes` 传关注股列表；`top` 默认 10 最大 20，控制强/中/弱板块数量 |
@@ -524,9 +526,10 @@ Agent 聚合 API 建议保持统一外壳：
 - 参数：`codes` 或 `code` 必填。
 - `codes` 支持逗号、中文逗号、空格、换行分隔。
 - 也支持多次传 `code=603063&code=000001`。
-- 最大 20 只，重复代码自动去重。
+- 最大 20 只，重复代码自动去重；超过20只明确报错，不再静默截断为前20只。
 - JSON 版复用 `stock-brief`，每只股票返回完整简讯数据，便于调试和后续编排。
-- text 版降噪为每股一行：名称、现价、涨跌幅、成交额、换手率、20 日表现和主要板块。
+- text版使用“全局查询时间与复权口径一次 + 每股独立分组卡片”：行情、周期表现、板块、
+  行情/技术数据日期，以及MA、MACD、RSI、BOLL、KDJ、BIAS、ATR、OBV、量价、多空比分行输出。
 - 第一版不维护服务端持久化关注池；关注列表由调用方传入。
 
 本次人工检查输出：
@@ -657,20 +660,21 @@ WebUI 只读展示，不提供人工下单按钮，不直接读取 SQLite，也�
 |---|---|---|
 | `tdx_paper_account` | 创建、列出、校正持仓、永久删除模拟账户 | `action=create|list|set_position|delete`；`list`只返回账户ID、名称、状态；`accountId`；`position={code,securityName,assetType,quantity,costPrice}`；`quantity=0`删除持仓；副作用操作必须传`confirm=true`；重建使用`delete`后再`create` |
 | `tdx_paper_order` | 按指定价格立即记录买卖；查询或撤销单笔遗留委托 | `action=place|cancel|get`；`accountId`；`code`；`side=buy|sell`；`price`必填成交价；`quantity`；`orderId`；`reason`只写入数据库和WebUI时间线；`place/cancel`必须传`confirm=true` |
-| `tdx_paper_portfolio` | 固定输出账户、现金、成本、总资产及按股票归类的成交历史 | `accountId`必填；`from`、`to`过滤成交日期；`limit`为每只股票最多成交数，默认20最大200；`code`可选筛选股票；无`view`参数 |
+| `tdx_paper_portfolio` | 固定输出账户当前资产、逐股持仓及行情时效 | 仅`accountId`必填；无`view`、`from`、`to`、`limit`、`code`参数 |
 | `tdx_paper_rules` | 返回模拟交易规则说明 | 无必填参数 |
 
-`tdx_paper_portfolio`的`stocks[]`以股票代码独立归类，每只股票只出现一条：当前持仓输出数量、
-可卖数量、冻结数量、平均成本、总成本、最新价格、市值和未实现盈亏；该股票成交历史放在同一条的
-`trades[]`中。已清仓但在所选历史范围内有成交的股票以`positionStatus=closed`保留。成交历史不输出
-交易理由，理由仍保存在SQLite和WebUI行为时间线中。
+`tdx_paper_portfolio`只返回`account`、`assets`、`stocks`、`freshness`。`account`仅含账户ID、状态和
+可用现金；`assets`仅含当前全部持仓成本、市值和账户总资产；`stocks[]`每只当前持仓只出现一条，
+仅含代码、名称、数量、可卖数量、冻结数量、平均成本、最新价、市值、未实现盈亏及该股行情日期和
+状态；`freshness`仅含查询时间、账户估值行情日期和状态。不返回账户名称、初始资金、冻结现金、
+累计费用、委托、成交历史、交易理由、已清仓股票或warning。
 
-账户总资产按`可用现金 + 冻结现金 + 当前持仓市值`计算。portfolio调用时按统一行情时效口径向TDX
-查询持仓最新价格；任一持仓行情缺失时，持仓市值和总资产返回`null`并附带warning，不用持仓成本
-冒充当前市值。`code`只筛选`stocks[]`，账户级资产汇总始终按完整账户计算。
+账户总资产按账户现金余额与当前持仓市值计算。portfolio调用时按统一行情时效口径向TDX查询持仓
+最新价格；任一持仓行情缺失时，持仓市值和总资产返回`null`，并通过对应股票及账户级
+`marketDataStatus`明确不可用状态，不用持仓成本冒充当前市值。
 
 当前已实现账户创建/列表/永久删除、当前持仓账务校正、立即记录买卖、单笔遗留委托查询与撤销、
-固定账户快照和规则说明。
+固定当前资产持仓快照和规则说明。成交历史仍保存在SQLite并供WebUI展示，不由portfolio输出。
 账户 `delete` 会在共享 SQLite 内永久删除指定账户及其持仓、委托、成交、资金流水、持仓流水、
 资产快照、清仓跟踪和 Agent 行为记录，不删除数据库文件，也不影响其他账户。
 不提供含义重叠且未实现的 `close/recreate`；用户明确要求重建时依次调用 `delete` 和 `create`。

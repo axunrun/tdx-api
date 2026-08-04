@@ -18,11 +18,8 @@ type PaperPortfolioQuote struct {
 
 type PaperPortfolioAccount struct {
 	ID            string  `json:"id"`
-	Name          string  `json:"name"`
 	Status        string  `json:"status"`
-	InitialCash   float64 `json:"initialCash"`
 	AvailableCash float64 `json:"availableCash"`
-	FrozenCash    float64 `json:"frozenCash"`
 }
 
 type PaperAccountRef struct {
@@ -35,37 +32,20 @@ type PaperPortfolioAssets struct {
 	PositionCost        float64  `json:"positionCost"`
 	PositionMarketValue *float64 `json:"positionMarketValue"`
 	TotalAssets         *float64 `json:"totalAssets"`
-	TradingFees         float64  `json:"tradingFees"`
-}
-
-type PaperPortfolioTrade struct {
-	TradedAt    string  `json:"tradedAt"`
-	Side        string  `json:"side"`
-	Quantity    int64   `json:"quantity"`
-	Price       float64 `json:"price"`
-	Amount      float64 `json:"amount"`
-	Fee         float64 `json:"fee"`
-	Commission  float64 `json:"commission"`
-	StampTax    float64 `json:"stampTax"`
-	TransferFee float64 `json:"transferFee"`
 }
 
 type PaperPortfolioStock struct {
-	Code             string                `json:"code"`
-	Name             string                `json:"name,omitempty"`
-	AssetType        string                `json:"assetType,omitempty"`
-	PositionStatus   string                `json:"positionStatus"`
-	Quantity         int64                 `json:"quantity"`
-	SellableQuantity int64                 `json:"sellableQuantity"`
-	FrozenQuantity   int64                 `json:"frozenQuantity"`
-	AverageCost      float64               `json:"averageCost"`
-	TotalCost        float64               `json:"totalCost"`
-	LatestPrice      *float64              `json:"latestPrice"`
-	MarketValue      *float64              `json:"marketValue"`
-	UnrealizedProfit *float64              `json:"unrealizedProfit"`
-	MarketDataDate   string                `json:"marketDataDate,omitempty"`
-	MarketDataStatus string                `json:"marketDataStatus,omitempty"`
-	Trades           []PaperPortfolioTrade `json:"trades"`
+	Code             string   `json:"code"`
+	Name             string   `json:"name"`
+	Quantity         int64    `json:"quantity"`
+	SellableQuantity int64    `json:"sellableQuantity"`
+	FrozenQuantity   int64    `json:"frozenQuantity"`
+	AverageCost      float64  `json:"averageCost"`
+	LatestPrice      *float64 `json:"latestPrice"`
+	MarketValue      *float64 `json:"marketValue"`
+	UnrealizedProfit *float64 `json:"unrealizedProfit"`
+	MarketDataDate   string   `json:"marketDataDate"`
+	MarketDataStatus string   `json:"marketDataStatus"`
 }
 
 type PaperPortfolioFreshness struct {
@@ -79,7 +59,6 @@ type PaperPortfolioSnapshot struct {
 	Assets    PaperPortfolioAssets    `json:"assets"`
 	Stocks    []PaperPortfolioStock   `json:"stocks"`
 	Freshness PaperPortfolioFreshness `json:"freshness"`
-	Warnings  []string                `json:"warnings,omitempty"`
 }
 
 var paperPortfolioQuoteLoader = loadPaperPortfolioQuotes
@@ -87,7 +66,7 @@ var paperPortfolioQuoteLoader = loadPaperPortfolioQuotes
 func paperMCPTools() []mcpTool {
 	account := newMCPTool(
 		"tdx_paper_account",
-		"模拟账户生命周期和持仓校正工具。list用于发现账户ID；账户、现金、持仓、成本、总资产和成交历史统一由tdx_paper_portfolio查询。set_position直接新增、覆盖或删除单只持仓，不改变现金、不生成成交记录；create/set_position/delete必须由用户明确确认并传confirm=true。delete会永久删除指定账户全部数据但不影响其他账户；重建时由用户明确要求后依次调用delete和create。",
+		"模拟账户生命周期和持仓校正工具。list用于发现账户ID；账户当前资产与持仓统一由tdx_paper_portfolio查询。set_position直接新增、覆盖或删除单只持仓，不改变现金、不生成成交记录；create/set_position/delete必须由用户明确确认并传confirm=true。delete会永久删除指定账户全部数据但不影响其他账户；重建时由用户明确要求后依次调用delete和create。",
 		"",
 		nil,
 		requiredEnum("action", "操作：create创建、list列出账户、set_position校正持仓、delete永久删除。账户详情统一调用tdx_paper_portfolio；账户重建使用delete后再create。", "create", "list", "set_position", "delete"),
@@ -150,7 +129,7 @@ func paperMCPTools() []mcpTool {
 
 	order := newMCPTool(
 		"tdx_paper_order",
-		"模拟交易记录工具。place按Agent提供的price立即成交并自动更新现金、持仓、费用、成交、清仓表现和资产快照，不读取实时行情、不判断交易时段；get只按orderId查询单笔遗留委托，成交历史统一由tdx_paper_portfolio按股票归类返回；place/cancel必须由用户明确确认并传confirm=true。",
+		"模拟交易记录工具。place按Agent提供的price立即成交并自动更新现金、持仓、费用、成交、清仓表现和资产快照，不读取实时行情、不判断交易时段；get只按orderId查询单笔遗留委托；place/cancel必须由用户明确确认并传confirm=true。tdx_paper_portfolio只返回当前资产与持仓，不返回成交历史。",
 		"",
 		nil,
 		requiredEnum("action", "操作：place立即记录成交、cancel撤销历史遗留待成交委托、get查询单笔遗留委托。", "place", "cancel", "get"),
@@ -206,14 +185,10 @@ func paperMCPTools() []mcpTool {
 
 	portfolio := newMCPTool(
 		"tdx_paper_portfolio",
-		"模拟账户固定快照查询。固定输出账户、现金、持仓成本、当前总资产及成交历史；stocks按股票独立归类，每只股票只出现一条并包含自己的持仓和成交记录，已清仓股票仍可按历史出现。成交记录不返回交易理由。当前持仓调用时使用TDX最新行情估值：交易时段计入实时行情，非交易时间使用最近截止行情并明确日期和状态；任一持仓行情缺失时总资产返回null，不使用成本冒充市值。",
+		"模拟账户当前资产与持仓快照。仅输出账户ID、状态、可用现金，持仓成本、市值、总资产，逐股当前持仓，以及查询时间和行情时效。只返回当前持仓；不返回成交历史、已清仓股票、账户名称、初始资金、冻结现金、费用或委托。当前持仓调用时使用TDX最新行情估值：交易时段计入实时行情，非交易时间使用最近截止行情并明确日期和状态；任一持仓行情缺失时总资产返回null，不使用成本冒充市值。",
 		"",
 		nil,
 		requiredString("accountId", "账户ID，查询固定账户快照时必填。"),
-		optionalDateString("from", "成交历史起始日期，YYYY-MM-DD或YYYYMMDD。"),
-		optionalDateString("to", "成交历史结束日期，YYYY-MM-DD或YYYYMMDD。"),
-		optionalIntegerDefault("limit", "每只股票最多返回的最近成交数量，默认20，最大200。", 20, 1, 200),
-		optionalString("code", "可选股票代码；仅筛选stocks及成交历史，账户级资产汇总仍按完整账户计算。"),
 	)
 	portfolio.OutputSchema = paperPortfolioOutputSchema()
 
@@ -238,77 +213,65 @@ func requiredEnum(name, description string, values ...string) mcpToolParam {
 }
 
 func paperPortfolioOutputSchema() map[string]any {
-	trade := map[string]any{
-		"type":        "object",
-		"description": "单笔成交记录，不包含交易理由。",
-		"properties": map[string]any{
-			"tradedAt":    map[string]any{"type": "string", "description": "成交时间。"},
-			"side":        map[string]any{"type": "string", "enum": []string{"buy", "sell"}},
-			"quantity":    map[string]any{"type": "integer"},
-			"price":       map[string]any{"type": "number"},
-			"amount":      map[string]any{"type": "number"},
-			"fee":         map[string]any{"type": "number", "description": "本笔总费用。"},
-			"commission":  map[string]any{"type": "number"},
-			"stampTax":    map[string]any{"type": "number"},
-			"transferFee": map[string]any{"type": "number"},
-		},
-	}
 	stock := map[string]any{
-		"type":        "object",
-		"description": "一只股票的独立状态；持仓和成交历史按代码归入同一条。",
+		"type":                 "object",
+		"additionalProperties": false,
+		"description":          "一只股票的当前持仓与估值状态。",
 		"properties": map[string]any{
-			"code":           map[string]any{"type": "string"},
-			"name":           map[string]any{"type": "string"},
-			"assetType":      map[string]any{"type": "string"},
-			"positionStatus": map[string]any{"type": "string", "enum": []string{"holding", "closed"}},
-			"quantity":       map[string]any{"type": "integer"},
+			"code":     map[string]any{"type": "string", "description": "股票代码。"},
+			"name":     map[string]any{"type": "string", "description": "股票名称。"},
+			"quantity": map[string]any{"type": "integer", "description": "当前持股数量。"},
 			"sellableQuantity": map[string]any{
 				"type":        "integer",
 				"description": "当前可卖数量。",
 			},
-			"frozenQuantity": map[string]any{"type": "integer"},
-			"averageCost":    map[string]any{"type": "number"},
-			"totalCost":      map[string]any{"type": "number"},
+			"frozenQuantity": map[string]any{"type": "integer", "description": "当前冻结数量。"},
+			"averageCost":    map[string]any{"type": "number", "description": "当前平均持仓成本。"},
 			"latestPrice": map[string]any{
 				"type":        []string{"number", "null"},
-				"description": "持仓最新价格；行情不可用或已清仓时为null。",
+				"description": "最新价格；行情不可用时为null。",
 			},
 			"marketValue": map[string]any{
 				"type":        []string{"number", "null"},
-				"description": "当前持仓市值；行情不可用或已清仓时为null。",
+				"description": "当前持仓市值；行情不可用时为null。",
 			},
 			"unrealizedProfit": map[string]any{
 				"type":        []string{"number", "null"},
-				"description": "当前未实现盈亏；行情不可用或已清仓时为null。",
+				"description": "当前未实现盈亏；行情不可用时为null。",
 			},
-			"marketDataDate":   map[string]any{"type": "string"},
-			"marketDataStatus": map[string]any{"type": "string"},
-			"trades": map[string]any{
-				"type":        "array",
-				"description": "该股票最近成交历史，不包含交易理由。",
-				"items":       trade,
+			"marketDataDate": map[string]any{
+				"type": "string", "description": "该股票行情对应的交易日期。",
 			},
+			"marketDataStatus": map[string]any{
+				"type": "string", "description": "实时、收盘或不可用等行情状态。",
+			},
+		},
+		"required": []string{
+			"code", "name", "quantity", "sellableQuantity", "frozenQuantity",
+			"averageCost", "latestPrice", "marketValue", "unrealizedProfit",
+			"marketDataDate", "marketDataStatus",
 		},
 	}
 	snapshot := map[string]any{
-		"type":        "object",
-		"description": "固定账户快照；不需要view参数。",
+		"type":                 "object",
+		"additionalProperties": false,
+		"description":          "固定账户当前资产与持仓快照。",
 		"properties": map[string]any{
 			"account": map[string]any{
-				"type":        "object",
-				"description": "账户和现金状态。",
+				"type":                 "object",
+				"additionalProperties": false,
+				"description":          "账户身份、状态和可用现金。",
 				"properties": map[string]any{
 					"id":            map[string]any{"type": "string"},
-					"name":          map[string]any{"type": "string"},
 					"status":        map[string]any{"type": "string"},
-					"initialCash":   map[string]any{"type": "number"},
 					"availableCash": map[string]any{"type": "number"},
-					"frozenCash":    map[string]any{"type": "number"},
 				},
+				"required": []string{"id", "status", "availableCash"},
 			},
 			"assets": map[string]any{
-				"type":        "object",
-				"description": "持仓成本、市值、交易费用和总资产；行情缺失时市值及总资产为null。",
+				"type":                 "object",
+				"additionalProperties": false,
+				"description":          "持仓成本、市值和总资产；行情缺失时市值及总资产为null。",
 				"properties": map[string]any{
 					"positionCost": map[string]any{
 						"type":        "number",
@@ -320,32 +283,28 @@ func paperPortfolioOutputSchema() map[string]any {
 					},
 					"totalAssets": map[string]any{
 						"type":        []string{"number", "null"},
-						"description": "可用现金+冻结现金+当前持仓总市值。",
-					},
-					"tradingFees": map[string]any{
-						"type":        "number",
-						"description": "账户全部成交累计佣金、印花税和过户费。",
+						"description": "账户现金余额与当前持仓总市值之和。",
 					},
 				},
+				"required": []string{"positionCost", "positionMarketValue", "totalAssets"},
 			},
 			"stocks": map[string]any{
 				"type":  "array",
 				"items": stock,
 			},
 			"freshness": map[string]any{
-				"type":        "object",
-				"description": "查询时间、行情日期和行情状态。",
+				"type":                 "object",
+				"additionalProperties": false,
+				"description":          "查询时间、账户估值行情日期和实时性状态。",
 				"properties": map[string]any{
 					"queryTime":        map[string]any{"type": "string"},
 					"marketDataDate":   map[string]any{"type": "string"},
 					"marketDataStatus": map[string]any{"type": "string"},
 				},
-			},
-			"warnings": map[string]any{
-				"type":  "array",
-				"items": map[string]any{"type": "string"},
+				"required": []string{"queryTime", "marketDataDate", "marketDataStatus"},
 			},
 		},
+		"required": []string{"account", "assets", "stocks", "freshness"},
 	}
 	return map[string]any{
 		"type": "object",
@@ -606,40 +565,28 @@ func callPaperPortfolioMCP(args map[string]any) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if paperStringArg(args, "view") != "" {
-		return nil, errors.New("view has been removed; portfolio now returns a fixed snapshot")
+	for _, removed := range []string{"view", "from", "to", "limit", "code"} {
+		if _, exists := args[removed]; exists {
+			return nil, fmt.Errorf(
+				"%s has been removed; portfolio only accepts accountId",
+				removed,
+			)
+		}
 	}
 	accountID, err := requirePaperStringArg(args, "accountId")
 	if err != nil {
 		return nil, err
 	}
-	code := paperStringArg(args, "code")
-	from, err := normalizePaperDateFilter(paperStringArg(args, "from"))
-	if err != nil {
-		return nil, fmt.Errorf("invalid from: %w", err)
-	}
-	to, err := normalizePaperDateFilter(paperStringArg(args, "to"))
-	if err != nil {
-		return nil, fmt.Errorf("invalid to: %w", err)
-	}
-	if from != "" && to != "" && from > to {
-		return nil, errors.New("from must not be later than to")
-	}
-	limit := paperLimitArg(args)
 	snapshot, err := buildPaperPortfolioSnapshot(
 		store,
 		accountID,
-		code,
-		from,
-		to,
-		limit,
 		time.Now(),
 	)
 	if err != nil {
 		return nil, err
 	}
 	return paperMCPResult(
-		fmt.Sprintf("账户快照已返回，共%d只相关股票。", len(snapshot.Stocks)),
+		fmt.Sprintf("账户快照已返回，共%d只当前持仓。", len(snapshot.Stocks)),
 		snapshot,
 	), nil
 }
@@ -659,10 +606,6 @@ func paperAccountRefs(accounts []PaperAccount) []PaperAccountRef {
 func buildPaperPortfolioSnapshot(
 	store *PaperStore,
 	accountID string,
-	code string,
-	from string,
-	to string,
-	limit int,
 	now time.Time,
 ) (PaperPortfolioSnapshot, error) {
 	account, err := store.GetAccount(accountID)
@@ -673,34 +616,17 @@ func buildPaperPortfolioSnapshot(
 	if err != nil {
 		return PaperPortfolioSnapshot{}, err
 	}
-	orders, err := store.ListOrders(accountID)
-	if err != nil {
-		return PaperPortfolioSnapshot{}, err
-	}
-	allTrades, err := store.ListTrades(accountID)
-	if err != nil {
-		return PaperPortfolioSnapshot{}, err
-	}
-
 	snapshot := PaperPortfolioSnapshot{
 		Account: PaperPortfolioAccount{
 			ID:            account.ID,
-			Name:          account.Name,
 			Status:        account.Status,
-			InitialCash:   roundPaperPortfolioNumber(account.InitialCash),
 			AvailableCash: roundPaperPortfolioNumber(account.AvailableCash),
-			FrozenCash:    roundPaperPortfolioNumber(account.FrozenCash),
 		},
 		Stocks: []PaperPortfolioStock{},
 		Freshness: PaperPortfolioFreshness{
 			QueryTime: now.Format(time.RFC3339),
 		},
 	}
-
-	for _, trade := range allTrades {
-		snapshot.Assets.TradingFees += paperTradeFee(trade)
-	}
-	snapshot.Assets.TradingFees = roundPaperPortfolioNumber(snapshot.Assets.TradingFees)
 
 	positionCodes := make([]string, 0, len(positions))
 	for i := range positions {
@@ -718,84 +644,33 @@ func buildPaperPortfolioSnapshot(
 	if len(positionCodes) > 0 {
 		quotes, err = paperPortfolioQuoteLoader(positionCodes, now)
 		if err != nil {
-			snapshot.Warnings = append(
-				snapshot.Warnings,
-				"持仓行情获取失败："+err.Error(),
-			)
+			quotes = map[string]PaperPortfolioQuote{}
 		}
 	}
-	applyPaperPortfolioAssetValues(&snapshot, positions, quotes)
+	applyPaperPortfolioAssetValues(
+		&snapshot,
+		positions,
+		quotes,
+		account.AvailableCash+account.FrozenCash,
+	)
 
-	stocks := map[string]*PaperPortfolioStock{}
-	ensureStock := func(stockCode string) *PaperPortfolioStock {
-		stockCode = normalizeStockCode(stockCode)
-		stock, ok := stocks[stockCode]
-		if !ok {
-			stock = &PaperPortfolioStock{
-				Code:           stockCode,
-				PositionStatus: "closed",
-				Trades:         []PaperPortfolioTrade{},
-			}
-			stocks[stockCode] = stock
-		}
-		return stock
-	}
-
-	filterCode := normalizeStockCode(code)
+	sort.SliceStable(positions, func(i, j int) bool {
+		return positions[i].Code < positions[j].Code
+	})
 	for _, position := range positions {
-		if filterCode != "" && filterCode != position.Code {
-			continue
+		stock := PaperPortfolioStock{
+			Code:             position.Code,
+			Name:             position.Name,
+			Quantity:         position.Quantity,
+			SellableQuantity: position.SellableQuantity,
+			FrozenQuantity:   position.FrozenQuantity,
+			AverageCost:      roundPaperPortfolioNumber(position.AvgCost),
 		}
-		stock := ensureStock(position.Code)
-		stock.Name = position.Name
-		stock.AssetType = position.AssetType
-		stock.PositionStatus = "holding"
-		stock.Quantity = position.Quantity
-		stock.SellableQuantity = position.SellableQuantity
-		stock.FrozenQuantity = position.FrozenQuantity
-		stock.AverageCost = roundPaperPortfolioNumber(position.AvgCost)
-		stock.TotalCost = roundPaperPortfolioNumber(
-			position.AvgCost * float64(position.Quantity),
-		)
-		applyPaperPortfolioStockQuote(stock, quotes[position.Code])
-	}
-
-	filteredTrades := filterPaperTrades(allTrades, filterCode, from, to)
-	tradeCounts := map[string]int{}
-	for _, trade := range filteredTrades {
-		stockCode := normalizeStockCode(trade.Code)
-		if tradeCounts[stockCode] >= limit {
-			continue
-		}
-		stock := ensureStock(stockCode)
-		stock.Trades = append(stock.Trades, paperPortfolioTrade(trade))
-		tradeCounts[stockCode]++
-	}
-	for _, order := range orders {
-		stockCode := normalizeStockCode(order.Code)
-		stock, ok := stocks[stockCode]
-		if !ok {
-			continue
-		}
-		if stock.Name == "" {
-			stock.Name = order.Name
-		}
-		if stock.AssetType == "" {
-			stock.AssetType = order.AssetType
-		}
-	}
-
-	stockCodes := make([]string, 0, len(stocks))
-	for stockCode := range stocks {
-		stockCodes = append(stockCodes, stockCode)
-	}
-	sort.Strings(stockCodes)
-	for _, stockCode := range stockCodes {
-		stock := stocks[stockCode]
 		if stock.Name == "" {
 			stock.Name = queryStockName(stock.Code)
 		}
-		snapshot.Stocks = append(snapshot.Stocks, *stock)
+		applyPaperPortfolioStockQuote(&stock, quotes[position.Code])
+		snapshot.Stocks = append(snapshot.Stocks, stock)
 	}
 	return snapshot, nil
 }
@@ -804,10 +679,11 @@ func applyPaperPortfolioAssetValues(
 	snapshot *PaperPortfolioSnapshot,
 	positions []PaperPosition,
 	quotes map[string]PaperPortfolioQuote,
+	cashBalance float64,
 ) {
 	if len(positions) == 0 {
 		marketValue := 0.0
-		totalAssets := snapshot.Account.AvailableCash + snapshot.Account.FrozenCash
+		totalAssets := roundPaperPortfolioNumber(cashBalance)
 		snapshot.Assets.PositionMarketValue = &marketValue
 		snapshot.Assets.TotalAssets = &totalAssets
 		snapshot.Freshness.MarketDataStatus = "无当前持仓，无需行情估值"
@@ -835,16 +711,11 @@ func applyPaperPortfolioAssetValues(
 	if len(missing) > 0 {
 		snapshot.Freshness.MarketDataStatus =
 			"部分持仓行情不可用，总资产不可计算"
-		snapshot.Warnings = append(
-			snapshot.Warnings,
-			"以下持仓缺少有效行情："+strings.Join(missing, "、"),
-		)
 		return
 	}
 
 	marketValue = roundPaperPortfolioNumber(marketValue)
-	totalAssets :=
-		snapshot.Account.AvailableCash + snapshot.Account.FrozenCash + marketValue
+	totalAssets := cashBalance + marketValue
 	totalAssets = roundPaperPortfolioNumber(totalAssets)
 	snapshot.Assets.PositionMarketValue = &marketValue
 	snapshot.Assets.TotalAssets = &totalAssets
@@ -862,7 +733,8 @@ func applyPaperPortfolioStockQuote(
 	}
 	price := roundPaperPortfolioNumber(quote.Price)
 	marketValue := roundPaperPortfolioNumber(price * float64(stock.Quantity))
-	unrealizedProfit := roundPaperPortfolioNumber(marketValue - stock.TotalCost)
+	positionCost := stock.AverageCost * float64(stock.Quantity)
+	unrealizedProfit := roundPaperPortfolioNumber(marketValue - positionCost)
 	stock.LatestPrice = &price
 	stock.MarketValue = &marketValue
 	stock.UnrealizedProfit = &unrealizedProfit
@@ -896,24 +768,6 @@ func loadPaperPortfolioQuotes(
 	return result, nil
 }
 
-func paperPortfolioTrade(trade PaperTrade) PaperPortfolioTrade {
-	return PaperPortfolioTrade{
-		TradedAt:    trade.TradedAt,
-		Side:        trade.Side,
-		Quantity:    trade.Quantity,
-		Price:       roundPaperPortfolioNumber(trade.Price),
-		Amount:      roundPaperPortfolioNumber(trade.Amount),
-		Fee:         roundPaperPortfolioNumber(paperTradeFee(trade)),
-		Commission:  roundPaperPortfolioNumber(trade.Commission),
-		StampTax:    roundPaperPortfolioNumber(trade.StampTax),
-		TransferFee: roundPaperPortfolioNumber(trade.TransferFee),
-	}
-}
-
-func paperTradeFee(trade PaperTrade) float64 {
-	return trade.Commission + trade.StampTax + trade.TransferFee
-}
-
 func roundPaperPortfolioNumber(value float64) float64 {
 	return math.Round(value*10000) / 10000
 }
@@ -925,20 +779,6 @@ func joinPaperPortfolioValues(values map[string]struct{}) string {
 	}
 	sort.Strings(items)
 	return strings.Join(items, "；")
-}
-
-func normalizePaperDateFilter(value string) (string, error) {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return "", nil
-	}
-	for _, layout := range []string{"2006-01-02", "20060102"} {
-		parsed, err := time.ParseInLocation(layout, value, time.Local)
-		if err == nil {
-			return parsed.Format(time.DateOnly), nil
-		}
-	}
-	return "", errors.New("date must be YYYY-MM-DD or YYYYMMDD")
 }
 
 func paperRulesMCPResult() map[string]any {
@@ -966,7 +806,7 @@ func paperRulesMCPResult() map[string]any {
 			"服务端不轮询 TDX 行情，不支持挂单等待价格触发。",
 			"买入后持仓立即可卖；卖出时只校验账户当前可卖数量。",
 			"每次成交自动更新现金、positions、orders、trades、费用、清仓表现和资产快照。",
-			"Agent交易决策前必须用固定accountId调用tdx_paper_portfolio获取账户、持仓和成交历史；服务端以SQLite状态为准。",
+			"Agent交易决策前必须用固定accountId调用tdx_paper_portfolio获取账户当前资产和持仓；服务端以SQLite状态为准。",
 		},
 		"positionAdjustment": []string{
 			"set_position 的 quantity 大于 0 时新增或覆盖绝对持仓，小于 0 会被拒绝。",
@@ -1069,40 +909,4 @@ func paperLimitArg(args map[string]any) int {
 		return maxLimit
 	}
 	return limit
-}
-
-func filterPaperTrades(
-	items []PaperTrade,
-	code string,
-	from string,
-	to string,
-) []PaperTrade {
-	out := []PaperTrade{}
-	for _, item := range items {
-		if code != "" && item.Code != code {
-			continue
-		}
-		if !paperTimeInRange(item.TradedAt, from, to) {
-			continue
-		}
-		out = append(out, item)
-	}
-	sort.SliceStable(out, func(i, j int) bool {
-		return out[i].TradedAt > out[j].TradedAt
-	})
-	return out
-}
-
-func paperTimeInRange(value string, from string, to string) bool {
-	date := value
-	if len(date) >= len(time.DateOnly) {
-		date = date[:len(time.DateOnly)]
-	}
-	if from != "" && date < from {
-		return false
-	}
-	if to != "" && date > to {
-		return false
-	}
-	return true
 }

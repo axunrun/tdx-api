@@ -401,22 +401,14 @@ func optionalBoolDefault(name, description string, defaultValue bool) mcpToolPar
 func textToolOutputSchema() map[string]any {
 	return map[string]any{
 		"type":        "object",
-		"description": "工具调用结果。content[0].text 为给 Agent 阅读的纯文本或 Markdown；structuredContent.text 为同一文本，endpoint/data 保留原始结构化结果。",
+		"description": "工具调用结果。长正文仅位于content[0].text；structuredContent只保留内部HTTP接口路径，避免正文重复占用上下文。",
 		"properties": map[string]any{
-			"text": map[string]any{
-				"type":        "string",
-				"description": "给 Agent 阅读的纯文本或 Markdown 摘要。",
-			},
 			"endpoint": map[string]any{
 				"type":        "string",
 				"description": "内部 HTTP 接口路径。",
 			},
-			"data": map[string]any{
-				"type":        "object",
-				"description": "原始结构化响应数据；具体字段随工具不同而变化。",
-			},
 		},
-		"required": []string{"text", "endpoint", "data"},
+		"required": []string{"endpoint"},
 	}
 }
 
@@ -513,8 +505,6 @@ func callAgentHandlerAsMCP(tool mcpTool, args map[string]any) (map[string]any, e
 		"content": []map[string]string{{"type": "text", "text": text}},
 		"structuredContent": map[string]any{
 			"endpoint": tool.Path,
-			"text":     text,
-			"data":     apiResp.Data,
 		},
 	}, nil
 }
