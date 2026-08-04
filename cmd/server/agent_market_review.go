@@ -114,9 +114,9 @@ func loadAgentMarketReview(w http.ResponseWriter, r *http.Request) (AgentMarketR
 	if session == "" {
 		session = "auto"
 	}
-	top := parseCount(r.URL.Query().Get("top"), 10)
-	if top <= 0 || top > 20 {
-		top = 10
+	top := parseCount(r.URL.Query().Get("top"), 5)
+	if top <= 0 || top > 5 {
+		top = 5
 	}
 	codes := parseAgentCodeList(r)
 	if len(codes) > 20 {
@@ -305,6 +305,10 @@ func buildAgentMarketReviewText(summary AgentMarketReview) string {
 		summary.CurrentBreadth.Date,
 	)
 	if summary.Hotspots != nil {
+		top := summary.Limits["hotspotTop"]
+		if top <= 0 || top > 5 {
+			top = 5
+		}
 		if summary.LatestCompletedBreadth.Date != "" {
 			b.WriteString(
 				"板块统计基准日：" +
@@ -312,9 +316,9 @@ func buildAgentMarketReviewText(summary AgentMarketReview) string {
 					"（20日区间指标）。\n",
 			)
 		}
-		b.WriteString("强势板块：" + marketSectorNames(summary.Hotspots.Strong, 5) + "。\n")
-		b.WriteString("中游板块：" + marketSectorNames(summary.Hotspots.Middle, 5) + "。\n")
-		b.WriteString("弱势板块：" + marketSectorNames(summary.Hotspots.Weak, 5) + "。\n")
+		b.WriteString("强势板块：" + marketSectorNames(summary.Hotspots.Strong, top) + "。\n")
+		b.WriteString("中游板块：" + marketSectorNames(summary.Hotspots.Middle, top) + "。\n")
+		b.WriteString("弱势板块：" + marketSectorNames(summary.Hotspots.Weak, top) + "。\n")
 	}
 	if len(summary.Watchlist) > 0 {
 		parts := make([]string, 0, len(summary.Watchlist))

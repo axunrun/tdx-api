@@ -46,9 +46,10 @@ type AgentAuctionItem struct {
 }
 
 type AgentAuctionContext struct {
-	PrevClose float64 `json:"prevClose,omitempty"`
-	Ret5      float64 `json:"ret5,omitempty"`
-	Ret20     float64 `json:"ret20,omitempty"`
+	PrevClose     float64 `json:"prevClose,omitempty"`
+	KlineDataDate string  `json:"klineDataDate,omitempty"`
+	Ret5          float64 `json:"ret5,omitempty"`
+	Ret20         float64 `json:"ret20,omitempty"`
 }
 
 type AgentAuctionText struct {
@@ -125,6 +126,9 @@ func buildAgentAuction(c *tdx.Client, code string, limit int, session string) Ag
 	} else {
 		summary.Context.Ret5 = klineReturnPct(resp.List, 5)
 		summary.Context.Ret20 = klineReturnPct(resp.List, 20)
+		if len(resp.List) > 0 {
+			summary.Context.KlineDataDate = resp.List[len(resp.List)-1].Time.Format("2006-01-02")
+		}
 		if summary.Context.PrevClose == 0 && len(resp.List) > 0 {
 			summary.Context.PrevClose = resp.List[len(resp.List)-1].Close.Float64()
 		}
@@ -242,9 +246,17 @@ func buildAgentAuctionText(summary AgentAuctionSummary) string {
 		name = summary.Code
 	}
 	b.WriteString(fmt.Sprintf("集合竞价：%s（%s），%s\n", name, summary.Code, auctionSessionText(summary.Session)))
+	if summary.Quote != nil {
+		b.WriteString(fmt.Sprintf(
+			"查询时间：%s；竞价行情日期：%s；行情状态：%s。\n",
+			valueOrDash(summary.Quote.QueryTime),
+			valueOrDash(summary.Quote.DataDate),
+			valueOrDash(summary.Quote.DataStatus),
+		))
+	}
 	if summary.Auction != nil && summary.Auction.Count > 0 {
 		b.WriteString(fmt.Sprintf(
-			"末笔%s，价格%.2f，较昨收%s，匹配量%d，%s%d。\n",
+			"末笔%s，价格%.2f，较昨收%s，匹配量%d，%s量%d（TDX原始数量口径）。\n",
 			summary.Auction.LatestTime,
 			summary.Auction.LatestPrice,
 			formatPercentText(summary.Auction.ChangePct),
@@ -259,9 +271,9 @@ func buildAgentAuctionText(summary AgentAuctionSummary) string {
 		b.WriteString("暂无集合竞价数据。\n")
 	}
 	b.WriteString(fmt.Sprintf(
-		"日K走势背景：截至可用日K，近5个交易日累计%s，近20个交易日累计%s（近20日%s）。\n",
+		"日K走势背景：截至%s可用日K，近5个交易日累计%s，近20个交易日累计%s。\n",
+		valueOrDash(summary.Context.KlineDataDate),
 		formatPercentText(summary.Context.Ret5),
-		formatPercentText(summary.Context.Ret20),
 		formatPercentText(summary.Context.Ret20),
 	))
 	appendWarningsText(&b, summary.Warnings)

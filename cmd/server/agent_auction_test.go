@@ -58,6 +58,11 @@ func TestBuildAgentAuctionTextIsCompact(t *testing.T) {
 		Code:    "603063",
 		Name:    "禾望电气",
 		Session: "open",
+		Quote: &AgentBriefQuote{
+			QueryTime:  "2026-08-04T09:25:01+08:00",
+			DataDate:   "2026-08-04",
+			DataStatus: "集合竞价动态行情",
+		},
 		Auction: &AgentAuctionResult{
 			Count:             1,
 			LatestTime:        "09:25:00",
@@ -68,14 +73,31 @@ func TestBuildAgentAuctionTextIsCompact(t *testing.T) {
 			UnmatchedSideText: "买盘未匹配",
 			Signals:           []string{"高开竞价"},
 		},
-		Context: AgentAuctionContext{Ret5: 1.2, Ret20: -3.4},
+		Context: AgentAuctionContext{
+			KlineDataDate: "2026-08-04",
+			Ret5:          1.2,
+			Ret20:         -3.4,
+		},
 	}
 
 	text := buildAgentAuctionText(summary)
 
-	for _, want := range []string{"集合竞价：禾望电气（603063），开盘竞价", "较昨收+5.00%", "信号：高开竞价", "近20日-3.40%"} {
+	for _, want := range []string{
+		"集合竞价：禾望电气（603063），开盘竞价",
+		"查询时间：2026-08-04T09:25:01+08:00",
+		"竞价行情日期：2026-08-04",
+		"行情状态：集合竞价动态行情",
+		"较昨收+5.00%",
+		"TDX原始数量口径",
+		"信号：高开竞价",
+		"截至2026-08-04可用日K",
+		"近20个交易日累计-3.40%",
+	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("text missing %q: %s", want, text)
 		}
+	}
+	if strings.Count(text, "-3.40%") != 1 {
+		t.Fatalf("20-day return should appear once: %s", text)
 	}
 }

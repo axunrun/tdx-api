@@ -349,14 +349,12 @@ func TestBuildAgentHotspotScanTextIsCompactChinese(t *testing.T) {
 		"最弱板块：",
 		"已排除新股/异常涨幅样本1条",
 		"风电",
-		"板块指数2026-07-29单日+1.25%",
-		"板块指数近20日+3.50%",
-		"成分股近20日平均+4.00%",
-		"最近完整交易日2026-07-28上涨2/2",
+		"指数：最近完整交易日单日+1.25%；近20日+3.50%",
+		"成分：近20日平均+4.00%；上涨2/2",
 		"平安银行+5.00%",
 		"消费电子",
 		"煤炭",
-		"成分股近20日平均-6.00%",
+		"成分：近20日平均-6.00%",
 		"近20日抗跌股：抗跌样本-1.00%",
 	} {
 		if !strings.Contains(text, want) {
@@ -466,8 +464,8 @@ func TestBuildAgentHotspotScanTextDescribesCompletedDailyDates(t *testing.T) {
 	for _, want := range []string{
 		"最近完整交易日2026-07-29",
 		"较2026-07-28收盘",
-		"板块指数2026-07-29单日+2.50%",
-		"成分股统计日2026-07-28单日平均+1.20%",
+		"指数：最近完整交易日单日+2.50%",
+		"成分：单日平均+1.20%",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("text missing %q: %s", want, text)
@@ -541,9 +539,8 @@ func TestBuildAgentHotspotScanTextDatesBothChangePctIndexReturns(t *testing.T) {
 
 	text := buildAgentHotspotScanText(summary)
 	for _, want := range []string{
-		"板块指数2026-07-29单日+1.25%",
-		"板块指数2026-07-28单日-0.50%",
-		"成分股单日平均+0.80%",
+		"指数：最近完整交易日单日+1.25%；同统计日单日-0.50%",
+		"成分：单日平均+0.80%",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("text missing %q: %s", want, text)

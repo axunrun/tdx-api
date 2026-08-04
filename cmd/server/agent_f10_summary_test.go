@@ -69,10 +69,22 @@ func TestBuildAgentF10SummaryTextUsesSectionsAndSeparators(t *testing.T) {
 	if strings.Contains(text, `"code"`) || strings.Contains(text, "{") {
 		t.Fatalf("text should be plain summary: %s", text)
 	}
-	for _, want := range []string{"F10深度资料：", "经营分析：", "产品 | 收入 | 毛利率", "F10风险线索：", "股权质押线索", "已排除："} {
+	for _, want := range []string{"F10深度资料：", "经营分析：", "产品 | 收入 | 毛利率", "F10风险线索：", "股权质押线索"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("text missing %q: %s", want, text)
 		}
+	}
+	for _, unwanted := range []string{"主营结构、经营评述和业务变化", "已排除："} {
+		if strings.Contains(text, unwanted) {
+			t.Fatalf("text should omit repeated metadata %q: %s", unwanted, text)
+		}
+	}
+}
+
+func TestParseAgentF10Sections(t *testing.T) {
+	selected := parseAgentF10Sections([]string{"股东研究, 经营分析"})
+	if len(selected) != 2 || !selected["股东研究"] || !selected["经营分析"] {
+		t.Fatalf("selected = %+v", selected)
 	}
 }
 

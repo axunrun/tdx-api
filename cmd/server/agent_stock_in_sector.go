@@ -5,22 +5,25 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/injoyai/tdx/protocol"
 )
 
 type AgentStockInSector struct {
-	Code       string                   `json:"code"`
-	Name       string                   `json:"name,omitempty"`
-	Source     string                   `json:"source"`
-	Metric     string                   `json:"metric"`
-	Sector     AgentBriefBlock          `json:"sector"`
-	MemberSize int                      `json:"memberSize"`
-	Target     *AgentStockInSectorItem  `json:"target,omitempty"`
-	Top        []AgentStockInSectorItem `json:"top"`
-	Bottom     []AgentStockInSectorItem `json:"bottom"`
-	Note       string                   `json:"note"`
-	Warnings   []string                 `json:"warnings,omitempty"`
+	Code        string                   `json:"code"`
+	Name        string                   `json:"name,omitempty"`
+	Source      string                   `json:"source"`
+	GeneratedAt string                   `json:"generatedAt"`
+	DataDate    string                   `json:"dataDate"`
+	Metric      string                   `json:"metric"`
+	Sector      AgentBriefBlock          `json:"sector"`
+	MemberSize  int                      `json:"memberSize"`
+	Target      *AgentStockInSectorItem  `json:"target,omitempty"`
+	Top         []AgentStockInSectorItem `json:"top"`
+	Bottom      []AgentStockInSectorItem `json:"bottom"`
+	Note        string                   `json:"note"`
+	Warnings    []string                 `json:"warnings,omitempty"`
 }
 
 type AgentStockInSectorItem struct {
@@ -99,7 +102,7 @@ func loadAgentStockInSector(w http.ResponseWriter, r *http.Request) (AgentStockI
 		limit = 10
 	}
 	metric := r.URL.Query().Get("metric")
-	return buildAgentStockInSector(code, block, members, stats, metric, limit), true
+	return buildAgentStockInSector(code, block, members, stats, metric, limit, time.Now()), true
 }
 
 func chooseStockSectorBlock(code, sectorType, sectorName string) (AgentBriefBlock, error) {
@@ -134,9 +137,10 @@ func buildAgentStockInSector(
 	stats []*protocol.TdxStat,
 	metric string,
 	limit int,
+	now time.Time,
 ) AgentStockInSector {
 	if metric == "" {
-		metric = "changePct"
+		metric = "chg20"
 	}
 	if limit <= 0 {
 		limit = 10
@@ -148,9 +152,10 @@ func buildAgentStockInSector(
 		memberNames[member.Code] = member.Name
 	}
 
+	latestStatDate := latestHotspotStatDate(stats)
 	items := make([]AgentStockInSectorItem, 0, len(members))
 	for _, stat := range stats {
-		if stat == nil || !memberSet[stat.Code] {
+		if stat == nil || stat.Date != latestStatDate || !memberSet[stat.Code] {
 			continue
 		}
 		items = append(items, stockInSectorItem(stat, memberNames[stat.Code], metric))
@@ -179,16 +184,18 @@ func buildAgentStockInSector(
 	})
 
 	return AgentStockInSector{
-		Code:       code,
-		Name:       memberNames[code],
-		Source:     "tdx_agent_stock_in_sector",
-		Metric:     metric,
-		Sector:     block,
-		MemberSize: len(items),
-		Target:     target,
-		Top:        top,
-		Bottom:     limitStockInSectorItems(reversed, limit),
-		Note:       "板块内位置接口，当前按TdxStat统计字段排序；不拉取全量实时行情，适合判断个股在所属板块中的相对强弱。",
+		Code:        code,
+		Name:        memberNames[code],
+		Source:      "tdx_agent_stock_in_sector",
+		GeneratedAt: now.Format(time.RFC3339),
+		DataDate:    formatTdxStatDate(latestStatDate),
+		Metric:      metric,
+		Sector:      block,
+		MemberSize:  len(items),
+		Target:      target,
+		Top:         top,
+		Bottom:      limitStockInSectorItems(reversed, limit),
+		Note:        "板块内位置接口，当前按TdxStat统计字段排序；不拉取全量实时行情，适合判断个股在所属板块中的相对强弱。",
 	}
 }
 
@@ -247,6 +254,8 @@ func buildAgentStockInSectorText(summary AgentStockInSector) string {
 		b.WriteString(fmt.Sprintf("股票代码：%s\n\n", summary.Code))
 	}
 	b.WriteString("板块位置：\n")
+	b.WriteString(fmt.Sprintf("查询时间：%s\n", valueOrDash(summary.GeneratedAt)))
+	b.WriteString(fmt.Sprintf("成分股统计日：%s\n", valueOrDash(summary.DataDate)))
 	b.WriteString(fmt.Sprintf(
 		"所属%s：%s，样本%d只，排序指标%s。\n",
 		summary.Sector.TypeName,

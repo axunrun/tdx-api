@@ -85,10 +85,18 @@ func handleAgentMarginTradingText(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, err.Error())
 		return
 	}
+	mode := strings.TrimSpace(r.URL.Query().Get("mode"))
+	if mode == "" {
+		mode = "summary"
+	}
+	if mode != "summary" && mode != "full" {
+		jsonErr(w, "mode必须是summary或full")
+		return
+	}
 	jsonResp(w, AgentMarginTradingText{
 		Code:    result.Code,
 		Format:  "text/markdown",
-		Content: buildMarginTradingText(result),
+		Content: buildMarginTradingText(result, mode),
 	})
 }
 
@@ -660,7 +668,7 @@ func shanghaiLocation() *time.Location {
 	return location
 }
 
-func buildMarginTradingText(result AgentMarginTrading) string {
+func buildMarginTradingText(result AgentMarginTrading, modes ...string) string {
 	var builder strings.Builder
 	fmt.Fprintf(&builder, "# %s（%s）融资融券\n\n", valueOrMarginDash(result.Name), result.Code)
 	fmt.Fprintf(&builder, "查询时间：%s\n", result.QueryTime)
@@ -672,6 +680,17 @@ func buildMarginTradingText(result AgentMarginTrading) string {
 	if len(result.Records) == 0 {
 		builder.WriteString("结论：该证券当前不是融资融券标的，无逐日融资融券明细。")
 		return builder.String()
+	}
+	mode := "summary"
+	if len(modes) > 0 && modes[0] != "" {
+		mode = modes[0]
+	}
+	if mode == "summary" {
+		writeMarginTradingSummary(&builder, result.Records)
+		if len(result.Warnings) > 0 {
+			builder.WriteString("\n提示：" + strings.Join(result.Warnings, "；") + "。")
+		}
+		return strings.TrimSpace(builder.String())
 	}
 
 	builder.WriteString("| 交易日 | 融资余额(万元) | 融资买入(万元) | 融资偿还(万元) | 融券卖出(万股) | 融券余量(万股) | 融券余额(万元) | 两融余额(万元) |\n")
@@ -692,6 +711,53 @@ func buildMarginTradingText(result AgentMarginTrading) string {
 		builder.WriteString("\n提示：" + strings.Join(result.Warnings, "；") + "。")
 	}
 	return strings.TrimSpace(builder.String())
+}
+
+func writeMarginTradingSummary(builder *strings.Builder, records []MarginTradingRecord) {
+	latest := records[0]
+	earliest := records[len(records)-1]
+	minBalance, maxBalance := latest.FinancingBalance, latest.FinancingBalance
+	netFinancing := 0.0
+	repayCount := 0
+	for _, record := range records {
+		minBalance = min(minBalance, record.FinancingBalance)
+		maxBalance = max(maxBalance, record.FinancingBalance)
+		if record.FinancingRepay != nil {
+			netFinancing += record.FinancingBuy - *record.FinancingRepay
+			repayCount++
+		}
+	}
+	fmt.Fprintf(builder, "最新（%s）：融资余额%.2f万元，融资买入%.2f万元，融资偿还%s万元；融券卖出%.2f万股，融券余量%.2f万股，融券余额%s万元，两融余额%s万元。\n",
+		latest.Date,
+		latest.FinancingBalance/10000,
+		latest.FinancingBuy/10000,
+		formatOptionalMarginAmount(latest.FinancingRepay, 10000),
+		latest.SecuritiesLendingSell/10000,
+		latest.SecuritiesLendingRemaining/10000,
+		formatOptionalMarginAmount(latest.SecuritiesLendingBalance, 10000),
+		formatOptionalMarginAmount(latest.TotalBalance, 10000),
+	)
+	fmt.Fprintf(builder, "区间（%s至%s）：融资余额变动%s（%.2f万元至%.2f万元），区间最高/最低%.2f/%.2f万元",
+		earliest.Date,
+		latest.Date,
+		formatMarginBalanceChange(latest.FinancingBalance, earliest.FinancingBalance),
+		earliest.FinancingBalance/10000,
+		latest.FinancingBalance/10000,
+		maxBalance/10000,
+		minBalance/10000,
+	)
+	if repayCount == len(records) {
+		fmt.Fprintf(builder, "；累计融资净买入%.2f万元。", netFinancing/10000)
+	} else {
+		builder.WriteString("；累计融资净买入不可计算（融资偿还数据不完整）。")
+	}
+}
+
+func formatMarginBalanceChange(latest, earliest float64) string {
+	if earliest == 0 {
+		return "不可计算"
+	}
+	return formatPercentText((latest - earliest) / earliest * 100)
 }
 
 func formatOptionalMarginAmount(value *float64, divisor float64) string {

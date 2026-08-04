@@ -53,7 +53,9 @@ func handleAgentF10Summary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	summary, err := buildAgentF10Summary(c, code, r.URL.Query().Get("mkt"))
+	summary, err := buildAgentF10Summary(
+		c, code, r.URL.Query().Get("mkt"), r.URL.Query().Get("sections"),
+	)
 	if err != nil {
 		jsonErr(w, err.Error())
 		return
@@ -73,7 +75,9 @@ func handleAgentF10SummaryText(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	summary, err := buildAgentF10Summary(c, code, r.URL.Query().Get("mkt"))
+	summary, err := buildAgentF10Summary(
+		c, code, r.URL.Query().Get("mkt"), r.URL.Query().Get("sections"),
+	)
 	if err != nil {
 		jsonErr(w, err.Error())
 		return
@@ -85,7 +89,11 @@ func handleAgentF10SummaryText(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func buildAgentF10Summary(c *tdx.Client, code, rawMarket string) (AgentF10Summary, error) {
+func buildAgentF10Summary(
+	c *tdx.Client,
+	code, rawMarket string,
+	rawSections ...string,
+) (AgentF10Summary, error) {
 	exchange := exchangeForCode(code, rawMarket)
 	exchange, categories, err := getF10Categories(c, exchange, code)
 	if err != nil {
@@ -104,6 +112,7 @@ func buildAgentF10Summary(c *tdx.Client, code, rawMarket string) (AgentF10Summar
 	}
 
 	warnings := make([]string, 0)
+	selected := parseAgentF10Sections(rawSections)
 	for i, category := range categories {
 		name := strings.TrimSpace(category.Name)
 		if !shouldIncludeAgentF10Category(name) {
@@ -111,6 +120,9 @@ func buildAgentF10Summary(c *tdx.Client, code, rawMarket string) (AgentF10Summar
 				Name:   name,
 				Reason: excludedAgentF10Reason(name),
 			})
+			continue
+		}
+		if len(selected) > 0 && !selected[name] {
 			continue
 		}
 		content, err := c.GetCompanyContent(exchange, code, category.Filename, category.Start, category.Length)
@@ -136,6 +148,18 @@ func buildAgentF10Summary(c *tdx.Client, code, rawMarket string) (AgentF10Summar
 	}
 	summary.Warnings = warnings
 	return summary, nil
+}
+
+func parseAgentF10Sections(rawSections []string) map[string]bool {
+	selected := make(map[string]bool)
+	for _, raw := range rawSections {
+		for _, name := range strings.Split(raw, ",") {
+			if name = strings.TrimSpace(name); name != "" {
+				selected[name] = true
+			}
+		}
+	}
+	return selected
 }
 
 func shouldIncludeAgentF10Category(name string) bool {
@@ -207,26 +231,15 @@ func buildAgentF10SummaryText(summary AgentF10Summary) string {
 		b.WriteString(fmt.Sprintf("股票代码：%s\n\n", summary.Code))
 	}
 	b.WriteString("F10深度资料：\n")
-	b.WriteString("本接口补充低频深度资料，不重复 stock-brief 的最新提示和财务字段。\n\n")
 	for _, section := range summary.Sections {
 		if section.Excerpt == "" {
 			continue
 		}
 		b.WriteString(fmt.Sprintf("%s：\n", section.Name))
-		if section.Usage != "" {
-			b.WriteString(section.Usage)
-			b.WriteString("。\n")
-		}
 		b.WriteString(section.Excerpt)
 		b.WriteString("\n\n")
 	}
 	appendF10RiskCluesText(&b, summary)
-	if len(summary.Excluded) > 0 {
-		b.WriteString("已排除：\n")
-		for _, item := range summary.Excluded {
-			b.WriteString(fmt.Sprintf("- %s：%s。\n", item.Name, item.Reason))
-		}
-	}
 	appendWarningsText(&b, summary.Warnings)
 	return strings.TrimSpace(b.String())
 }

@@ -160,7 +160,11 @@ func buildScenarioValuationText(brief AgentStockBrief, query queryValues) string
 
 	var b strings.Builder
 	b.WriteString(calculationHeader(brief))
+	b.WriteString(calculationPriceFreshnessText(brief, queryFloatInput(query, "currentPrice")))
 	b.WriteString(fmt.Sprintf("当前价格与 EPS 口径：价格 %.2f 元，EPS %.4f（%s），期限 %d 年。\n", price, eps, epsSource, years))
+	if !epsInput && brief.Stat != nil && brief.Stat.Date != "" {
+		b.WriteString("PE_TTM统计日期：" + formatTdxStatDate(brief.Stat.Date) + "。\n")
+	}
 	b.WriteString("情景估值：\n")
 	b.WriteString("情景 | 年增速 | 目标PE | 目标EPS | 目标价 | 涨跌幅 | 年化收益\n")
 	for _, row := range rows {
@@ -219,17 +223,41 @@ func buildImpliedExpectationText(brief AgentStockBrief, query queryValues) strin
 
 	var b strings.Builder
 	b.WriteString(calculationHeader(brief))
+	b.WriteString(calculationPriceFreshnessText(brief, queryFloatInput(query, "currentPrice")))
 	b.WriteString(fmt.Sprintf("当前价格：%.2f 元。\n", price))
 	b.WriteString(fmt.Sprintf("当前 EPS：%.4f（%s）。\n", eps, epsSource))
+	if !queryFloatInput(query, "eps") && brief.Stat != nil && brief.Stat.Date != "" {
+		b.WriteString("PE_TTM统计日期：" + formatTdxStatDate(brief.Stat.Date) + "。\n")
+	}
 	b.WriteString(fmt.Sprintf("目标 PE 假设：%.2f。\n", targetPE))
 	b.WriteString(fmt.Sprintf("当前价格隐含未来 EPS：%.4f。\n", requiredFutureEPS))
 	b.WriteString(fmt.Sprintf("隐含 EPS 年复合增速：%s。\n", formatPercentText(impliedCAGR)))
 	if brief.LatestReport != nil {
-		b.WriteString(fmt.Sprintf("与已有净利润同比对比：最新净利润同比 %s。\n", formatPercentText(brief.LatestReport.NetProfitYoY)))
+		reportDate := valueOrDash(brief.LatestReport.ReportDate)
+		b.WriteString(fmt.Sprintf(
+			"与已有净利润同比对比：报告期%s净利润同比%s。\n",
+			reportDate,
+			formatPercentText(brief.LatestReport.NetProfitYoY),
+		))
 	}
 	b.WriteString(fmt.Sprintf("估值预期压力：%s。\n", pressure))
 	b.WriteString("数据口径与限制：这是价格反推公式，不读取报告、不输出买卖建议。\n")
 	return strings.TrimSpace(b.String())
+}
+
+func calculationPriceFreshnessText(brief AgentStockBrief, manualPrice bool) string {
+	if manualPrice {
+		return "价格来源：用户输入。\n"
+	}
+	if brief.Quote == nil {
+		return "价格来源：TDX行情；查询时间、行情日期和状态不可用。\n"
+	}
+	return fmt.Sprintf(
+		"价格来源：TDX行情；查询时间：%s；行情日期：%s；行情状态：%s。\n",
+		valueOrDash(brief.Quote.QueryTime),
+		valueOrDash(brief.Quote.DataDate),
+		valueOrDash(brief.Quote.DataStatus),
+	)
 }
 
 func buildTechnicalScoreSummary(

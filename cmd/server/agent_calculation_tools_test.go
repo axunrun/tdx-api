@@ -18,9 +18,13 @@ func TestBuildScenarioValuationTextUsesDefaultsAndAvoidsAdvice(t *testing.T) {
 		Code: "603063",
 		Name: "禾望电气",
 		Quote: &AgentBriefQuote{
-			Price: 50,
+			Price:      50,
+			QueryTime:  "2026-08-04T10:00:00+08:00",
+			DataDate:   "2026-08-04",
+			DataStatus: "盘中实时行情",
 		},
 		Stat: &AgentBriefStat{
+			Date:  "20260803",
 			PETTM: 25,
 		},
 		LatestReport: &AgentBriefLatestReport{
@@ -30,7 +34,13 @@ func TestBuildScenarioValuationTextUsesDefaultsAndAvoidsAdvice(t *testing.T) {
 
 	text := buildScenarioValuationText(brief, url.Values{"years": []string{"3"}})
 
-	for _, want := range []string{"情景估值：", "悲观 | -10.00%", "中性 | 0.00%", "乐观 | 8.00%", "不代表买卖建议"} {
+	for _, want := range []string{
+		"价格来源：TDX行情",
+		"查询时间：2026-08-04T10:00:00+08:00",
+		"行情日期：2026-08-04",
+		"PE_TTM统计日期：2026-08-03",
+		"情景估值：", "悲观 | -10.00%", "中性 | 0.00%", "乐观 | 8.00%", "不代表买卖建议",
+	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("text missing %q:\n%s", want, text)
 		}
@@ -59,6 +69,7 @@ func TestBuildScenarioValuationTextDescribesManualInputs(t *testing.T) {
 	text := buildScenarioValuationText(brief, query)
 
 	for _, want := range []string{
+		"价格来源：用户输入",
 		"EPS 10.0000（用户输入）",
 		"悲观 | 10.00% | 15.00 | 12.1000 | 181.50元 | +81.50% | +34.72%",
 		"关键假设：使用用户输入的增长率和目标PE。",
@@ -108,11 +119,16 @@ func TestBuildImpliedExpectationTextCalculatesPressure(t *testing.T) {
 	brief := AgentStockBrief{
 		Code: "603063",
 		Quote: &AgentBriefQuote{
-			Price: 50,
+			Price:      50,
+			QueryTime:  "2026-08-04T10:00:00+08:00",
+			DataDate:   "2026-08-04",
+			DataStatus: "盘中实时行情",
 		},
 		Stat: &AgentBriefStat{
+			Date:  "20260803",
 			PETTM: 25,
 		},
+		LatestReport: &AgentBriefLatestReport{ReportDate: "2026-06-30", NetProfitYoY: 16.55},
 	}
 	query := url.Values{
 		"years":    []string{"3"},
@@ -121,7 +137,13 @@ func TestBuildImpliedExpectationTextCalculatesPressure(t *testing.T) {
 
 	text := buildImpliedExpectationText(brief, query)
 
-	for _, want := range []string{"当前价格隐含未来 EPS", "隐含 EPS 年复合增速", "估值预期压力"} {
+	for _, want := range []string{
+		"价格来源：TDX行情",
+		"行情日期：2026-08-04",
+		"PE_TTM统计日期：2026-08-03",
+		"报告期2026-06-30净利润同比+16.55%",
+		"当前价格隐含未来 EPS", "隐含 EPS 年复合增速", "估值预期压力",
+	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("text missing %q:\n%s", want, text)
 		}
@@ -137,6 +159,7 @@ func TestBuildImpliedExpectationTextCalculatesManualInputs(t *testing.T) {
 	})
 
 	for _, want := range []string{
+		"价格来源：用户输入",
 		"当前价格隐含未来 EPS：5.0000",
 		"隐含 EPS 年复合增速：-29.29%",
 	} {

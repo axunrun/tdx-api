@@ -536,62 +536,48 @@ func writeHotspotSectorLine(
 	label string,
 ) {
 	period := hotspotMetricPeriodText(summary.Metric)
-	b.WriteString(fmt.Sprintf("%d. %s：", rank, sector.Name))
+	b.WriteString(fmt.Sprintf("%d. %s\n", rank, sector.Name))
+	b.WriteString("   指数：")
 	switch summary.Metric {
 	case "windowReturn":
 		b.WriteString(fmt.Sprintf(
-			"板块指数区间%s；",
+			"指定区间%s。",
 			formatPercentText(sector.AverageValue),
 		))
 		period = "最近完整交易日"
 	case "dailyReturn":
 		b.WriteString(fmt.Sprintf(
-			"板块指数%s单日%s；成分股统计日%s单日平均%s；",
-			summary.MetricEndDate,
+			"最近完整交易日单日%s。",
 			formatPercentText(sector.AverageValue),
-			summary.ConstituentDataDate,
-			formatPercentText(sector.ConstituentAverageValue),
 		))
-		period = summary.ConstituentDataDate + "单日"
+		period = "单日"
 	default:
+		indexParts := make([]string, 0, 2)
 		if sector.BoardIndexDailyReturn != nil {
-			b.WriteString(fmt.Sprintf(
-				"板块指数%s单日%s；",
-				summary.BoardIndexDailyDate,
-				formatPercentText(*sector.BoardIndexDailyReturn),
-			))
+			indexParts = append(indexParts, "最近完整交易日单日"+
+				formatPercentText(*sector.BoardIndexDailyReturn))
 		}
 		if sector.BoardIndexReturn != nil {
-			if summary.Metric == "changePct" && summary.BoardIndexEndDate != "" {
-				b.WriteString(fmt.Sprintf(
-					"板块指数%s单日%s；",
-					summary.BoardIndexEndDate,
-					formatPercentText(*sector.BoardIndexReturn),
-				))
-			} else {
-				b.WriteString(fmt.Sprintf(
-					"板块指数%s%s；",
-					period,
-					formatPercentText(*sector.BoardIndexReturn),
-				))
+			indexLabel := period
+			if summary.Metric == "changePct" {
+				indexLabel = "同统计日单日"
 			}
+			indexParts = append(indexParts, indexLabel+formatPercentText(*sector.BoardIndexReturn))
 		}
-		b.WriteString(fmt.Sprintf(
-			"成分股%s平均%s；",
-			period,
-			formatPercentText(sector.AverageValue),
-		))
+		if len(indexParts) == 0 {
+			indexParts = append(indexParts, "不可用")
+		}
+		b.WriteString(strings.Join(indexParts, "；") + "。")
 	}
-	breadthDate := "最近完整交易日"
-	if summary.Metric == "dailyReturn" {
-		breadthDate = "成分股统计日"
-	}
-	if summary.ConstituentDataDate != "" {
-		breadthDate += summary.ConstituentDataDate
+	b.WriteString("\n   成分：")
+	constituentAverage := sector.AverageValue
+	if summary.Metric == "dailyReturn" || summary.Metric == "windowReturn" {
+		constituentAverage = sector.ConstituentAverageValue
 	}
 	b.WriteString(fmt.Sprintf(
-		"%s上涨%d/%d（%s）。",
-		breadthDate,
+		"%s平均%s；上涨%d/%d（%s）。",
+		period,
+		formatPercentText(constituentAverage),
 		sector.RisingCount,
 		sector.MemberCount,
 		formatPercentText(sector.RisingPct),

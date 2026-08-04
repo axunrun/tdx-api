@@ -75,10 +75,11 @@ func TestBuildAgentMarketReviewText(t *testing.T) {
 			RisingPct: 33.33, AverageChange: -0.5, MedianChange: -0.4,
 		},
 		Hotspots: &AgentMarketHotspots{
-			Strong: []AgentHotspotSector{{Name: "光伏", AverageValue: 3}},
-			Middle: []AgentHotspotSector{{Name: "储能", AverageValue: 1}},
-			Weak:   []AgentHotspotSector{{Name: "白酒", AverageValue: -2}},
+			Strong: []AgentHotspotSector{{Name: "光伏", AverageValue: 3}, {Name: "储能", AverageValue: 2}},
+			Middle: []AgentHotspotSector{{Name: "银行", AverageValue: 1}, {Name: "保险", AverageValue: 0}},
+			Weak:   []AgentHotspotSector{{Name: "白酒", AverageValue: -2}, {Name: "医药", AverageValue: -3}},
 		},
+		Limits: map[string]int{"hotspotTop": 1},
 	}
 
 	text := buildAgentMarketReviewText(summary)
@@ -94,6 +95,9 @@ func TestBuildAgentMarketReviewText(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Fatalf("text missing %q: %s", want, text)
 		}
+	}
+	if strings.Contains(text, "储能+2.00%") || strings.Contains(text, "保险+0.00%") {
+		t.Fatalf("text ignored hotspotTop limit: %s", text)
 	}
 }
 

@@ -159,6 +159,10 @@ func TestMCPMarketReviewDescribesDataDatesAndSessionMeaning(t *testing.T) {
 			t.Fatalf("session description missing %q: %s", want, description)
 		}
 	}
+	top := properties["top"].(map[string]any)
+	if top["default"] != 5 || top["minimum"] != 1 || top["maximum"] != 5 {
+		t.Fatalf("top schema = %+v", top)
+	}
 }
 
 func TestMCPToolSchemasDescribeAgentReadableConstraints(t *testing.T) {
@@ -288,9 +292,14 @@ func TestMCPKlineSchemaDescribesRawDailyTradingData(t *testing.T) {
 func TestMCPToolSchemasDescribeCalculationTools(t *testing.T) {
 	scenario := findMCPTool(t, "tdx_scenario_valuation_text")
 	scenarioProperties := scenario.InputSchema["properties"].(map[string]any)
-	for _, name := range []string{"years", "eps", "bearGrowth", "basePE", "assumptionMode"} {
+	for _, name := range []string{"years", "eps", "bearGrowth", "basePE"} {
 		if scenarioProperties[name] == nil {
 			t.Fatalf("scenario schema missing %s", name)
+		}
+	}
+	for _, name := range []string{"assumptionMode", "level"} {
+		if scenarioProperties[name] != nil {
+			t.Fatalf("scenario schema retains unused %s: %+v", name, scenarioProperties[name])
 		}
 	}
 	for _, name := range []string{"bearPE", "basePE", "bullPE"} {
@@ -326,6 +335,9 @@ func TestMCPToolSchemasDescribeCalculationTools(t *testing.T) {
 			t.Fatalf("implied schema missing %s", name)
 		}
 	}
+	if impliedProperties["level"] != nil {
+		t.Fatalf("implied schema retains unused level: %+v", impliedProperties["level"])
+	}
 	targetPE := impliedProperties["targetPE"].(map[string]any)
 	if targetPE["exclusiveMinimum"] != 0 ||
 		!strings.Contains(targetPE["description"].(string), "必须为正数") {
@@ -337,12 +349,15 @@ func TestMCPToolSchemasDescribeCalculationTools(t *testing.T) {
 	}
 
 	technical := findMCPTool(t, "tdx_technical_score_text")
-	for _, want := range []string{"查询时间", "各周期数据日期", "交易时段"} {
+	for _, want := range []string{"查询时间", "各周期数据日期", "交易时段", "无level参数"} {
 		if !strings.Contains(technical.Description, want) {
 			t.Fatalf("technical description missing %q: %s", want, technical.Description)
 		}
 	}
 	technicalProperties := technical.InputSchema["properties"].(map[string]any)
+	if technicalProperties["level"] != nil {
+		t.Fatalf("technical schema retains unused level: %+v", technicalProperties["level"])
+	}
 	dayCount := technicalProperties["dayCount"].(map[string]any)
 	if dayCount["minimum"] != 60 || dayCount["maximum"] != 500 {
 		t.Fatalf("technical dayCount schema = %+v", dayCount)

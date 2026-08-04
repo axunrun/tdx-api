@@ -74,9 +74,9 @@ MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text
 | `/api/agent/trade-flow-estimate` | 单日逐笔资金流估算 JSON | 已完成 | 支持 `date=YYYY-MM-DD`，优先按60个交易日逐笔成交额自适应阈值估算分档资金流；旧周期缓存自动失效 |
 | `/api/agent/trade-flow-estimate-text` | 单日逐笔资金流估算文本 | 已完成 | 面向 Agent 的中文低噪音输出，明确非外部 APP 官方口径 |
 | `/api/agent/margin-trading` | 个股融资融券 JSON | 已完成 | 直连上交所、深交所、北交所官方披露，返回最新 N 个实际交易日的逐日明细 |
-| `/api/agent/margin-trading-text` | 个股融资融券文本 | 已完成 | 面向 Agent 的中文表格，明确查询时间、最新披露日期、请求与实际交易日数量 |
+| `/api/agent/margin-trading-text` | 个股融资融券文本 | 已完成 | 默认输出最新值和区间摘要；`mode=full` 才返回逐日表格，均明确查询时间、最新披露日期和实际交易日数量 |
 | `/api/agent/f10-summary` | F10 深度资料 JSON | 已完成 | 覆盖股本、股东、机构、分红、资金、资本、题材、公告、经营、行业、研报等低频资料 |
-| `/api/agent/f10-summary-text` | F10 深度资料文本 | 已完成 | 面向 Agent 的深度基本面补充输出 |
+| `/api/agent/f10-summary-text` | F10 深度资料文本 | 已完成 | 默认输出全部保留分类；可用 `sections` 精确选择分类，文本省略重复用途说明和排除清单 |
 | `/api/agent/assets/search` | A 股资产搜索 JSON | 已完成 | 模糊解析代码、名称、拼音输入；候选项返回与 `assets/detail` 同颗粒度详情 |
 | `/api/agent/assets/search-text` | A 股资产搜索文本 | 已完成 | 面向 Agent 的中文资产解析结果；查无结果时明确提示“查无此股票” |
 | `/api/agent/assets/detail` | A 股资产详情 JSON | 已完成 | 明确代码查询单只资产详情，返回标准代码、名称、市场、类型和板块归属 |
@@ -108,37 +108,39 @@ MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text
 | `/api/agent/stock-brief` | `code` 必填；`mkt` 可选 | `code` 为股票代码；`mkt` 用于覆盖市场，通常可省略 |
 | `/api/agent/stock-brief-text` | `code` 必填；`mkt` 可选 | 返回中文低噪音基本快照；明确行情查询时间、数据日期和状态，财务及估值保留各自报告或统计日期 |
 | `/api/agent/technical-summary` | `code` 必填 | 返回日/周/月未复权技术指标摘要 |
-| `/api/agent/technical-score-text` | `code` 必填；`dayCount`、`includeWeeklyMonthly`、`adjust`、`level` 可选 | `dayCount=60..500`，默认250，小于250仍按250根预热；`includeWeeklyMonthly=true|false`，默认true；`adjust=qfq|none`，默认qfq；输出10类指标，ATR/OBV固定0分；盘中按当前未完成日K动态计算 |
+| `/api/agent/technical-score-text` | `code` 必填；`dayCount`、`includeWeeklyMonthly`、`adjust` 可选 | `dayCount=60..500`，默认250，小于250仍按250根预热；`includeWeeklyMonthly=true|false`，默认true；`adjust=qfq|none`，默认qfq；输出10类指标，ATR/OBV固定0分；盘中按当前未完成日K动态计算；无`level`参数 |
 | `/api/agent/kline-summary` | `code` 必填；`level` 可选；`dayCount` 可选 | `level=brief|normal|deep`；`dayCount` 控制日线展示与阶段统计数量，最大500；近52周区间独立使用最近250根日K计算 |
 | `/api/agent/kline-summary-text` | `code` 必填；`level`、`dayCount`、`adjust` 可选 | `adjust=qfq|none`，默认qfq；近N日收益使用当前收盘与N个交易日前收盘；日线近52周区间使用最近250根日K |
 | `/api/agent/trade-flow-estimate` | `code` 必填；`date` 可选 | `date=YYYY-MM-DD` 或 `YYYYMMDD`；不传默认今天 |
 | `/api/agent/trade-flow-estimate-text` | `code` 必填；`date` 可选 | 与 JSON 版一致，返回中文资金流估算摘要 |
 | `/api/agent/margin-trading` | `code` 必填；`days` 可选 | `days=1..120`，默认30；从交易所最新已披露记录向前取 N 个实际交易日，不按自然日计数，不提供 `start/end` 参数；接口可联通但无该证券明细时返回 `isMarginEligible=false`、`eligibilityStatus=not_eligible` |
-| `/api/agent/margin-trading-text` | 同 JSON 版 | MCP 工具名 `tdx_margin_trading_text`；输出融资余额、融资买入/偿还、融券卖出/余量及交易所可提供的融券或两融余额 |
-| `/api/agent/f10-summary` | `code` 必填；`mkt` 可选 | 返回低频深度 F10 分类裁剪摘要 |
-| `/api/agent/f10-summary-text` | `code` 必填；`mkt` 可选 | 与 JSON 版一致，返回中文低噪音文本 |
+| `/api/agent/margin-trading-text` | `code` 必填；`days`、`mode` 可选 | `mode=summary|full`，默认 `summary`；summary 输出最新值、区间变动、高低点及累计融资净买入，full 输出逐日完整表格 |
+| `/api/agent/f10-summary` | `code` 必填；`mkt`、`sections` 可选 | `sections` 为逗号分隔的精确分类名；留空返回全部保留分类 |
+| `/api/agent/f10-summary-text` | 同 JSON 版 | 返回中文低噪音正文，不重复每类用途和运行时排除清单 |
 | `/api/agent/assets/search` | `keyword` 必填，也支持 `q`；`limit` 可选 | 搜索 A 股资产，默认最多 20 条，最大 50 条；每个候选项包含 `assets/detail` 同颗粒度字段；查无结果返回 `count=0` 和空 `items`，不作为接口错误 |
 | `/api/agent/assets/search-text` | 同 JSON 版 | 返回中文资产搜索结果；唯一命中时可直接读取代码和主要板块，查无结果时返回“查无此股票” |
 | `/api/agent/assets/detail` | `code` 必填 | 明确代码查询单只 A 股资产标准名称、市场属性和板块归属 |
 | `/api/agent/sector-membership` | `code` 必填 | 查询个股完整板块归属，返回原始列表和分组结果 |
 | `/api/agent/sector-membership-text` | `code` 必填 | 与 JSON 版一致，返回中文板块归属摘要 |
-| `/api/agent/stock-in-sector` | `code` 必填；`sectorType` 可选；`sectorName` 可选；`metric` 可选；`limit` 可选 | 默认选第一个概念板块；`metric=changePct|chg5|chg20|chg60|peTtm|divYield`；`limit` 默认 10 最大 50 |
-| `/api/agent/stock-in-sector-text` | 同 JSON 版 | 返回中文相对强弱摘要 |
+| `/api/agent/stock-in-sector` | `code` 必填；`sectorType` 可选；`sectorName` 可选；`metric` 可选；`limit` 可选 | 默认选第一个概念板块；`metric=changePct|chg5|chg20|chg60|peTtm|divYield`，默认 `chg20`；仅使用最近完整 TdxStat 统计日样本；`limit` 默认 10 最大 50 |
+| `/api/agent/stock-in-sector-text` | 同 JSON 版 | 返回查询时间、成分股统计日、目标股排名、百分位和板块前列股票；不是盘中实时排名 |
 | `/api/agent/sector-detail` | `sectorName` 或 `indexCode` 必填；`sectorType` 可选；`metric` 可选；`topStocks` 可选；`excludeNew` 可选 | `sectorName` 必须与 TDX 板块名精确一致，名称不确定时使用 `indexCode`；`topStocks` 表示强/中/弱各自上限；`excludeNew=true` 排除 N/C、单日涨幅超过100%及涨跌类 metric 排序值超过100%的样本；返回板块指数完整日与单独标注的 TdxStat 成分股统计日 |
 | `/api/agent/sector-detail-text` | 同 JSON 版 | 返回中文板块深度摘要，适合在 `hotspot-scan` 找到板块后继续拆解 |
 | `/api/agent/sector-realtime`、`/api/agent/sector-realtime-text` | `sectorName` 或 `indexCode` 必填；`sectorType` 可选 | 仅工作日 09:30-11:30、13:00-15:00 返回实时板块指数涨跌；盘前、午休、收盘后和周末返回 `available=false` 及明确说明，不回退历史数据 |
 | `/api/agent/hotspot-scan` | `sectorType` 可选；`metric` 可选；`startDate` 可选；`endDate` 可选；`window` 可选；`offset` 可选；`limit` 可选；`topStocks` 可选；`minMembers` 可选；`excludeNew` 可选 | `metric` 默认 `chg20`；`dailyReturn` 按板块指数最近完整交易日单日涨跌排序；`chg5/chg20/chg60/changePct` 按最新完整 TdxStat 成分股平均值排序，但每个入榜板块固定附带最近完整交易日指数单日涨跌，20/60日等口径同时保留同周期指数收益；`windowReturn` 按板块指数区间收益排序 |
-| `/api/agent/hotspot-scan-text` | 同 JSON 版 | 每个板块依次返回同周期板块指数收益、同周期成分股平均、最近完整交易日上涨比例，以及同周期强势股或抗跌股 |
+| `/api/agent/hotspot-scan-text` | 同 JSON 版 | 日期口径在头部统一说明；每个板块用“指数/成分”两行返回同周期指数收益、成分股平均、上涨比例及代表股 |
 | `/api/agent/multi-brief` | `codes` 或 `code` 必填 | `codes=603063,000001` 或多次传 `code=603063&code=000001`；最多 20 只；JSON 返回每只股票的 `stock-brief` 聚合结果 |
 | `/api/agent/multi-brief-text` | `codes` 必填；`adjust` 可选 | `codes` 为最多20只逗号分隔代码，超过20只明确报错并要求分批调用；`adjust=qfq|none`，默认qfq；全局口径只输出一次，每只股票用独立卡片输出价格、涨跌幅、20日表现、板块、日线10类统一技术指标和日期状态 |
 | `/api/agent/auction` | `code` 必填；`session` 可选；`limit` 可选 | `session=open|close|all`，默认 `open`；`open` 过滤 09:20-09:25 开盘不可撤单竞价，`close` 过滤 14:57-15:00，`all` 返回全天竞价记录；`limit` 默认 20 最大 100 |
-| `/api/agent/auction-text` | 同 JSON 版 | 返回中文竞价摘要，包含末笔价格、较昨收涨跌、匹配量、未匹配方向、近 5/20 个交易日日K累计涨跌背景和信号 |
-| `/api/agent/market-review` | `session` 可选；`codes` 可选；`top` 可选 | `session=auto|current|morning|full`，默认 `auto`；`auto` 按系统时间判断非交易日、盘前、09:20-09:25集合竞价、竞价结束、盘中、午休和收盘；非 `auto` 值只调整复盘文字视角，不改变数据真实日期；`codes` 传关注股列表；`top` 默认 10 最大 20，控制强/中/弱板块数量 |
+| `/api/agent/auction-text` | 同 JSON 版 | 返回查询时间、竞价行情日期和状态、末笔价格、较昨收涨跌、TDX原始数量口径的匹配/未匹配量、标明截止日期的近 5/20 日日K背景和信号 |
+| `/api/agent/market-review` | `session` 可选；`codes` 可选；`top` 可选 | `session=auto|current|morning|full`，默认 `auto`；`auto` 按系统时间判断非交易日、盘前、09:20-09:25集合竞价、竞价结束、盘中、午休和收盘；非 `auto` 值只调整复盘文字视角，不改变数据真实日期；`codes` 传关注股列表；`top` 默认 5、范围 1-5，控制强/中/弱板块各自展示数量 |
 | `/api/agent/market-review-text` | 同 JSON 版 | `currentBreadth` 使用严格A股代码池和实时行情，`latestCompletedBreadth` 使用 `TdxStat` 最新完整盘后日期；两者均输出日期、时点、股票范围和有效样本数。若当前行情不可用则明确提示，不回退冒充当前数据 |
 | `/api/agent/intraday-alerts` | `codes` 或 `code` 必填；`windowMinutes` 可选 | `codes=603063,000001` 或多次传 `code=603063&code=000001`；最多 20 只；`windowMinutes` 默认 30，允许 5-60；JSON 返回交易日判断、每只股票的实时行情、分时近段涨跌、近段成交量变化和异动信号 |
-| `/api/agent/intraday-alerts-text` | 同 JSON 版 | 返回中文盘中异动摘要；若非交易日导致分时为空，会明确提示“非交易日无可用分时数据” |
+| `/api/agent/intraday-alerts-text` | 同 JSON 版 | 输出查询时间；异动股逐只展开，无明显异动股合并一行，重复数据告警按原因归并；非交易日明确提示无可用分时数据 |
 | `/api/agent/global-market-brief` | 无参数 | 返回外围权重资产池；分组包括 `risk`、`apac`、`commodity`、`fx`、`bond`、`leader`；每项包含 `price`、`changePct`、`range20`、`range60`，其中区间字段包含涨跌幅、区间最高、区间最低和当前区间位置；TDX 未验证到 Sensex30、俄罗斯RTS 本体稳定直连代码，暂不硬塞无效项 |
-| `/api/agent/global-market-brief-text` | 无参数 | 返回中文摘要；保留每项现价、当日涨跌、20/60 日涨跌幅、区间高低点和观察意义 |
+| `/api/agent/global-market-brief-text` | 无参数 | 统一输出生成时间；保留每项现价、当日涨跌、20/60日涨跌幅和区间高低点，不重复静态入选理由 |
+| `/api/agent/scenario-valuation-text` | `code` 必填；`mkt`、`years`、`currentPrice`、`eps`、三组增长率和目标PE可选 | 三情景公式计算；自动行情会输出查询时间、行情日期和状态，反推EPS时输出PE统计日期；无 `level` 或 `assumptionMode` 参数 |
+| `/api/agent/implied-expectation-text` | `code` 必填；`mkt`、`years`、`currentPrice`、`eps`、`targetPE` 可选 | 从价格反推未来EPS及隐含增速；输出价格来源、行情时效、PE统计日期和净利润报告期；无 `level` 参数 |
 
 ## 行情数据统一时效口径
 
@@ -447,7 +449,8 @@ Agent 聚合 API 建议保持统一外壳：
 
 `/api/agent/f10-summary` 与 `/api/agent/f10-summary-text` 已完成：
 
-- 参数：`code` 必填；`mkt` 可选。
+- 参数：`code` 必填；`mkt`、`sections` 可选。`sections` 使用逗号分隔的精确分类名，
+  留空返回全部保留分类。
 - 递进边界：
   - 短期/快速分析优先使用 `stock-brief`、`kline-summary-text`、`trade-flow-estimate-text`。
   - 深度基本面分析再追加 `f10-summary-text`。
@@ -464,6 +467,8 @@ Agent 聚合 API 建议保持统一外壳：
   - 保留 ` | ` 列分隔符，避免表格字段混在一起。
   - `研报评级` 分类只保留投资评级统计、盈利预测统计和盈利预测明细；默认去掉 `研报摘要` 和 `机构调研`，避免长篇问答挤占 Agent 上下文。
   - 每个分类默认裁剪 900 字符。
+  - text 版不重复输出每类静态用途说明和运行时排除清单；JSON 版仍保留结构化
+    `usage`、`excluded` 字段供调试。
   - 不输出原始 F10 全文；原文仍可通过 `/api/f10?cat=N` 调试查看。
 
 本次人工检查输出：
@@ -574,7 +579,7 @@ Agent 聚合 API 建议保持统一外壳：
   - 15:00 后：`full` 全天收盘复盘。
 - 也支持手动传 `session=current|morning|full`。
 - `codes` 可选，用于关注股联动摘要。
-- `top` 可选，默认 10，最大 20，控制强/中/弱板块数量。
+- `top` 可选，默认 5，范围 1-5，控制强/中/弱板块各自展示数量；完整排名使用 `hotspot-scan-text`。
 - 输出包含：
   - 主要指数：上证指数、深证成指、创业板指、科创50、北证50，并标明指数日期。
   - `currentBreadth`：严格A股代码池的实时行情广度，标明日期、查询时点、股票总数和有效报价数。
@@ -601,7 +606,7 @@ Agent 聚合 API 建议保持统一外壳：
 - `codes` 支持逗号、中文逗号、空格、换行分隔，也支持多次传 `code=603063&code=000001`。
 - 最多 20 只股票；`windowMinutes` 默认 30，允许 5-60。
 - JSON 版返回每只股票的当前价格、当日涨跌幅、分时近段涨跌、近段成交量变化、异动信号和提示。
-- text 版返回面向 Agent 的中文摘要，只保留当前行情和有效异动结论。
+- text 版输出查询时间；有效异动逐只展开，无明显异动股票合并为一行，重复数据提示按原因归并。
 - 信号口径：
   - 当日涨跌幅 `>= 5%` 标记为“当日强势”。
   - 当日涨跌幅 `<= -5%` 标记为“当日弱势”。

@@ -963,7 +963,7 @@ func buildAgentKlineSummaryText(summary AgentKlineSummary) string {
 	b.WriteString("说明：展示区间由level/dayCount控制；仅输出K线价格结构，不重复技术评分接口的指标。\n")
 	for _, period := range summary.analysisPeriods {
 		b.WriteString(fmt.Sprintf(
-			"%s：样本 %d/%d，区间 %s 至 %s，收盘 %.2f，涨跌幅 %s，最高 %.2f，最低 %.2f，最大回撤 %s，波动区间 %s，趋势 %s，位置 %s",
+			"%s：样本%d/%d，区间%s至%s，收盘%.2f，区间涨跌%s，最高/最低%.2f/%.2f。\n",
 			period.Name,
 			period.UsedCount,
 			period.TotalCount,
@@ -973,21 +973,21 @@ func buildAgentKlineSummaryText(summary AgentKlineSummary) string {
 			formatPercentText(period.ChangePct),
 			period.High,
 			period.Low,
+		))
+		b.WriteString(fmt.Sprintf(
+			"  结构：最大回撤%s，波动区间%s，趋势%s，位置%s，阶段%s，风险%s，近5/20/60日%s/%s/%s。\n",
 			formatPercentText(period.MaxDrawdownPct),
 			formatPercentText(period.VolatilityPct),
 			period.Trend,
 			period.Position,
-		))
-		if len(period.Signals) > 0 {
-			b.WriteString("；信号：" + strings.Join(period.Signals, "、"))
-		}
-		b.WriteString(fmt.Sprintf(
-			"；阶段：%s；风险：%s；近5/20/60涨跌：%s/%s/%s；形态：%s，上影线 %s；连续：%s%d日，区间涨跌 %s；距20日高点 %s，距20日低点 %s",
 			period.TrendStage,
 			period.RiskLevel,
 			formatPercentText(period.StageReturns["ret5"]),
 			formatPercentText(period.StageReturns["ret20"]),
 			formatPercentText(period.StageReturns["ret60"]),
+		))
+		b.WriteString(fmt.Sprintf(
+			"  形态：%s，上影线%s；连续%s%d日，区间涨跌%s；距20日高/低%s/%s",
 			klineCandleShapeText(period.Candle.Shape),
 			formatPercentText(period.Candle.UpperShadowPct),
 			klineStreakDirectionText(period.Streak.Direction),
@@ -996,6 +996,9 @@ func buildAgentKlineSummaryText(summary AgentKlineSummary) string {
 			formatPercentText(period.KeyLevels.DistanceToHigh20Pct),
 			formatPercentText(period.KeyLevels.DistanceToLow20Pct),
 		))
+		if len(period.Signals) > 0 {
+			b.WriteString("；信号：" + strings.Join(period.Signals, "、"))
+		}
 		if period.YearRange.Available {
 			b.WriteString(fmt.Sprintf(
 				"；近52周区间 %.2f-%.2f（%s至%s），距高点 %s，距低点 %s",
@@ -1007,7 +1010,7 @@ func buildAgentKlineSummaryText(summary AgentKlineSummary) string {
 				formatPercentText(period.YearRange.DistanceToLowPct),
 			))
 		}
-		b.WriteString("；摘要：" + period.Summary + "。\n")
+		b.WriteString("。\n")
 	}
 	if len(summary.Warnings) > 0 {
 		b.WriteString("\n数据提示：\n")

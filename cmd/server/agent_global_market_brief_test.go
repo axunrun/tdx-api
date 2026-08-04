@@ -29,6 +29,7 @@ func TestBuildAgentGlobalMarketRangeNeedsPriorClose(t *testing.T) {
 
 func TestBuildAgentGlobalMarketBriefTextIncludesRangeAndWarnings(t *testing.T) {
 	summary := AgentGlobalMarketBrief{
+		GeneratedAt: "2026-08-04T14:00:00+08:00",
 		Groups: []AgentGlobalMarketGroup{
 			{
 				Key:  "leader",
@@ -58,9 +59,12 @@ func TestBuildAgentGlobalMarketBriefTextIncludesRangeAndWarnings(t *testing.T) {
 
 	text := buildAgentGlobalMarketBriefText(summary)
 
-	for _, want := range []string{"外围权重资产概览", "SpaceX", "近20日不可用", "商业航天观察"} {
+	for _, want := range []string{"外围权重资产概览", "生成时间：2026-08-04", "SpaceX", "近20日不可用"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("text missing %q: %s", want, text)
 		}
+	}
+	if strings.Contains(text, "商业航天观察") {
+		t.Fatalf("static reason should not be repeated in agent text: %s", text)
 	}
 }

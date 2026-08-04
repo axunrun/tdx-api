@@ -296,6 +296,9 @@ func groupAgentGlobalMarketItems(items []AgentGlobalMarketItem) []AgentGlobalMar
 func buildAgentGlobalMarketBriefText(summary AgentGlobalMarketBrief) string {
 	var b strings.Builder
 	b.WriteString("外围权重资产概览\n")
+	if summary.GeneratedAt != "" {
+		b.WriteString("生成时间：" + summary.GeneratedAt + "\n")
+	}
 	for _, group := range summary.Groups {
 		b.WriteString("\n")
 		b.WriteString(group.Name)
@@ -315,7 +318,6 @@ func formatAgentGlobalMarketItemText(item AgentGlobalMarketItem) string {
 		fmt.Sprintf("%s（%s）现价%.2f，当日%s", item.Name, item.Code, item.Price, formatPercentText(item.ChangePct)),
 		formatAgentGlobalMarketRangeText("近20日", item.Range20),
 		formatAgentGlobalMarketRangeText("近60日", item.Range60),
-		item.Reason,
 	}
 	if len(item.Warnings) > 0 {
 		parts = append(parts, "提示: "+strings.Join(item.Warnings, "；"))

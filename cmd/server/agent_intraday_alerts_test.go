@@ -35,16 +35,18 @@ func TestApplyIntradayMinuteSignalsDetectsRiseAndVolume(t *testing.T) {
 
 func TestBuildAgentIntradayAlertsText(t *testing.T) {
 	summary := AgentIntradayAlerts{
+		QueryTime:     "2026-08-04T14:00:00+08:00",
 		WindowMinutes: 30,
-		Count:         1,
+		Count:         2,
 		Items: []AgentIntradayAlertItem{
-			{Text: "禾望电气（603063）最新52.00；信号：短时拉升"},
+			{Code: "603063", Signals: []string{"短时拉升"}, Text: "禾望电气（603063）最新52.00；信号：短时拉升"},
+			{Code: "300499", Name: "高澜股份", Signals: []string{"无明显异动"}},
 		},
 	}
 
 	text := buildAgentIntradayAlertsText(summary)
 
-	for _, want := range []string{"盘中异动提醒：近30分钟窗口，共1只", "短时拉升"} {
+	for _, want := range []string{"盘中异动提醒：近30分钟窗口，共2只", "查询时间：2026-08-04", "短时拉升", "无明显异动：高澜股份（300499）"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("text missing %q: %s", want, text)
 		}

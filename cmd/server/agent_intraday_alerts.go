@@ -12,6 +12,7 @@ import (
 
 type AgentIntradayAlerts struct {
 	Source        string                   `json:"source"`
+	QueryTime     string                   `json:"queryTime"`
 	TradingDay    bool                     `json:"tradingDay"`
 	WindowMinutes int                      `json:"windowMinutes"`
 	Count         int                      `json:"count"`
@@ -98,6 +99,7 @@ func buildAgentIntradayAlerts(
 	}
 	return AgentIntradayAlerts{
 		Source:        "tdx_agent_intraday_alerts",
+		QueryTime:     time.Now().Format(time.RFC3339),
 		TradingDay:    tradingDay,
 		WindowMinutes: windowMinutes,
 		Count:         len(items),
@@ -288,11 +290,42 @@ func intradayAlertText(item AgentIntradayAlertItem) string {
 func buildAgentIntradayAlertsText(summary AgentIntradayAlerts) string {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("盘中异动提醒：近%d分钟窗口，共%d只。\n", summary.WindowMinutes, summary.Count))
-	for i, item := range summary.Items {
-		b.WriteString(fmt.Sprintf("%d. %s\n", i+1, item.Text))
-		if len(item.Warnings) > 0 {
-			b.WriteString("   提示：" + strings.Join(item.Warnings, "；") + "\n")
+	if summary.QueryTime != "" {
+		b.WriteString("查询时间：" + summary.QueryTime + "\n")
+	}
+	triggered := make([]AgentIntradayAlertItem, 0, len(summary.Items))
+	quiet := make([]string, 0, len(summary.Items))
+	warningCodes := make(map[string][]string)
+	warningOrder := make([]string, 0)
+	for _, item := range summary.Items {
+		for _, warning := range item.Warnings {
+			if _, exists := warningCodes[warning]; !exists {
+				warningOrder = append(warningOrder, warning)
+			}
+			warningCodes[warning] = append(warningCodes[warning], item.Code)
 		}
+		if len(item.Signals) == 1 && item.Signals[0] == "无明显异动" {
+			name := item.Name
+			if name == "" {
+				name = item.Code
+			}
+			quiet = append(quiet, fmt.Sprintf("%s（%s）", name, item.Code))
+			continue
+		}
+		triggered = append(triggered, item)
+	}
+	if len(triggered) > 0 {
+		b.WriteString("异动标的：\n")
+		for i, item := range triggered {
+			b.WriteString(fmt.Sprintf("%d. %s\n", i+1, item.Text))
+		}
+	}
+	if len(quiet) > 0 {
+		b.WriteString("无明显异动：" + strings.Join(quiet, "、") + "。\n")
+	}
+	for _, warning := range warningOrder {
+		codes := warningCodes[warning]
+		b.WriteString(fmt.Sprintf("数据提示：%s（%s）。\n", warning, strings.Join(codes, "、")))
 	}
 	appendWarningsText(&b, summary.Warnings)
 	return strings.TrimSpace(b.String())

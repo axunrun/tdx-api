@@ -87,10 +87,18 @@ func TestMarginTradingTextExplainsDaysAndDisclosureDate(t *testing.T) {
 		"最新已披露交易日：2026-07-30",
 		"请求2个交易日，实际返回2个交易日",
 		"days按交易所实际披露记录计数，不按自然日计数",
+		"区间（2026-07-29至2026-07-30）",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("text missing %q:\n%s", want, text)
 		}
+	}
+	if strings.Contains(text, "| 交易日 |") {
+		t.Fatalf("summary mode should not include daily table:\n%s", text)
+	}
+	full := buildMarginTradingText(result, "full")
+	if !strings.Contains(full, "| 交易日 |") || !strings.Contains(full, "2026-07-29") {
+		t.Fatalf("full mode should include daily table:\n%s", full)
 	}
 }
 
@@ -103,10 +111,10 @@ func TestMarginTradingOptionalAmountDistinguishesMissingFromZero(t *testing.T) {
 	}
 }
 
-func TestMarginTradingMCPOnlyExposesCodeAndDays(t *testing.T) {
+func TestMarginTradingMCPExposesCodeDaysAndMode(t *testing.T) {
 	tool := findMCPTool(t, "tdx_margin_trading_text")
 	properties := tool.InputSchema["properties"].(map[string]any)
-	if len(properties) != 2 {
+	if len(properties) != 3 {
 		t.Fatalf("properties = %+v", properties)
 	}
 	if _, ok := properties["code"]; !ok {
@@ -115,6 +123,10 @@ func TestMarginTradingMCPOnlyExposesCodeAndDays(t *testing.T) {
 	days := properties["days"].(map[string]any)
 	if days["default"] != 30 || days["minimum"] != 1 || days["maximum"] != 120 {
 		t.Fatalf("days schema = %+v", days)
+	}
+	assertMCPEnum(t, properties, "mode", "summary", "full")
+	if properties["mode"].(map[string]any)["default"] != "summary" {
+		t.Fatalf("mode schema = %+v", properties["mode"])
 	}
 	for _, forbidden := range []string{"start", "end", "startDate", "endDate"} {
 		if _, ok := properties[forbidden]; ok {
