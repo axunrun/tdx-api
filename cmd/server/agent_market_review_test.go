@@ -8,6 +8,17 @@ import (
 	"github.com/injoyai/tdx/protocol"
 )
 
+func TestLatestCompletedMarketIndexKlineSkipsPreopenPlaceholder(t *testing.T) {
+	want := &protocol.Kline{Close: 100, Volume: 1}
+	got := latestCompletedMarketIndexKline([]*protocol.Kline{
+		want,
+		{Close: 100},
+	})
+	if got != want {
+		t.Fatalf("latestCompletedMarketIndexKline() = %v, want completed row", got)
+	}
+}
+
 func TestResolveMarketReviewTypeAuto(t *testing.T) {
 	tests := []struct {
 		at   time.Time
@@ -114,7 +125,7 @@ func TestBuildAgentMarketReviewTextMarksCurrentBreadthUnavailable(t *testing.T) 
 		},
 	})
 
-	if !strings.Contains(text, "当前市场广度：不可用（当前交易日尚无有效行情）") {
+	if !strings.Contains(text, "当前市场广度：盘前尚未产生；最近完整盘后广度见下文") {
 		t.Fatalf("unexpected text: %s", text)
 	}
 }

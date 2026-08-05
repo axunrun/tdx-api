@@ -168,8 +168,12 @@ func multiBriefQuoteCardText(brief AgentStockBrief) string {
 	if brief.Quote == nil {
 		return "行情：不可用"
 	}
+	priceLabel := "现价"
+	if strings.Contains(brief.Quote.DataStatus, "最近完整交易日") {
+		priceLabel = "最近收盘价"
+	}
 	parts := []string{
-		fmt.Sprintf("现价%.2f", brief.Quote.Price),
+		fmt.Sprintf("%s%.2f", priceLabel, brief.Quote.Price),
 		"涨跌幅" + formatPercentText(brief.Quote.ChangePct),
 		"成交额" + brief.Quote.AmountText,
 	}

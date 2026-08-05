@@ -207,7 +207,11 @@ func buildMarketIndexes(c *tdx.Client) ([]AgentMarketIndex, []string) {
 			warnings = append(warnings, spec.name+"指数K线获取失败")
 			continue
 		}
-		kline := resp.List[len(resp.List)-1]
+		kline := latestCompletedMarketIndexKline(resp.List)
+		if kline == nil {
+			warnings = append(warnings, spec.name+"指数无有效K线")
+			continue
+		}
 		lastClose := kline.Last.Float64()
 		changePct := 0.0
 		if lastClose > 0 {
@@ -223,6 +227,15 @@ func buildMarketIndexes(c *tdx.Client) ([]AgentMarketIndex, []string) {
 		})
 	}
 	return items, warnings
+}
+
+func latestCompletedMarketIndexKline(klines []*protocol.Kline) *protocol.Kline {
+	for i := len(klines) - 1; i >= 0; i-- {
+		if klines[i] != nil && klines[i].Close.Float64() > 0 && klines[i].Volume > 0 {
+			return klines[i]
+		}
+	}
+	return nil
 }
 
 func medianFloat64(values []float64) float64 {
@@ -298,7 +311,7 @@ func buildAgentMarketReviewText(summary AgentMarketReview) string {
 		}
 		b.WriteString(fmt.Sprintf("%s（%s）：%s。\n", label, indexDate, strings.Join(parts, "，")))
 	}
-	appendCurrentMarketBreadthText(&b, summary.CurrentBreadth)
+	appendCurrentMarketBreadthText(&b, summary.CurrentBreadth, summary.ReviewType)
 	appendCompletedMarketBreadthText(
 		&b,
 		summary.LatestCompletedBreadth,
@@ -353,8 +366,17 @@ func marketReviewTypeText(reviewType string) string {
 	}
 }
 
-func appendCurrentMarketBreadthText(b *strings.Builder, breadth AgentMarketBreadth) {
+func appendCurrentMarketBreadthText(
+	b *strings.Builder,
+	breadth AgentMarketBreadth,
+	reviewType string,
+) {
 	if !breadth.Available {
+		if reviewType == "preopen" || reviewType == "call_auction" ||
+			reviewType == "preopen_after_auction" {
+			b.WriteString("当前市场广度：盘前尚未产生；最近完整盘后广度见下文。\n")
+			return
+		}
 		b.WriteString(fmt.Sprintf("当前市场广度：不可用（%s）。\n", breadth.SourceNote))
 		return
 	}

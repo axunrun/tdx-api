@@ -8,6 +8,39 @@ import (
 	"github.com/injoyai/tdx/protocol"
 )
 
+func TestLatestAgentBriefKlineSkipsInvalidTrailingRows(t *testing.T) {
+	want := &protocol.Kline{
+		Close:  100,
+		Volume: 1,
+		Time:   time.Date(2026, 8, 4, 0, 0, 0, 0, time.Local),
+	}
+	got := latestAgentBriefKline(&protocol.KlineResp{
+		List: []*protocol.Kline{want, nil, {Close: 200}, {Close: 0}},
+	})
+	if got != want {
+		t.Fatalf("latestAgentBriefKline() = %v, want latest valid row", got)
+	}
+}
+
+func TestQuoteTextLabelsFallbackAsLatestClose(t *testing.T) {
+	var b strings.Builder
+	appendQuoteText(&b, &AgentBriefQuote{
+		Price:      12.34,
+		DataDate:   "2026-08-04",
+		DataStatus: "实时行情尚未形成有效价格，使用最近完整交易日收盘行情",
+	}, &AgentBriefMoneyflow{
+		Date:             "20260803",
+		AmountChangeText: "1.00亿元",
+	})
+	text := b.String()
+	if !strings.Contains(text, "最近收盘价 12.34 元") || strings.Contains(text, "当前价格") {
+		t.Fatalf("unexpected fallback quote text: %s", text)
+	}
+	if strings.Contains(text, "成交额较上一交易日") {
+		t.Fatalf("text mixed quote and amount statistics from different dates: %s", text)
+	}
+}
+
 func TestQuoteKlineDataStatusFollowsUnifiedFreshnessPolicy(t *testing.T) {
 	location := time.FixedZone("Asia/Shanghai", 8*60*60)
 	today := time.Date(2026, 7, 31, 0, 0, 0, 0, location)
@@ -124,6 +157,7 @@ func TestBuildAgentStockBriefTextUsesChineseSummaryAndFiltersDebugFields(t *test
 			ChgYTD:    18.2,
 		},
 		Moneyflow: &AgentBriefMoneyflow{
+			Date:             "20260731",
 			Amount:           110020.88,
 			AmountPrev:       90000,
 			AmountChangePct:  22.25,
@@ -184,7 +218,7 @@ func TestBuildAgentStockBriefTextUsesChineseSummaryAndFiltersDebugFields(t *test
 		"行情摘要：",
 		"振幅 +6.94%",
 		"换手率 +4.79%",
-		"成交额较昨日增加2.00亿元（+22.25%）",
+		"成交额较上一交易日增加2.00亿元（+22.25%）",
 		"总市值 232.70亿元，流通市值 232.70亿元",
 		"总资产 91.76亿元",
 		"主营利润 20.15亿元，营业利润 6.12亿元",

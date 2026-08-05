@@ -40,9 +40,14 @@ func appendQuoteText(b *strings.Builder, quote *AgentBriefQuote, moneyflow *Agen
 	b.WriteString(fmt.Sprintf("查询时间：%s\n", valueOrDash(quote.QueryTime)))
 	b.WriteString(fmt.Sprintf("行情数据日期：%s\n", valueOrDash(quote.DataDate)))
 	b.WriteString(fmt.Sprintf("行情数据状态：%s。\n", valueOrDash(quote.DataStatus)))
+	priceLabel := "当前价格"
+	if strings.Contains(quote.DataStatus, "最近完整交易日") {
+		priceLabel = "最近收盘价"
+	}
 	b.WriteString(fmt.Sprintf(
-		"%s，当前价格 %.2f 元，涨跌幅 %s。日内区间 %.2f-%.2f 元，振幅 %s，开盘 %.2f 元，昨收 %.2f 元，成交额 %s，成交量 %d 手",
+		"%s，%s %.2f 元，涨跌幅 %s。日内区间 %.2f-%.2f 元，振幅 %s，开盘 %.2f 元，昨收 %.2f 元，成交额 %s，成交量 %d 手",
 		quote.Market,
+		priceLabel,
 		quote.Price,
 		formatPercentText(quote.ChangePct),
 		quote.Low,
@@ -56,9 +61,10 @@ func appendQuoteText(b *strings.Builder, quote *AgentBriefQuote, moneyflow *Agen
 	if quote.TurnoverRate > 0 {
 		b.WriteString(fmt.Sprintf("，换手率 %s", formatPercentText(quote.TurnoverRate)))
 	}
-	if moneyflow != nil && moneyflow.AmountChangeText != "" {
+	if moneyflow != nil && moneyflow.AmountChangeText != "" &&
+		formatTdxStatDate(moneyflow.Date) == quote.DataDate {
 		b.WriteString(fmt.Sprintf(
-			"，成交额较昨日%s（%s）",
+			"，成交额较上一交易日%s（%s）",
 			formatSignedCNYText(moneyflow.AmountChangeText, moneyflow.Amount-moneyflow.AmountPrev),
 			formatPercentText(moneyflow.AmountChangePct),
 		))

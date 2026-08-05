@@ -518,6 +518,18 @@ func buildAgentBriefQuote(c *tdx.Client, code string, queryTimes ...time.Time) (
 	}
 	quote := quotes[0]
 	kline := quote.Kline
+	fallback := false
+	if kline.Close.Float64() <= 0 {
+		resp, fallbackErr := c.GetKlineDay(code, 0, 5)
+		if fallbackErr != nil {
+			return nil, fmt.Errorf("实时行情无有效价格，日K回退失败: %w", fallbackErr)
+		}
+		kline = latestAgentBriefKline(resp)
+		if kline == nil {
+			return nil, fmt.Errorf("实时行情无有效价格，且无有效日K数据")
+		}
+		fallback = true
+	}
 	lastClose := kline.Last.Float64()
 	price := kline.Close.Float64()
 	changePct := 0.0
@@ -525,6 +537,12 @@ func buildAgentBriefQuote(c *tdx.Client, code string, queryTimes ...time.Time) (
 	if lastClose != 0 {
 		changePct = (price - lastClose) / lastClose * 100
 		amplitudePct = (kline.High.Float64() - kline.Low.Float64()) / lastClose * 100
+	}
+	dataDate := quoteKlineDataDate(kline, now)
+	dataStatus := quoteKlineDataStatus(kline, now)
+	if fallback {
+		dataDate = kline.Time.Format(time.DateOnly)
+		dataStatus = "实时行情尚未形成有效价格，使用最近完整交易日收盘行情"
 	}
 	return &AgentBriefQuote{
 		Code:         quote.Code,
@@ -541,9 +559,22 @@ func buildAgentBriefQuote(c *tdx.Client, code string, queryTimes ...time.Time) (
 		AmountText:   formatCNYText(kline.Amount.Float64()),
 		Text:         fmt.Sprintf("现价%.2f，涨跌幅%.2f%%，成交额%s", price, changePct, formatCNYText(kline.Amount.Float64())),
 		QueryTime:    now.Format(time.RFC3339),
-		DataDate:     quoteKlineDataDate(kline, now),
-		DataStatus:   quoteKlineDataStatus(kline, now),
+		DataDate:     dataDate,
+		DataStatus:   dataStatus,
 	}, nil
+}
+
+func latestAgentBriefKline(resp *protocol.KlineResp) *protocol.Kline {
+	if resp == nil {
+		return nil
+	}
+	for i := len(resp.List) - 1; i >= 0; i-- {
+		if resp.List[i] != nil && resp.List[i].Close.Float64() > 0 &&
+			resp.List[i].Volume > 0 {
+			return resp.List[i]
+		}
+	}
+	return nil
 }
 
 func quoteKlineDataDate(kline *protocol.Kline, now time.Time) string {
