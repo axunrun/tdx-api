@@ -126,7 +126,7 @@ func buildScenarioValuationText(brief AgentStockBrief, query queryValues) string
 	}
 	if price <= 0 || !epsOK || eps <= 0 {
 		return calculationHeader(brief) +
-			"情景估值：无法计算。\n" +
+			"估值计算状态：不适用（接口调用成功）。\n" +
 			"原因：需要有效当前价格、正 EPS 和有效 PE_TTM；服务端不强行解析研报预测 EPS。\n"
 	}
 	if hasNonPositiveInput(query, "bearPE", "basePE", "bullPE") {
@@ -209,7 +209,7 @@ func buildImpliedExpectationText(brief AgentStockBrief, query queryValues) strin
 	targetPE := queryFloatDefault(query, "targetPE", defaultTargetPE(brief.Stat))
 	if price <= 0 || targetPE <= 0 || !epsOK || eps <= 0 {
 		return calculationHeader(brief) +
-			"当前价格隐含预期：无法计算。\n" +
+			"隐含预期计算状态：不适用（接口调用成功）。\n" +
 			"原因：需要有效当前价格、正 EPS 和正目标 PE；亏损公司不适用该公式。\n"
 	}
 	requiredFutureEPS := price / targetPE

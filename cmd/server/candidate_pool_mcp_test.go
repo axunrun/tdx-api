@@ -27,7 +27,8 @@ func TestCandidatePoolMCPToolSchema(t *testing.T) {
 	}
 	assertMCPEnum(t, properties, "action", "add", "list", "get", "remove")
 	code := properties["code"].(map[string]any)
-	if code["pattern"] != `^\d{6}$` {
+	if _, exists := code["pattern"]; exists ||
+		!strings.Contains(code["description"].(string), "300476.SZ") {
 		t.Fatalf("code schema = %+v", code)
 	}
 	validUntil := properties["validUntil"].(map[string]any)

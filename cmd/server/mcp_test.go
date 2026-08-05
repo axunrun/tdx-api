@@ -201,8 +201,8 @@ func TestMCPToolSchemasDescribeAgentReadableConstraints(t *testing.T) {
 	}
 
 	sectorDetail := findMCPTool(t, "tdx_sector_detail_text")
-	if len(sectorDetail.InputSchema["anyOf"].([]map[string]any)) != 2 {
-		t.Fatalf("sector detail anyOf = %+v", sectorDetail.InputSchema["anyOf"])
+	if _, exists := sectorDetail.InputSchema["anyOf"]; exists {
+		t.Fatalf("sector detail anyOf hides properties in some MCP clients: %+v", sectorDetail.InputSchema)
 	}
 	for _, want := range []string{"最近完整交易日单日涨跌", "近20/60日", "不会把未收盘"} {
 		if !strings.Contains(sectorDetail.Description, want) {
@@ -226,8 +226,17 @@ func TestMCPToolSchemasDescribeAgentReadableConstraints(t *testing.T) {
 	}
 
 	sectorRealtime := findMCPTool(t, "tdx_sector_realtime_text")
-	if len(sectorRealtime.InputSchema["anyOf"].([]map[string]any)) != 2 {
-		t.Fatalf("sector realtime anyOf = %+v", sectorRealtime.InputSchema["anyOf"])
+	if _, exists := sectorRealtime.InputSchema["anyOf"]; exists {
+		t.Fatalf("sector realtime anyOf hides properties in some MCP clients: %+v", sectorRealtime.InputSchema)
+	}
+
+	stockBrief := findMCPTool(t, "tdx_stock_brief_text")
+	stockBriefProperties := stockBrief.InputSchema["properties"].(map[string]any)
+	stockCode := stockBriefProperties["code"].(map[string]any)
+	market := stockBriefProperties["mkt"].(map[string]any)
+	if !strings.Contains(stockCode["description"].(string), "300476.SZ") ||
+		!strings.Contains(market["description"].(string), "冲突") {
+		t.Fatalf("stock code contract is incomplete: code=%+v mkt=%+v", stockCode, market)
 	}
 	for _, want := range []string{
 		"09:30-11:30",
@@ -262,7 +271,8 @@ func TestMCPKlineSchemaDescribesRawDailyTradingData(t *testing.T) {
 
 	properties := kline.InputSchema["properties"].(map[string]any)
 	code := properties["code"].(map[string]any)
-	if code["pattern"] != `^\d{6}$` {
+	if _, exists := code["pattern"]; exists ||
+		!strings.Contains(code["description"].(string), "300499.SZ") {
 		t.Fatalf("code schema = %+v", code)
 	}
 	period := properties["type"].(map[string]any)

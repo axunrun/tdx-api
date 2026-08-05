@@ -24,7 +24,6 @@ func candidatePoolMCPTools() []mcpTool {
 		optionalBool("confirm", "add/remove 等写入候选池的操作必须为 true。"),
 	)
 	properties := tool.InputSchema["properties"].(map[string]any)
-	properties["code"].(map[string]any)["pattern"] = `^\d{6}$`
 	properties["validUntil"] = map[string]any{
 		"type":        "string",
 		"description": "候选池记录有效时间，YYYY-MM-DD 或 YYYYMMDD；通常应与最近深度分析报告的 next_review_date / deep_report_valid_until 对齐；到期后需要重新分析刷新。",
@@ -38,7 +37,7 @@ func candidatePoolMCPTools() []mcpTool {
 	}
 	tool.Description = "SQLite 选股候选池工具。上下文协议：reason 只写为什么入池；themes 写板块/概念/题材；buySignalTier 写能不能买；triggerCondition 写什么时候触发；invalidationCondition 写什么时候失效。list/get 是只读操作，不需要 confirm；add 是按 code 加入或更新，已存在时覆盖 name/addedDate/validUntil/buySignalTier/triggerCondition/invalidationCondition/reason/themes 并刷新 updatedAt，不追加历史；list 默认按 updatedAt desc 返回；remove 是硬删除，会永久移除当前记录且不保留归档。"
 	properties["action"].(map[string]any)["description"] = "操作：add 加入或更新；list 只读列出候选池；get 只读查看单只候选股；remove 硬删除当前记录。"
-	properties["code"].(map[string]any)["description"] = "6 位股票代码；add/get/remove 时必填；同 code 只保留一条当前候选池记录。"
+	properties["code"].(map[string]any)["description"] = "股票代码；推荐6位，同时兼容sz300476、300476.SZ等市场前缀或后缀格式；add/get/remove时必填，同code只保留一条当前记录。"
 	properties["name"].(map[string]any)["description"] = "股票名称；add 时可选，不传则尽量从股票名称库自动补全；同 code 已存在时会被本次值覆盖。"
 	properties["addedDate"].(map[string]any)["description"] = "添加日期，YYYY-MM-DD 或 YYYYMMDD；add 时可选，不传默认今天；同 code 已存在时会被本次值覆盖。"
 	properties["reason"].(map[string]any)["description"] = "入池理由；add 时必填；只写为什么入池，不要混写能不能买；同 code 已存在时覆盖旧 reason，不追加历史。"

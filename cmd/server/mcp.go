@@ -112,9 +112,8 @@ func mcpTools() []mcpTool {
 		mcpToolParam{
 			Name:        "code",
 			Type:        "string",
-			Description: "必填，6位A股股票代码，例如300499。",
+			Description: "必填A股股票代码；推荐6位，例如300499，同时兼容sz300499或300499.SZ。",
 			Required:    true,
-			Schema:      map[string]any{"pattern": `^\d{6}$`},
 		},
 		optionalEnumDefault(
 			"type",
@@ -244,15 +243,6 @@ func mcpTools() []mcpTool {
 			optionalBoolDefault("includeWeeklyMonthly", "是否包含周线、月线评分，默认true。", true),
 		),
 	}
-	for i := range tools {
-		if tools[i].Name == "tdx_sector_detail_text" ||
-			tools[i].Name == "tdx_sector_realtime_text" {
-			tools[i].InputSchema["anyOf"] = []map[string]any{
-				{"required": []string{"sectorName"}},
-				{"required": []string{"indexCode"}},
-			}
-		}
-	}
 	tools = append(tools, candidatePoolMCPTools()...)
 	return append(tools, paperMCPTools()...)
 }
@@ -298,10 +288,19 @@ func newMCPTool(name, description, path string, handler http.HandlerFunc, params
 }
 
 func requiredString(name, description string) mcpToolParam {
+	if name == "code" {
+		description += "；推荐6位代码，同时兼容sz300476、300476.SZ等市场前缀或后缀格式。"
+	}
+	if name == "codes" {
+		description += "；每只代码均兼容6位、市场前缀或市场后缀格式。"
+	}
 	return mcpToolParam{Name: name, Type: "string", Description: description, Required: true}
 }
 
 func optionalString(name, description string) mcpToolParam {
+	if name == "code" {
+		description += "；推荐6位代码，同时兼容sz300476、300476.SZ等市场前缀或后缀格式。"
+	}
 	return mcpToolParam{Name: name, Type: "string", Description: description}
 }
 
@@ -383,7 +382,7 @@ func optionalMarket(name string) mcpToolParam {
 	return mcpToolParam{
 		Name:        name,
 		Type:        "string",
-		Description: "A股市场覆盖参数：可传 sh、sz、bj；留空或不传时按股票代码自动识别。仅支持A股，不支持港股或美股扩展行情。",
+		Description: "A股市场覆盖参数：可传sh、sz、bj；留空时从代码自动识别。若与代码内市场前缀或后缀冲突则明确报错。仅支持A股。",
 		Enum:        []string{"", "sh", "sz", "bj"},
 	}
 }
@@ -471,6 +470,9 @@ func callMCPTool(raw json.RawMessage) (map[string]any, error) {
 	if err := json.Unmarshal(raw, &params); err != nil {
 		return nil, fmt.Errorf("工具参数解析失败: %w", err)
 	}
+	if err := normalizeMCPCodeArguments(params.Arguments); err != nil {
+		return nil, fmt.Errorf("%s参数错误: %w", params.Name, err)
+	}
 	if result, ok, err := callCandidatePoolMCPTool(params.Name, params.Arguments); ok {
 		return result, err
 	}
@@ -488,7 +490,7 @@ func callMCPTool(raw json.RawMessage) (map[string]any, error) {
 func callAgentHandlerAsMCP(tool mcpTool, args map[string]any) (map[string]any, error) {
 	req := httptest.NewRequest(http.MethodGet, tool.Path+"?"+encodeMCPQuery(args), nil)
 	rec := httptest.NewRecorder()
-	tool.Handler(rec, req)
+	normalizeAgentCodeRequest(http.HandlerFunc(tool.Handler)).ServeHTTP(rec, req)
 
 	var apiResp APIResponse
 	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&apiResp); err != nil {

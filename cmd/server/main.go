@@ -158,7 +158,7 @@ func main() {
 	)
 
 	log.Printf("TDX API Server v2.1 已开始监听 :%s", port)
-	log.Fatal(http.ListenAndServe(":"+port, mux))
+	log.Fatal(http.ListenAndServe(":"+port, normalizeAgentHTTPRequests(mux)))
 }
 
 func startBackgroundInitializers(onDone func(), tasks ...func()) {

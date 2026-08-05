@@ -327,7 +327,7 @@ func paperInitialPositionsSchema() map[string]any {
 			"properties": map[string]any{
 				"code": map[string]any{
 					"type":        "string",
-					"description": "证券代码。",
+					"description": "证券代码；推荐6位，同时兼容市场前缀或后缀格式。",
 				},
 				"name": map[string]any{
 					"type":        "string",
@@ -366,7 +366,7 @@ func paperPositionAdjustmentSchema() map[string]any {
 		"properties": map[string]any{
 			"code": map[string]any{
 				"type":        "string",
-				"description": "证券代码。",
+				"description": "证券代码；推荐6位，同时兼容市场前缀或后缀格式。",
 			},
 			"securityName": map[string]any{
 				"type":        "string",

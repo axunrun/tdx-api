@@ -105,6 +105,16 @@ func TestBuildScenarioValuationTextRejectsNonPositivePE(t *testing.T) {
 	}
 }
 
+func TestValuationToolsMarkMissingInputsAsNotApplicable(t *testing.T) {
+	scenario := buildScenarioValuationText(AgentStockBrief{Code: "300476"}, url.Values{})
+	implied := buildImpliedExpectationText(AgentStockBrief{Code: "300476"}, url.Values{})
+	for name, text := range map[string]string{"scenario": scenario, "implied": implied} {
+		if !strings.Contains(text, "接口调用成功") || !strings.Contains(text, "不适用") {
+			t.Fatalf("%s result is ambiguous: %s", name, text)
+		}
+	}
+}
+
 func TestBuildScenarioValuationTextRejectsOutOfRangeYears(t *testing.T) {
 	text := buildScenarioValuationText(AgentStockBrief{Code: "603063"}, url.Values{"years": []string{"0"}})
 

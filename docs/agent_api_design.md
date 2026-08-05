@@ -103,6 +103,14 @@ MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text
 
 ## 已实现聚合接口参数
 
+### 股票代码统一输入契约
+
+- 推荐输入6位代码，例如`300476`；同时兼容`sz300476`、`SZ300476`、`300476.sz`和`300476.SZ`。
+- 服务端在REST Agent接口和MCP工具入口统一转换为`code=300476&mkt=sz`后再调用行情、财务、F10和统计方法。
+- `mkt`可传`sh|sz|bj`；若显式`mkt`与代码中的市场前缀或后缀冲突，直接返回明确参数错误，不静默猜测。
+- `codes`批量参数逐只执行同一归一化；非法代码在调用数据源前即被拒绝，不再暴露`DefaultCodes`内部错误。
+- 板块接口不使用股票代码：`sector-detail`和`sector-realtime`必须传`sectorName`或`indexCode`，该二选一约束由服务端校验，MCP Schema保留全部参数字段以兼容不同客户端。
+
 | API | 参数 | 说明 |
 |---|---|---|
 | `/api/agent/stock-brief` | `code` 必填；`mkt` 可选 | `code` 为股票代码；`mkt` 用于覆盖市场，通常可省略 |
@@ -139,8 +147,8 @@ MCP 主要暴露面向 Agent 的文本聚合工具，工具名使用 `tdx_*_text
 | `/api/agent/intraday-alerts-text` | 同 JSON 版 | 输出查询时间；异动股逐只展开，无明显异动股合并一行，重复数据告警按原因归并；非交易日明确提示无可用分时数据 |
 | `/api/agent/global-market-brief` | 无参数 | 返回外围权重资产池；分组包括 `risk`、`apac`、`commodity`、`fx`、`bond`、`leader`；每项包含 `price`、`changePct`、`range20`、`range60`，其中区间字段包含涨跌幅、区间最高、区间最低和当前区间位置；TDX 未验证到 Sensex30、俄罗斯RTS 本体稳定直连代码，暂不硬塞无效项 |
 | `/api/agent/global-market-brief-text` | 无参数 | 统一输出生成时间；保留每项现价、当日涨跌、20/60日涨跌幅和区间高低点，不重复静态入选理由 |
-| `/api/agent/scenario-valuation-text` | `code` 必填；`mkt`、`years`、`currentPrice`、`eps`、三组增长率和目标PE可选 | 三情景公式计算；自动行情会输出查询时间、行情日期和状态，反推EPS时输出PE统计日期；无 `level` 或 `assumptionMode` 参数 |
-| `/api/agent/implied-expectation-text` | `code` 必填；`mkt`、`years`、`currentPrice`、`eps`、`targetPE` 可选 | 从价格反推未来EPS及隐含增速；输出价格来源、行情时效、PE统计日期和净利润报告期；无 `level` 参数 |
+| `/api/agent/scenario-valuation-text` | `code` 必填；`mkt`、`years`、`currentPrice`、`eps`、三组增长率和目标PE可选 | 三情景公式计算；自动行情会输出查询时间、行情日期和状态，反推EPS时输出PE统计日期；价格、EPS或PE不足时明确返回“接口调用成功、计算不适用”，不误报为工具失败；无 `level` 或 `assumptionMode` 参数 |
+| `/api/agent/implied-expectation-text` | `code` 必填；`mkt`、`years`、`currentPrice`、`eps`、`targetPE` 可选 | 从价格反推未来EPS及隐含增速；输出价格来源、行情时效、PE统计日期和净利润报告期；输入数据不足或亏损股不适用时明确返回“接口调用成功、计算不适用”；无 `level` 参数 |
 
 ## 行情数据统一时效口径
 
